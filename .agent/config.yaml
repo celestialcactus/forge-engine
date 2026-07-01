@@ -1,0 +1,12 @@
+model_access:
+  mode: copilot-assisted
+execution_limits:
+  max_iterations: 10
+  max_runtime_minutes: 20
+  max_tool_calls: 50
+state_storage: local
+branch_state:
+  on_merge: archive
+  protected_branches:
+    - main
+    - develop

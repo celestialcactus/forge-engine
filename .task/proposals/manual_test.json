@@ -1,0 +1,6 @@
+{
+  "filePath": "src/utils/math.ts",
+  "originalContent": "",
+  "newContent": "export const add = (a: number, b: number) => a + b;\nexport const subtract = (a: number, b: number) => a - b;",
+  "description": "Create basic math utility for testing the Decoupled Flow."
+}

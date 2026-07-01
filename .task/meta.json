@@ -1,0 +1,21 @@
+{
+  "task_id": "task_bf8704dabc55",
+  "run_id": "run_d4a41a6c",
+  "iteration_id": 0,
+  "status": "running",
+  "created_at": "2026-04-28T22:30:54.167Z",
+  "updated_at": "2026-04-28T23:21:08.981Z",
+  "active_owner": {
+    "user": "gabri",
+    "machine": "DESKTOP-5A6KSI6",
+    "claimed_at": "2026-04-28T22:30:54.167Z",
+    "heartbeat": "2026-04-28T23:21:08.981Z"
+  },
+  "validation": {
+    "tests_passed": null,
+    "build_passed": null,
+    "constraint_checks_passed": null,
+    "lint_passed": null,
+    "human_review_required": false
+  }
+}

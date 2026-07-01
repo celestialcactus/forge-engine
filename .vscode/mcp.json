@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "agent-engine": {
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "c:/Users/gabri/.vscode/Projects/CodeTraining/Drop-in-Code-Assistant/dist/cli/app.js",
+        "serve",
+        "--mcp"
+      ],
+      "cwd": "c:/Users/gabri/.vscode/Projects/CodeTraining/Drop-in-Code-Assistant"
+    }
+  }
+}
