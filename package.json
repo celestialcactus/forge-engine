@@ -1,61 +1,42 @@
 {
   "name": "forge-engine",
   "version": "0.1.0",
-  "description": "Drop-in enterprise agent coding system — spec-driven, constraint-enforced, auditable agent execution",
+  "description": "Sovereign-first, host-neutral agent runtime for developer workflows",
   "type": "module",
   "bin": {
-    "forge": "./dist/cli/index.js"
+    "forge": "./dist/src/cli.js"
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "forge": "node dist/cli/index.js",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@ai-sdk/anthropic": "^1.1.0",
-    "@ai-sdk/google": "^1.0.0",
-    "@ai-sdk/openai": "^1.0.0",
-    "@inquirer/prompts": "^8.4.2",
-    "@modelcontextprotocol/sdk": "^1.12.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.57.2",
-    "@opentelemetry/resources": "^2.8.0",
-    "@opentelemetry/sdk-node": "^0.57.2",
-    "@opentelemetry/sdk-trace-node": "^2.8.0",
-    "@opentelemetry/semantic-conventions": "^1.41.1",
-    "ai": "^4.0.0",
-    "ai-sdk-ollama": "^3.0.0",
-    "better-sqlite3": "^11.0.0",
-    "chalk": "^5.6.2",
-    "commander": "^12.0.0",
-    "diff": "^7.0.0",
-    "drizzle-orm": "^0.38.0",
-    "env-paths": "^3.0.0",
-    "execa": "^9.5.0",
-    "figures": "^6.1.0",
-    "ink": "^5.0.0",
-    "ink-text-input": "^5.0.1",
-    "nanoid": "^5.0.0",
-    "pino": "^9.0.0",
-    "proper-lockfile": "^4.1.2",
-    "strip-ansi": "^7.1.0",
-    "yaml": "^2.7.0",
-    "zod": "^3.24.0"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.12",
-    "@types/diff": "^7.0.2",
-    "@types/node": "^22.0.0",
-    "drizzle-kit": "^0.30.0",
-    "typescript": "^5.7.0",
-    "vitest": "^3.2.1"
+    "build": "tsc -p tsconfig.v1.json",
+    "dev": "tsx src/cli.ts",
+    "forge": "node dist/src/cli.js",
+    "test": "tsx --test tests/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.v1.json --noEmit",
+    "check": "npm run typecheck && npm test && npm run build",
+    "smoke": "node dist/src/cli.js doctor --json && node dist/src/cli.js run smoke",
+    "prebuild": "node scripts/clean.mjs"
   },
   "engines": {
     "node": ">=22.0.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "22.18.1",
+    "tsx": "4.20.5"
+  },
+  "files": [
+    "dist/src",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "typescript": "5.9.2",
+    "zod": "4.4.3"
+  }
 }

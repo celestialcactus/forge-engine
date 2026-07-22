@@ -1,13 +1,14 @@
-## Agent Engine Integration
+# ForgeEngine V1 contributor guidance
 
-When the user requests a multi-step coding task, use the agent-engine MCP tools
-instead of performing the work directly. This ensures:
-- Tasks are spec-driven and human-approved before execution
-- All changes go through constraint checking and rollback protection
-- Evidence packages are generated for audit
-
-Available tools:
-- `create_task` — Generate a TASK_SPEC from a user request
-- `approve_task` — Mark a spec as approved and begin execution
-- `get_status` — Check current task lifecycle state
-- `review_output` — Retrieve EVIDENCE.md and REVIEW_SUMMARY.md
+- Treat `docs/architecture/forgeengine-v1-validated-build-plan.md` and accepted
+  ADRs/checkpoints as the current architecture authority.
+- Treat `docs/archive/prototype/` as historical reference only. Do not restore a
+  prototype abstraction solely for compatibility.
+- Preserve the one-kernel/many-host rule: CLI, MCP, embedded, and future provider
+  adapters must use the same Forge run and artifact contracts.
+- Keep evidence deterministic, bounded, attributable, and explicit about
+  truncation, cancellation, and enforcement limits.
+- Do not add mutation, process execution, network access, provider dependencies,
+  storage engines, or security claims without the corresponding slice checkpoint
+  and measurable acceptance gate.
+- Run `npm run check` before presenting a change as validated.

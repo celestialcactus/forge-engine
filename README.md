@@ -1,102 +1,66 @@
-# Forge Engine (v0.1)
+# ForgeEngine
 
-Forge Engine is a spec-driven, enterprise-grade agent execution harness designed for local-first efficiency, hybrid intelligence routing, and robust state persistence. It enables developers to run complex, multi-agent workflows (DAGs) locally or hybridly, minimizing cloud overhead while maintaining enterprise safety features like DLP, Egress enforcement, and contextual auto-compression.
+ForgeEngine is a sovereign-first, host-neutral software-evidence runtime for
+developer workspaces. It gives a CLI, IDE host, MCP client, or future provider the
+same bounded and inspectable record of what evidence was selected, which
+capability acted, and how the run ended.
 
----
+The archived prototype is reference material only. The V1 runtime is being rebuilt
+slice by slice from the contracts in `docs/architecture/`.
 
-## 🌟 Key Features
+## Current implementation: Slice 1
 
-### 1. Hybrid Model Routing
-Run in three operational modes:
-*   **Sovereign:** Executes strictly on local hardware (Ollama / Llama3 / Mistral) for absolute data isolation and zero provider cost.
-*   **Copilot:** Relies on premium cloud models (Claude 3.5 Sonnet / GPT-4o) for high-reasoning tasks.
-*   **Hybrid (Dynamic Dispatch):** Utilizes a heuristic classifier to analyze task complexity, token sizes, and file footprints, automatically routing lighter tasks to local LLMs and heavy reasoning to the cloud.
+The accepted read-only slice provides:
 
-### 2. Directed Acyclic Graph (DAG) Workflows
-Build structured agent topologies instead of fragile linear chains:
-*   Define multi-agent pipelines with `defineWorkflow`.
-*   Support dynamic edge routing using conditional guard gates (e.g. `analysisCompleted`, `noBlockerFindings`).
-*   Built-in resilient loop protection preventing agents from hitting unbounded iterations.
+- one host-neutral run protocol with ordered events, context plans, approvals,
+  capability results, cancellation, failures, and final artifacts;
+- deterministic workspace inventory and literal search;
+- bounded UTF-8 file reads with line evidence and SHA-256 content identity;
+- TypeScript/JavaScript declarations and no-emit TypeScript diagnostics;
+- read-only Git status and bounded diff evidence;
+- a local CLI and seven-tool stdio MCP adapter tested with VS Code;
+- observed, connection-scoped snapshot reuse with invalidation and a bounded
+  rescan ceiling.
 
-### 3. State Checkpointing & Persistence
-*   Automatically persists state checkpoints at every node transition using Drizzle ORM and `better-sqlite3`.
-*   If an execution is interrupted, crashes, or hits an iteration cap, it can be instantly resumed from its last valid state.
-*   Integrated **FTS5 Full-Text Search** virtual tables for indexing and semantic recall of previous agent execution results.
+`forge run <task>` currently executes a deterministic read-only inventory plan. It
+preserves the developer task in the run artifact; it is not yet natural-language
+model orchestration.
 
-### 4. Compress-Cache-Retrieve (CCR) Context Pipeline
-Avoid LLM context-window blowout with our smart compression engine:
-*   **Smart JSON Array Crusher:** Samples massive JSON data, keeping failures and anomalies intact while trimming redundant successes.
-*   **Hash-and-Swap Truncation:** Large command line logs and code arrays are swapped with a 16-character hash and saved to the SQLite cache.
-*   **Autonomous Retrieval:** Injects the `ccr_retrieve` tool directly into the LLM's workspace, allowing the model to pull the uncompressed data if it needs to inspect a truncated section.
+## Explicitly not implemented yet
 
-### 5. Interactive CLI & Live Steering
-*   **Model Thought Streaming:** Watch the agent's step-by-step thinking directly within the console renderer.
-*   **Manual Intervention (SIGTSTP):** Press `Ctrl+Z` at any time to pause execution. Inject context on-the-fly, inspect properties, or force redirect the engine to a specific workflow node.
+Forge does not yet expose workspace mutation, generic shell execution, durable
+sessions, provider escalation, skills, compression, or an OS sandbox. TypeScript
+diagnostics remain synchronous, snapshot identity is not a complete content
+manifest, and very large workspaces still need indexed evidence services.
 
----
+## Development
 
-## 🛠️ Installation
+Requires Node.js 22 or newer.
 
-Prerequisites: Node.js (v18+) and npm.
-
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/celestialcactus/forge-engine.git
-    cd forge-engine
-    ```
-2.  Install dependencies:
-    ```bash
-    npm install
-    ```
-3.  Build the source:
-    ```bash
-    npm run build
-    ```
-
----
-
-## ⚙️ Configuration
-
-Create a `.env` file in the root of your project:
-
-```env
-# Cloud Model Authentication
-ANTHROPIC_API_KEY=your-claude-key-here
-OPENAI_API_KEY=your-openai-key-here
-
-# Local Model Configuration (Ollama)
-OLLAMA_API_BASE_URL=http://127.0.0.1:11434/api
-
-# OpenTelemetry Exports (Optional)
-OTEL_SERVICE_NAME=forge-engine
+```powershell
+npm ci
+npm run check
+npm run smoke
 ```
 
-### Sandbox Execution (Docker)
-By default, the `bash` and `browser_action` tools run locally during development. In production, configure the docker workspace environment to sandbox shell commands:
-```env
-FORGE_SANDBOX_MODE=docker
+Useful commands:
+
+```powershell
+node dist/src/cli.js doctor --json
+node dist/src/cli.js inspect --workspace C:\path\to\repo --json
+node dist/src/cli.js search "literal text" --workspace C:\path\to\repo --json
+node dist/src/cli.js run "Inspect this workspace" --workspace C:\path\to\repo --json
 ```
 
----
+VS Code uses the workspace-local `.vscode/mcp.json` after a production build. See
+`docs/testing/vscode-developer-test-milestone-a.md` for the controlled prompts.
 
-## 🚀 Running the Engine
+## Architecture and decisions
 
-Initialize the SQLite database memory:
-```bash
-npm run db:generate
-npm run db:migrate
-```
-
-Launch the interactive CLI loop:
-```bash
-npm run forge
-```
-
----
-
-## 🧪 Testing
-
-To run the unit test suite verifying the registry filters and model router heuristics:
-```bash
-npm run test
-```
+- `docs/architecture/forgeengine-v1-validated-build-plan.md` is the V1 execution
+  authority.
+- `docs/architecture/slice-1-read-only-repository-intelligence.md` explains the
+  accepted slice.
+- `docs/audit/slice-1-closure-audit.md` records the release-gate audit.
+- `docs/decisions/architecture-changelog.md` indexes checkpoints and ADRs.
+- `docs/archive/prototype/` preserves the preliminary implementation.

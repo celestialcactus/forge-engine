@@ -1,9 +1,12 @@
-export * from './core/types.js';
-export * from './core/tools/index.js';
-export * from './tools/index.js';
-// To be added in later phases:
-export * from './core/agents/index.js';
-export * from './core/workflows/index.js';
-export * from './core/compression/index.js';
-export * from './persistence/index.js';
-// export * from './engine.js';
+export * from './runtime.js';
+export * from './slice0/contracts.js';
+export * from './slice0/context.js';
+export * as v1Protocol from './slice0/contracts.js';
+export * from './v1/workspace.js';
+export * from './v1/workspace-path.js';
+export * from './v1/snapshot-cache.js';
+export * from './v1/files.js';
+export * from './v1/typescript-evidence.js';
+export * from './v1/git-evidence.js';
+export * from './v1/service.js';
+export * from './mcp/server.js';
