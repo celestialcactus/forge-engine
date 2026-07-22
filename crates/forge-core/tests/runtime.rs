@@ -126,6 +126,7 @@ fn allow() -> FixedPolicy {
     FixedPolicy(ApprovalDecision {
         outcome: ApprovalOutcome::Allow,
         reason: "Fixture permits read-only evidence inspection.".to_owned(),
+        facts: None,
     })
 }
 
@@ -225,6 +226,7 @@ fn records_denial_and_continues() {
     let mut deny = FixedPolicy(ApprovalDecision {
         outcome: ApprovalOutcome::Deny,
         reason: "Fixture policy denied this capability.".to_owned(),
+        facts: None,
     });
     let artifact = run(
         request("denied-run"),

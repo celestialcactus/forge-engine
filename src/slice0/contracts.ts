@@ -7,6 +7,22 @@
 export type RunStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'budget_exhausted';
 export type ApprovalOutcome = 'allow' | 'ask' | 'deny';
 
+export interface ApprovalFacts {
+  readonly schemaVersion: 1;
+  readonly callId: string;
+  readonly capabilityId: string;
+  readonly hostPolicy: {
+    readonly posture: 'allow' | 'ask' | 'deny';
+    readonly source: string;
+    readonly reason: string;
+  };
+  readonly userConsent: {
+    readonly status: 'notRequired' | 'granted' | 'declined' | 'unavailable';
+    readonly source: string;
+    readonly reason: string;
+  };
+}
+
 export interface WorkspaceSnapshot {
   readonly id: string;
   readonly rootLabel: string;
@@ -49,7 +65,7 @@ export type RunEventData =
   | { readonly type: 'run.started'; readonly task: string; readonly snapshotId: string }
   | { readonly type: 'context.planned'; readonly plan: ContextPlan }
   | { readonly type: 'capability.requested'; readonly call: CapabilityCall }
-  | { readonly type: 'approval.decided'; readonly callId: string; readonly outcome: ApprovalOutcome; readonly reason: string }
+  | { readonly type: 'approval.decided'; readonly callId: string; readonly outcome: ApprovalOutcome; readonly reason: string; readonly facts?: ApprovalFacts }
   | { readonly type: 'capability.completed'; readonly result: CapabilityResult }
   | { readonly type: 'run.completed'; readonly output: string }
   | { readonly type: 'run.failed'; readonly code: string; readonly message: string }
@@ -104,7 +120,11 @@ export interface Capability {
 }
 
 export interface ApprovalPolicy {
-  decide(call: CapabilityCall): Promise<{ readonly outcome: ApprovalOutcome; readonly reason: string }>;
+  decide(call: CapabilityCall): Promise<{
+    readonly outcome: ApprovalOutcome;
+    readonly reason: string;
+    readonly facts?: ApprovalFacts;
+  }>;
 }
 
 export const equivalentTrace = (left: readonly RunEvent[], right: readonly RunEvent[]): boolean =>

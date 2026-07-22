@@ -1,6 +1,6 @@
 # SGU-004: Rust policy authority
 
-- **Status:** planned
+- **Status:** local implementation gate passed; hosted CI and VS Code pending
 - **Opened:** 2026-07-22
 - **Predecessor:** SGU-003 passed at `a3e220c9e7091a15ed4da19feebcc876e9487374`
 - **Blocks:** Slice 2B production mutation through the hybrid kernel
@@ -77,3 +77,26 @@ If the facts/decision split causes ambiguous policy semantics, artifact drift, o
 host regressions, keep the accepted TypeScript runtime as the shipped control,
 revert the SGU-004 bridge change, and redesign the private protocol. Do not weaken
 the single-authority invariant to preserve the spike implementation.
+
+## Local implementation checkpoint
+
+The implementation now uses private `forge.kernel.bridge.v2`. TypeScript exposes
+an `ApprovalFactsProvider`, not an `ApprovalPolicy`, to the Rust runtime. Facts are
+schema-versioned, attributable, and correlated to the exact call and capability.
+Rust validates and resolves them, then records both the final outcome and the
+structured facts in the authoritative approval event.
+
+Decision rules are explicit:
+
+1. host deny wins;
+2. otherwise explicit user decline denies;
+3. host allow permits;
+4. host ask plus granted consent permits;
+5. host ask without granted consent remains ask;
+6. malformed, unsupported, empty-provenance, or mismatched-call facts fail closed
+   before capability execution.
+
+`npm run check:hybrid` passes locally with 13 Rust tests, 37 TypeScript tests, and
+22 hybrid/MCP tests. The official MCP client still discovers exactly seven tools.
+The remaining acceptance gates are hosted Windows/macOS/Linux execution and the
+controlled one-call VS Code scenario on the exact candidate commit.

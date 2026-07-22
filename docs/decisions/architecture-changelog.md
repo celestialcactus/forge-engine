@@ -71,3 +71,8 @@ checkpoint records.
 - Opened SGU-004 to replace the spike's TypeScript-computed approval decision with
   attributable host/user facts and a final Rust-owned policy result before Slice
   2B mutation work resumes.
+- Implemented SGU-004 locally with private bridge protocol v2: TypeScript supplies
+  attributable, exact-call host/user facts; Rust validates them, applies deny and
+  consent precedence, produces the only final decision, and records structured
+  facts in the approval event. Local Rust, TypeScript, hybrid, and MCP gates pass;
+  hosted and VS Code gates remain open. See Checkpoint 15.

@@ -4,14 +4,14 @@ use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::rc::Rc;
 
 use forge_core::{
-    ApprovalDecision, ApprovalPolicy, Cancellation, CapabilityAdapter, CapabilityCall,
-    CapabilityResult, PlannerRequest, PlannerTurn, RunArtifact, RunEvent, RunRequest,
-    RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceSnapshot,
+    ApprovalDecision, ApprovalFacts, ApprovalPolicy, Cancellation, CapabilityAdapter,
+    CapabilityCall, CapabilityResult, PlannerRequest, PlannerTurn, RunArtifact, RunEvent,
+    RunRequest, RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceSnapshot, resolve_approval,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-const PROTOCOL_VERSION: &str = "forge.kernel.bridge.v1";
+const PROTOCOL_VERSION: &str = "forge.kernel.bridge.v2";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,11 +45,11 @@ enum HostMessage {
         request_id: String,
         result: CapabilityResult,
     },
-    #[serde(rename = "approval.decision")]
-    ApprovalDecision {
+    #[serde(rename = "approval.facts")]
+    ApprovalFacts {
         protocol_version: String,
         request_id: String,
-        decision: ApprovalDecision,
+        facts: ApprovalFacts,
     },
     #[serde(rename = "runtime.error")]
     RuntimeError {
@@ -104,7 +104,7 @@ impl BridgeIo {
                 request_id,
                 ..
             }
-            | HostMessage::ApprovalDecision {
+            | HostMessage::ApprovalFacts {
                 protocol_version,
                 request_id,
                 ..
@@ -154,8 +154,8 @@ impl TaskPlanner for BridgePlanner {
             HostMessage::CapabilityResult { .. } => Err(RuntimeSignal::Failed(
                 "Received capability.result while awaiting planner.turn.".to_owned(),
             )),
-            HostMessage::ApprovalDecision { .. } => Err(RuntimeSignal::Failed(
-                "Received approval.decision while awaiting planner.turn.".to_owned(),
+            HostMessage::ApprovalFacts { .. } => Err(RuntimeSignal::Failed(
+                "Received approval.facts while awaiting planner.turn.".to_owned(),
             )),
             HostMessage::RuntimeError { message, .. } => Err(RuntimeSignal::Failed(message)),
         }
@@ -204,8 +204,8 @@ impl CapabilityAdapter for BridgeCapabilities {
             HostMessage::PlannerTurn { .. } => Err(RuntimeSignal::Failed(
                 "Received planner.turn while awaiting capability.result.".to_owned(),
             )),
-            HostMessage::ApprovalDecision { .. } => Err(RuntimeSignal::Failed(
-                "Received approval.decision while awaiting capability.result.".to_owned(),
+            HostMessage::ApprovalFacts { .. } => Err(RuntimeSignal::Failed(
+                "Received approval.facts while awaiting capability.result.".to_owned(),
             )),
             HostMessage::RuntimeError { message, .. } => Err(RuntimeSignal::Failed(message)),
         }
@@ -222,7 +222,7 @@ impl ApprovalPolicy for BridgePolicy {
             let mut io = self.io.borrow_mut();
             let request_id = io.request_id.clone();
             io.send(&json!({
-                "type": "approval.decide",
+                "type": "approval.facts.request",
                 "protocolVersion": PROTOCOL_VERSION,
                 "requestId": request_id,
                 "call": call,
@@ -231,13 +231,21 @@ impl ApprovalPolicy for BridgePolicy {
             io.receive().map_err(RuntimeSignal::Failed)?
         };
         match incoming {
-            HostMessage::ApprovalDecision { decision, .. } => Ok(decision),
+            HostMessage::ApprovalFacts { facts, .. } => {
+                if facts.call_id != call.id || facts.capability_id != call.capability_id {
+                    return Err(RuntimeSignal::Failed(format!(
+                        "Approval facts target {}/{} does not match capability call {}/{}.",
+                        facts.call_id, facts.capability_id, call.id, call.capability_id
+                    )));
+                }
+                resolve_approval(&facts).map_err(RuntimeSignal::Failed)
+            }
             HostMessage::RunCancel { reason, .. } => Err(RuntimeSignal::Cancelled(reason)),
             HostMessage::PlannerTurn { .. } => Err(RuntimeSignal::Failed(
-                "Received planner.turn while awaiting approval.decision.".to_owned(),
+                "Received planner.turn while awaiting approval.facts.".to_owned(),
             )),
             HostMessage::CapabilityResult { .. } => Err(RuntimeSignal::Failed(
-                "Received capability.result while awaiting approval.decision.".to_owned(),
+                "Received capability.result while awaiting approval.facts.".to_owned(),
             )),
             HostMessage::RuntimeError { message, .. } => Err(RuntimeSignal::Failed(message)),
         }

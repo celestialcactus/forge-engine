@@ -19,7 +19,7 @@ VS Code / MCP / future provider SDK / TypeScript compiler
        tools, workflow definitions, presentation,
            provider/compiler/host integration
                          |
-            forge.kernel.bridge.v1 over NDJSON
+            forge.kernel.bridge.v2 over NDJSON
                          |
                  Rust kernel authority
      validate -> authorize -> schedule -> invoke -> record
@@ -44,10 +44,13 @@ network service and does not introduce a second persistence boundary.
 FFI/N-API is intentionally deferred. It would optimize a boundary before proving
 that the boundary is correct.
 
-## Bridge protocol v1
+## Bridge protocol v2
 
 Every message is one UTF-8 JSON object followed by LF. Every message carries
-`protocolVersion: "forge.kernel.bridge.v1"` and a caller-selected `requestId`.
+`protocolVersion: "forge.kernel.bridge.v2"` and a caller-selected `requestId`.
+Version 2 replaces adapter-computed approval decisions with attributable facts;
+version 1 remains historical spike evidence and is intentionally rejected by a
+version-2 peer.
 
 ### Host to kernel
 
@@ -55,9 +58,9 @@ Every message is one UTF-8 JSON object followed by LF. Every message carries
   optional pre-start cancellation reason.
 - `planner.turn`: a complete output or one capability call in response to the
   kernel's matching planner request.
-- `approval.decision`: the spike adapter's approval response for the exact call
-  requested by Rust. In the target boundary this message carries user consent and
-  host-policy facts; Rust resolves the final Forge policy outcome.
+- `approval.facts`: versioned host-policy and user-consent facts bound to the exact
+  `callId` and `capabilityId` requested by Rust. It cannot carry a final Forge
+  decision.
 - `capability.result`: bounded adapter evidence correlated to the requested call.
 - `run.cancel`: explicit cancellation reason while the kernel awaits an adapter.
 - `runtime.error`: a planner, policy, or integration callback failure that Rust
@@ -68,7 +71,7 @@ Every message is one UTF-8 JSON object followed by LF. Every message carries
 - `run.event`: the next authoritative logical event.
 - `planner.next`: the immutable task, context plan, prior capability results, and
   one-based turn number.
-- `approval.decide`: the exact capability call requiring a policy decision.
+- `approval.facts.request`: the exact capability call requiring host and user facts.
 - `capability.invoke`: the approved call and immutable workspace snapshot.
 - `run.result`: the terminal authoritative `RunArtifact`.
 - `protocol.error`: malformed or out-of-state bridge input. If a run exists, the
@@ -102,11 +105,12 @@ TypeScript owns:
 - workspace, Git, TypeScript, and other integration-specific capabilities;
 - MCP schemas and compact host presentation.
 
-The current executable spike delegates a complete `ApprovalDecision` to the
-TypeScript callback so it can remain differentially compatible with the accepted
-TypeScript oracle. That is temporary spike behavior, not permission for a second
-production policy engine. Before production cutover, the bridge must separate
-external approval facts from the final decision produced by Rust.
+The executable SGU-004 boundary accepts only `ApprovalFacts` from TypeScript. Rust
+validates schema version, non-empty provenance, and exact call/capability identity;
+applies host-deny and user-decline precedence; resolves `ask`; and produces the
+only final `ApprovalDecision`. The authoritative `approval.decided` event retains
+those structured facts as an optional backward-compatible evidence extension.
+Legacy artifacts remain readable and logical event order is unchanged.
 
 TypeScript must not synthesize missing Rust events or repair a malformed artifact.
 The host either accepts one schema-valid terminal artifact or records a bridge
@@ -205,10 +209,9 @@ harness metrics.
 - provider streaming and partial-result semantics;
 - process-tree containment and sandbox backends;
 - whether the MCP adapter should eventually move into Rust;
-- stable public schemas beyond bridge v1;
+- stable public schemas beyond the private bridge-v2 and RunArtifact-v1 boundary;
 - signed, reproducible multi-target packaging and update delivery;
-- mapping the target organization harness after its actual contract is inspected;
-- separating host/user approval facts from Rust's final policy result.
+- mapping the target organization harness after its actual contract is inspected.
 
-SGU-003 may recommend the hybrid direction without pretending these production
-questions are already solved.
+SGU-003 accepted the hybrid direction, and SGU-004 locally corrected the policy
+boundary. Neither result pretends these remaining production questions are solved.

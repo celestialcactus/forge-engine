@@ -10,8 +10,8 @@ import type {
   TaskPlanner,
   WorkspaceSnapshot,
 } from '../slice0/contracts.js';
-import { Slice0Runtime, type Slice0RuntimeOptions } from '../slice0/runtime.js';
-import { RustKernelRuntime } from '../hybrid/rust-kernel-runtime.js';
+import { Slice0Runtime } from '../slice0/runtime.js';
+import { RustKernelRuntime, type ApprovalFactsProvider } from '../hybrid/rust-kernel-runtime.js';
 import {
   createChangeProposalCapability,
   type ChangeProposalOptions,
@@ -42,9 +42,36 @@ class SingleCapabilityPlanner implements TaskPlanner {
   }
 }
 
+const readOnlyApprovalFacts = (call: CapabilityCall) => ({
+  schemaVersion: 1 as const,
+  callId: call.id,
+  capabilityId: call.capabilityId,
+  hostPolicy: {
+    posture: 'allow' as const,
+    source: 'forge.v1.read-only-policy',
+    reason: 'Developer Test Milestone A exposes only registered read-only evidence.',
+  },
+  userConsent: {
+    status: 'notRequired' as const,
+    source: 'forge.v1.read-only-policy',
+    reason: 'Registered read-only evidence does not require interactive consent.',
+  },
+});
+
 const readOnlyPolicy: ApprovalPolicy = {
-  async decide() {
-    return { outcome: 'allow', reason: 'Developer Test Milestone A exposes only registered read-only evidence.' };
+  async decide(call) {
+    return {
+      outcome: 'allow',
+      reason: 'Developer Test Milestone A exposes only registered read-only evidence.',
+      facts: readOnlyApprovalFacts(call),
+    };
+  },
+};
+
+const readOnlyApprovalFactsProvider: ApprovalFactsProvider = {
+  async collect(call, signal) {
+    signal.throwIfAborted();
+    return readOnlyApprovalFacts(call);
   },
 };
 
@@ -182,15 +209,14 @@ export class ForgeWorkspaceService {
     const snapshot = await this.#workspaceSnapshot();
     signal?.throwIfAborted();
     const call: CapabilityCall = { id: 'call-1', capabilityId: capability.id, input };
-    const runtimeOptions: Slice0RuntimeOptions = {
-      planner: new SingleCapabilityPlanner(call),
-      approvalPolicy: readOnlyPolicy,
-      capabilities: [capability],
-    };
+    const planner = new SingleCapabilityPlanner(call);
+    const capabilities = [capability];
     const runtime = this.#kernel === undefined
-      ? new Slice0Runtime(runtimeOptions)
+      ? new Slice0Runtime({ planner, approvalPolicy: readOnlyPolicy, capabilities })
       : new RustKernelRuntime({
-          ...runtimeOptions,
+          planner,
+          approvalFacts: readOnlyApprovalFactsProvider,
+          capabilities,
           kernelPath: this.#kernel.binaryPath,
           ...(this.#kernel.arguments === undefined ? {} : { kernelArguments: this.#kernel.arguments }),
           ...(this.#kernel.environment === undefined ? {} : { environment: this.#kernel.environment }),

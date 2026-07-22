@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import type {
-  ApprovalPolicy,
+  ApprovalFacts,
   Capability,
   CapabilityCall,
   CapabilityResult,
@@ -18,9 +18,15 @@ import type {
 } from '../slice0/contracts.js';
 import type { Slice0RuntimeOptions } from '../slice0/runtime.js';
 
-export const rustKernelProtocolVersion = 'forge.kernel.bridge.v1';
+export const rustKernelProtocolVersion = 'forge.kernel.bridge.v2';
 
-export interface RustKernelRuntimeOptions extends Slice0RuntimeOptions {
+
+export interface ApprovalFactsProvider {
+  collect(call: CapabilityCall, signal: AbortSignal): Promise<ApprovalFacts>;
+}
+
+export interface RustKernelRuntimeOptions extends Omit<Slice0RuntimeOptions, 'approvalPolicy'> {
+  readonly approvalFacts: ApprovalFactsProvider;
   readonly kernelPath: string;
   readonly kernelArguments?: readonly string[];
   readonly environment?: Readonly<NodeJS.ProcessEnv>;
@@ -87,7 +93,7 @@ const validateArtifact = (
 
 export class RustKernelRuntime {
   readonly #planner: Slice0RuntimeOptions['planner'];
-  readonly #approvalPolicy: ApprovalPolicy;
+  readonly #approvalFacts: ApprovalFactsProvider;
   readonly #capabilities: ReadonlyMap<string, Capability>;
   readonly #onEvent: Slice0RuntimeOptions['onEvent'];
   readonly #kernelPath: string;
@@ -97,7 +103,7 @@ export class RustKernelRuntime {
 
   constructor(options: RustKernelRuntimeOptions) {
     this.#planner = options.planner;
-    this.#approvalPolicy = options.approvalPolicy;
+    this.#approvalFacts = options.approvalFacts;
     this.#capabilities = new Map(options.capabilities.map((capability) => [capability.id, capability]));
     this.#onEvent = options.onEvent;
     this.#kernelPath = options.kernelPath;
@@ -215,16 +221,16 @@ export class RustKernelRuntime {
         return;
       }
 
-      if (message.type === 'approval.decide') {
-        const operation = this.#approvalPolicy.decide(message.call as CapabilityCall);
+      if (message.type === 'approval.facts.request') {
+        const operation = this.#approvalFacts.collect(message.call as CapabilityCall, signal);
         try {
-          const decision = await raceWithCancellation(operation, signal);
-          if (decision === cancelled) return;
+          const facts = await raceWithCancellation(operation, signal);
+          if (facts === cancelled) return;
           await writeMessage({
-            type: 'approval.decision',
+            type: 'approval.facts',
             protocolVersion: rustKernelProtocolVersion,
             requestId,
-            decision,
+            facts,
           });
         } catch (error) {
           if (signal.aborted) return;

@@ -1,8 +1,8 @@
 use crate::context::{compile_context, required_context_bytes};
 use crate::contracts::{
-    ApprovalDecision, ApprovalOutcome, CapabilityCall, CapabilityResult, ContextItemKind,
-    ContextPlan, PlannerRequest, PlannerTurn, RunArtifact, RunEvent, RunEventData, RunRequest,
-    RunStatus, WorkspaceSnapshot,
+    ApprovalDecision, ApprovalFacts, ApprovalOutcome, CapabilityCall, CapabilityResult,
+    ContextItemKind, ContextPlan, HostPolicyPosture, PlannerRequest, PlannerTurn, RunArtifact,
+    RunEvent, RunEventData, RunRequest, RunStatus, UserConsentStatus, WorkspaceSnapshot,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -27,6 +27,66 @@ pub trait CapabilityAdapter {
 
 pub trait ApprovalPolicy {
     fn decide(&mut self, call: &CapabilityCall) -> Result<ApprovalDecision, RuntimeSignal>;
+}
+
+pub fn resolve_approval(facts: &ApprovalFacts) -> Result<ApprovalDecision, String> {
+    if facts.schema_version != 1 {
+        return Err(format!(
+            "Unsupported approval facts schema version: {}.",
+            facts.schema_version
+        ));
+    }
+    for (label, value) in [
+        ("callId", facts.call_id.as_str()),
+        ("capabilityId", facts.capability_id.as_str()),
+        ("hostPolicy.source", facts.host_policy.source.as_str()),
+        ("hostPolicy.reason", facts.host_policy.reason.as_str()),
+        ("userConsent.source", facts.user_consent.source.as_str()),
+        ("userConsent.reason", facts.user_consent.reason.as_str()),
+    ] {
+        if value.trim().is_empty() {
+            return Err(format!("Approval facts field {label} must not be empty."));
+        }
+    }
+
+    if facts.host_policy.posture == HostPolicyPosture::Deny {
+        return Ok(ApprovalDecision {
+            outcome: ApprovalOutcome::Deny,
+            reason: facts.host_policy.reason.clone(),
+            facts: Some(facts.clone()),
+        });
+    }
+    if facts.user_consent.status == UserConsentStatus::Declined {
+        return Ok(ApprovalDecision {
+            outcome: ApprovalOutcome::Deny,
+            reason: facts.user_consent.reason.clone(),
+            facts: Some(facts.clone()),
+        });
+    }
+
+    match facts.host_policy.posture {
+        HostPolicyPosture::Allow => Ok(ApprovalDecision {
+            outcome: ApprovalOutcome::Allow,
+            reason: facts.host_policy.reason.clone(),
+            facts: Some(facts.clone()),
+        }),
+        HostPolicyPosture::Ask => match facts.user_consent.status {
+            UserConsentStatus::Granted => Ok(ApprovalDecision {
+                outcome: ApprovalOutcome::Allow,
+                reason: facts.user_consent.reason.clone(),
+                facts: Some(facts.clone()),
+            }),
+            UserConsentStatus::NotRequired | UserConsentStatus::Unavailable => {
+                Ok(ApprovalDecision {
+                    outcome: ApprovalOutcome::Ask,
+                    reason: facts.host_policy.reason.clone(),
+                    facts: Some(facts.clone()),
+                })
+            }
+            UserConsentStatus::Declined => unreachable!("decline is resolved before host ask"),
+        },
+        HostPolicyPosture::Deny => unreachable!("host deny is resolved before consent"),
+    }
 }
 
 pub trait Cancellation {
@@ -218,6 +278,7 @@ impl Slice0Runtime<'_> {
                 call_id: call.id.clone(),
                 outcome: decision.outcome.clone(),
                 reason: decision.reason.clone(),
+                facts: decision.facts.clone(),
             },
             self.event_sink,
         );

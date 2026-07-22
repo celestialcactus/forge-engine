@@ -96,6 +96,8 @@ pub enum RunEventData {
         call_id: String,
         outcome: ApprovalOutcome,
         reason: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        facts: Option<ApprovalFacts>,
     },
     #[serde(rename = "capability.completed")]
     CapabilityCompleted { result: CapabilityResult },
@@ -171,4 +173,49 @@ pub enum PlannerTurn {
 pub struct ApprovalDecision {
     pub outcome: ApprovalOutcome,
     pub reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub facts: Option<ApprovalFacts>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HostPolicyPosture {
+    Allow,
+    Ask,
+    Deny,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UserConsentStatus {
+    NotRequired,
+    Granted,
+    Declined,
+    Unavailable,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HostPolicyFact {
+    pub posture: HostPolicyPosture,
+    pub source: String,
+    pub reason: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UserConsentFact {
+    pub status: UserConsentStatus,
+    pub source: String,
+    pub reason: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ApprovalFacts {
+    pub schema_version: u8,
+    pub call_id: String,
+    pub capability_id: String,
+    pub host_policy: HostPolicyFact,
+    pub user_consent: UserConsentFact,
 }

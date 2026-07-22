@@ -179,6 +179,12 @@ test('runs real workspace inventory through the accepted Forge run contract', as
   assert.deepEqual(artifact.events.map((event) => event.type), [
     'run.started', 'context.planned', 'capability.requested', 'approval.decided', 'capability.completed', 'run.completed',
   ]);
+  const approval = artifact.events.find((event) => event.type === 'approval.decided');
+  assert.equal(approval?.type, 'approval.decided');
+  if (approval?.type !== 'approval.decided') throw new Error('Expected approval evidence.');
+  assert.equal(approval.facts?.callId, 'call-1');
+  assert.equal(approval.facts?.capabilityId, 'workspace.inventory');
+  assert.equal(approval.facts?.hostPolicy.source, 'forge.v1.read-only-policy');
 });
 
 test('returns bounded attributable literal search evidence', async () => {

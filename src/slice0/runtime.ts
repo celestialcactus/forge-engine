@@ -104,7 +104,7 @@ export class Slice0Runtime {
   async #execute(call: CapabilityCall, request: RunRequest, signal: AbortSignal, emit: (data: RunEventData) => void): Promise<CapabilityResult> {
     emit({ type: 'capability.requested', call });
     const decision = await this.#approvalPolicy.decide(call);
-    emit({ type: 'approval.decided', callId: call.id, outcome: decision.outcome, reason: decision.reason });
+    emit({ type: 'approval.decided', callId: call.id, outcome: decision.outcome, reason: decision.reason, ...(decision.facts === undefined ? {} : { facts: decision.facts }) });
     if (decision.outcome !== 'allow') {
       const result = { callId: call.id, success: false, content: `${decision.outcome}: ${decision.reason}` };
       emit({ type: 'capability.completed', result });
