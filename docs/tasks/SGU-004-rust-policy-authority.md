@@ -1,9 +1,10 @@
 # SGU-004: Rust policy authority
 
-- **Status:** local implementation gate passed; hosted CI and VS Code pending
+- **Status:** accepted; all closure gates passed
 - **Opened:** 2026-07-22
+- **Closed:** 2026-07-22
 - **Predecessor:** SGU-003 passed at `a3e220c9e7091a15ed4da19feebcc876e9487374`
-- **Blocks:** Slice 2B production mutation through the hybrid kernel
+- **Unblocks:** Slice 2B production mutation through the hybrid kernel
 
 ## Decision question
 
@@ -98,5 +99,5 @@ Decision rules are explicit:
 
 `npm run check:hybrid` passes locally with 13 Rust tests, 37 TypeScript tests, and
 22 hybrid/MCP tests. The official MCP client still discovers exactly seven tools.
-The remaining acceptance gates are hosted Windows/macOS/Linux execution and the
-controlled one-call VS Code scenario on the exact candidate commit.
+The exact candidate also passed hosted Windows/macOS/Linux hybrid conformance,
+the Windows/macOS TypeScript matrix, and the controlled one-call VS Code scenario.

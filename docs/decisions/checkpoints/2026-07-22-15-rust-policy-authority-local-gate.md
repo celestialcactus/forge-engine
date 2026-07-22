@@ -1,6 +1,6 @@
-# Checkpoint 2026-07-22-15: Rust policy authority local gate
+# Checkpoint 2026-07-22-15: Rust policy authority accepted
 
-- **Status:** local gate passed; hosted CI and VS Code pending
+- **Status:** accepted; all closure gates passed
 - **Date:** 2026-07-22
 - **Related ADRs:** ADR-0006
 - **Task:** SGU-004
@@ -66,8 +66,9 @@ and V1 service runs retain the facts that produced their final decision.
 | Malformed and missing facts | Passed | terminal failed artifact, zero capability results |
 | Provider failure and cancellation | Passed | explicit failed/cancelled terminal evidence; no hang |
 | Official MCP surface | Passed locally | exactly seven tools; compact projection unchanged |
-| Hosted Windows/macOS/Linux | Pending | requires candidate commit and push |
-| Controlled VS Code one-call test | Pending | requires rebuilt server on the exact candidate commit |
+| Hosted Windows/macOS/Linux | Passed | hybrid run `29941196756`; all three jobs passed |
+| Hosted TypeScript matrix | Passed | run `29941196741`; Windows and macOS passed |
+| Controlled VS Code one-call test | Passed | exactly one Forge call; run `run:3a1a9078-ae0d-4391-886a-4edbf75f884f` |
 
 ## Non-goals preserved
 
@@ -77,8 +78,30 @@ and V1 service runs retain the facts that produced their final decision.
 - no long-lived kernel topology decision;
 - no organization-specific harness adapter without the real contract.
 
+## Hosted benchmark regression caught during closure
+
+The first hosted hybrid run passed every correctness and conformance stage but
+failed the final latency benchmark on all three operating systems. Its fixture
+still constructed the bridge with the removed TypeScript `approvalPolicy` input,
+so no `ApprovalFactsProvider` was available at runtime. The benchmark now supplies
+attributable facts explicitly, and `tsconfig.scripts.json` places benchmark scripts
+under the normal TypeScript gate so this constructor path cannot drift silently.
+
+The repaired 20-sample Windows release benchmark measured 15.454 ms p95 against
+the 500 ms spike ceiling. Hosted hybrid run `29941196756` then passed on Windows,
+macOS, and Ubuntu.
+
+## VS Code acceptance evidence
+
+On candidate `11b45d278dd32691aeed6274d8e33e7016858532`, a fresh Copilot Agent chat
+was restricted to Forge tools and asked for exactly one workspace-summary call with
+`maxFiles: 20`. It made exactly that call with no retry, terminal, built-in search,
+or non-Forge tool. Forge returned snapshot `workspace:d320e09d94cca9ba`, 177 files,
+explicit truncation, and the canonical six-event order.
+
 ## Next gate
 
-Review the complete diff, commit one candidate, run hosted Windows/macOS/Linux on
-that exact SHA, then rebuild/restart the VS Code MCP server and repeat the one-call
-workspace-summary test. SGU-004 and the Slice 2B gate remain open until both pass.
+SGU-004 is closed and Slice 2B may resume on a separate feature branch. Rust is
+the policy and run-state authority; TypeScript remains the integration layer.
+Production mutation still requires its own apply, verification, recovery, and
+cross-platform acceptance gates.
