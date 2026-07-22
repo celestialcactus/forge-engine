@@ -1,6 +1,6 @@
 # Slice 2: developer change transaction
 
-**Status:** Slice 2A proposal contract implemented; cross-platform boundary validation in progress
+**Status:** Slice 2A proposal and cross-platform candidate accepted; complete Slice 2 in progress
 **Date:** 2026-07-22
 
 ## User-visible outcome
@@ -65,8 +65,9 @@ omits dirty/untracked developer state, and does not carry ignored dependencies s
 as `node_modules`.
 
 See `docs/architecture/slice-2-windows-worktree-process-boundary.md` for the
-accepted local evidence and remaining gates. The identical suite is part of the
-Windows/macOS hosted conformance matrix; macOS remains pending until that job passes.
+accepted candidate evidence and remaining gates. The identical suite passed on
+hosted Windows and macOS. The repository enforces LF for tracked text so Forge
+evidence digests do not vary with the checkout platform.
 
 ## Current safety boundary
 

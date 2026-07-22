@@ -1,6 +1,6 @@
 # Slice 2A VS Code and platform conformance
 
-**Status:** Windows local pass with one host-composition exception; macOS runner pending
+**Status:** Slice 2A platform pass; VS Code pass with one host-composition exception
 **Date:** 2026-07-22
 **Branch:** `feature/SGU-002-v1-reconstruction-slice-2`
 
@@ -92,20 +92,28 @@ on `windows-latest` and `macos-latest`:
 The workflow executes the same proposal, MCP, Git-worktree, process-bound,
 typecheck, build, and CLI tests on both operating systems.
 
-A local Windows pass is not evidence of macOS compatibility. Slice 2A's macOS
-criterion remains pending until the hosted `macos-latest` job completes
-successfully on this branch.
+A local Windows pass is not evidence of macOS compatibility. The first hosted run
+(`29903309422`) exposed that the repository had no checkout line-ending policy:
+macOS passed, while Windows converted an LF fixture to CRLF and produced a
+different evidence digest. A fresh Windows clone reproduced the failure.
+
+Forge now declares `* text=auto eol=lf` in `.gitattributes`, because evidence
+digests must identify the same tracked text bytes on Windows, macOS, and Linux.
+The correction was verified from a new Windows clone with zero CR bytes in the
+fixture and then by hosted run `29903942618`, where both `windows-latest` and
+`macos-latest` passed `npm ci`, `npm run check`, and `npm run smoke` on commit
+`78f2ad478d32756975b3c486b4876553838f28c9`.
 
 ## Acceptance summary
 
 | Criterion | Result |
 | --- | --- |
-| Deterministic, non-mutating proposal | pass locally |
-| Digest conflict and canonical-path protection | pass locally |
-| Aggregate bounded diff evidence | pass locally |
-| Worktree/process candidate behavior | pass on Windows |
+| Deterministic, non-mutating proposal | pass on Windows and macOS |
+| Digest conflict and canonical-path protection | pass on Windows and macOS |
+| Aggregate bounded diff evidence | pass on Windows and macOS |
+| Worktree/process candidate behavior | pass on Windows and macOS |
 | VS Code keeps seven read-only Forge tools | pass |
 | VS Code exact read call and provenance | pass after restart |
 | VS Code preserves complete relative path | partial; host shortened it |
-| macOS conformance | pending hosted runner |
+| Cross-platform checkout and conformance | pass on hosted Windows and macOS |
 | Complete Slice 2 apply/verify/recover loop | not implemented |

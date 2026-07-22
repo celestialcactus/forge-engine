@@ -1,6 +1,6 @@
 # Checkpoint 11: Slice 2 proposal boundary and isolation spike
 
-- **Status:** in progress
+- **Status:** accepted for Slice 2A; complete Slice 2 remains in progress
 - **Date:** 2026-07-22
 - **Scope:** proposal-first change transactions and Windows/macOS worktree and process feasibility
 - **Decision owner:** ForgeEngine project
@@ -35,7 +35,9 @@ The local Windows candidate verification transport uses a fixed executable and a
 with `shell: false`. It bounds captured output, retains actual byte counts, and
 distinguishes timeout from caller cancellation.
 
-The same suite is wired to a hosted macOS runner; macOS acceptance remains pending.
+The same suite passed on hosted Windows and macOS. The first Windows run exposed
+platform-dependent CRLF checkout bytes and therefore different evidence digests;
+the repository now enforces LF for tracked text through `.gitattributes`.
 
 ## Not yet accepted
 
@@ -49,15 +51,17 @@ The same suite is wired to a hosted macOS runner; macOS acceptance remains pendi
 
 ## Validation record
 
-- Slice 2 proposal contract: five focused tests passed.
+- Slice 2 proposal contract: six focused tests passed.
 - Worktree/process boundary experiment: three focused tests passed locally on Windows.
-- Hosted macOS conformance: pending branch workflow execution.
-- Strict typecheck passed before checkpoint documentation.
-- Full-suite/build validation is required after documentation consolidation.
+- Clean Windows checkout: LF policy observed, 36/36 tests, typecheck, build, and smoke passed.
+- Hosted conformance run `29903942618`: Windows and macOS passed on commit `78f2ad4`.
+- Controlled VS Code: exactly seven read-only Forge tools remained selected and the
+  exact-read prompt used one Forge call after MCP restart. Copilot shortened the
+  displayed relative path, which remains a host-composition exception.
 
 ## Next checkpoint trigger
 
-Promote the spike into a production isolation/verification lifecycle only after its
+Promote the accepted Slice 2A spike into a production isolation/verification lifecycle only after its
 contracts cover base identity, process trees, cleanup failure, and recoverable
 failed verification. The first write must occur in a disposable fixture boundary,
 never in the developer's active workspace.

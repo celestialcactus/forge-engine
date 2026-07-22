@@ -31,8 +31,9 @@ worktree, then proves:
 - timeout and caller cancellation can be distinguished in evidence.
 
 The experiment passed locally on Windows on 2026-07-22. The same executable suite
-is included in the Windows/macOS hosted conformance matrix. macOS acceptance remains
-pending until that hosted job passes.
+then passed in hosted Windows and macOS jobs on commit `78f2ad4`. The initial
+hosted Windows run also caught platform-dependent CRLF checkout bytes; enforcing
+LF for tracked text made evidence digests identical across supported hosts.
 
 ## Architectural interpretation
 

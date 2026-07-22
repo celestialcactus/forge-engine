@@ -44,4 +44,8 @@ checkpoint records.
 
 - Added a locked Node 22 conformance matrix for Windows and macOS plus a controlled
   VS Code Slice 2A record. The VS Code boundary retained exactly seven read-only
-  tools; macOS acceptance remains pending the hosted runner.
+  tools, with one residual host-only relative-path rendering exception.
+- The first platform matrix caught CRLF-dependent evidence hashes on Windows while
+  macOS passed. Added a repository LF checkout contract and reran the same commit
+  lineage successfully on hosted Windows and macOS. Slice 2A is accepted; apply,
+  verify, accept/recover, and rollback remain later Slice 2 gates.
