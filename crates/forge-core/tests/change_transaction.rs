@@ -2,10 +2,11 @@ use std::cell::Cell;
 
 use forge_core::{
     ApplicationChange, AppliedChangeEvidence, ApplyEvidence, ApprovalFacts, BoundaryEvidence,
-    CapabilityCall, ChangeApplicationManifest, ChangeTransactionAdapter, ChangeTransactionPhase,
-    ChangeTransactionRequest, ChangeTransactionStatus, HostPolicyFact, HostPolicyPosture,
-    NoCancellation, UserConsentFact, UserConsentStatus, VerificationEvidence,
-    VerificationSelection, execute_candidate_transaction, proposal_id_for_manifest,
+    BoundedTextEvidence, CandidateRetentionEvidence, CapabilityCall, ChangeApplicationManifest,
+    ChangeTransactionAdapter, ChangeTransactionPhase, ChangeTransactionRequest,
+    ChangeTransactionStatus, HostPolicyFact, HostPolicyPosture, NoCancellation, UserConsentFact,
+    UserConsentStatus, VerificationEvidence, VerificationSelection, execute_candidate_transaction,
+    proposal_id_for_manifest,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -118,6 +119,7 @@ impl ChangeTransactionAdapter for FakeAdapter {
                 },
                 after_sha256: change.after_sha256.clone(),
             }],
+            diff: None,
         })
     }
 
@@ -125,6 +127,7 @@ impl ChangeTransactionAdapter for FakeAdapter {
         &mut self,
         _boundary: &BoundaryEvidence,
         selection: &VerificationSelection,
+        _cancellation: &dyn forge_core::Cancellation,
     ) -> Result<VerificationEvidence, String> {
         self.operations.push("verify");
         Ok(VerificationEvidence {
@@ -136,6 +139,26 @@ impl ChangeTransactionAdapter for FakeAdapter {
             stdout_bytes: 7,
             stderr_bytes: 0,
             output_truncated: false,
+            stdout: "fixture".to_owned(),
+            stderr: String::new(),
+        })
+    }
+
+    fn retain(
+        &mut self,
+        boundary: &BoundaryEvidence,
+    ) -> Result<CandidateRetentionEvidence, String> {
+        self.operations.push("retain");
+        Ok(CandidateRetentionEvidence {
+            boundary_id: boundary.boundary_id.clone(),
+            retained: true,
+            original_workspace_unchanged: true,
+            final_diff: BoundedTextEvidence {
+                text: "fixture diff".to_owned(),
+                total_bytes: 12,
+                sha256: digest("fixture diff"),
+                truncated: false,
+            },
         })
     }
 
@@ -172,7 +195,7 @@ fn verified_candidate_has_one_rust_owned_phase_sequence() {
     );
 
     assert_eq!(artifact.status, ChangeTransactionStatus::VerifiedCandidate);
-    assert_eq!(adapter.operations, ["prepare", "apply", "verify"]);
+    assert_eq!(adapter.operations, ["prepare", "apply", "verify", "retain"]);
     assert_eq!(
         artifact
             .steps
@@ -185,6 +208,7 @@ fn verified_candidate_has_one_rust_owned_phase_sequence() {
             &ChangeTransactionPhase::BoundaryPrepared,
             &ChangeTransactionPhase::CandidateApplied,
             &ChangeTransactionPhase::VerificationCompleted,
+            &ChangeTransactionPhase::CandidateRetained,
             &ChangeTransactionPhase::CandidateVerified,
         ]
     );
@@ -194,7 +218,7 @@ fn verified_candidate_has_one_rust_owned_phase_sequence() {
             .iter()
             .map(|step| step.sequence)
             .collect::<Vec<_>>(),
-        [1, 2, 3, 4, 5, 6]
+        [1, 2, 3, 4, 5, 6, 7]
     );
     assert!(artifact.recovery.is_none());
 }

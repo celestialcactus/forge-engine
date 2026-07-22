@@ -19,10 +19,10 @@ either accept or recover a small change with every phase represented as evidence
 | Read base | implemented | canonical path, bounded content, SHA-256 digest, snapshot ID |
 | Propose | implemented | deterministic proposal ID, before/after digests, bounded unified diff |
 | Approve | Rust contract implemented; host flow pending | explicit decision tied to transaction, proposal, snapshot, verification, and exact capability call |
-| Isolate | candidate proven for a clean committed base; production lifecycle pending | selected worktree or equivalent boundary with reported guarantees |
-| Apply | Rust state machine implemented; production adapter pending | exact internal manifest, validated applied paths/digests, recoverable candidate-only mutation |
-| Verify | Rust evidence contract implemented; worktree/process adapter pending | policy-owned check ID, bounded output counts, timeout/cancellation, validated result |
-| Accept or recover | pending | final diff, verification outcome, cleanup and rollback status |
+| Isolate | private Rust clean-revision worktree adapter implemented; hosted acceptance pending | clean HEAD, matching snapshot/digests, tracked-file reproducibility, detached boundary |
+| Apply | private Rust candidate-only replacement adapter implemented | exact manifest, applied digests, bounded application diff |
+| Verify | private policy-named process adapter implemented | fixed executable/arguments, bounded output, timeout/cancellation, process-tree termination |
+| Accept or recover | private retain/recover path implemented; promotion deferred | post-verification digests/path set, final diff, explicit retention or cleanup |
 
 ## Slice 2B transaction authority
 
@@ -32,11 +32,12 @@ snapshot. Rust validates the capability subject, content digests, policy result,
 adapter evidence, phase order, cancellation, and recovery outcome.
 
 A successful contract run ends at verified_candidate inside an isolated boundary.
-It does not promote changes into the active workspace. The production clean-base
-worktree and policy-named process adapter remain Increment 2B-2, and neither
-increment expands the seven-tool MCP surface.
+It does not promote changes into the active workspace. Increment 2B-2 now supplies
+the private Rust clean-revision worktree and policy-named process adapter. Hosted
+cross-platform acceptance remains open, and neither increment expands the
+seven-tool MCP surface.
 
-See ADR-0007 and Checkpoint 16.
+See ADR-0007 and Checkpoints 16-17.
 
 ## Slice 2A contract
 
@@ -85,14 +86,14 @@ evidence digests do not vary with the checkout platform.
 
 ## Current safety boundary
 
-No production source write, generic shell, process execution, worktree creation,
-package installation, Git mutation, or rollback API exists in this slice. A reviewable
-diff is not proof that an apply boundary is safe.
+No public source-write, generic shell, package-installation, promotion, CLI, or MCP
+mutation API exists in this slice. The private Rust adapter can create and mutate a
+detached candidate only after exact policy and clean-revision checks.
 
-The executable experiment establishes basic isolation, dirty-base mismatch,
-dependency absence, cancellation, and output bounds. Production work still must
-establish command policy, descendant-process termination, cleanup evidence, and
-recoverable failure behavior before any apply capability is registered.
+A Git worktree is a recoverability boundary, not a security sandbox. Policy-owned
+verification still runs with the developer process permissions. Forge detects
+governed-workspace drift and refuses retention, but organizational sandbox, DLP,
+and egress controls remain separate layers.
 
 ## Slice 2 exit gate
 

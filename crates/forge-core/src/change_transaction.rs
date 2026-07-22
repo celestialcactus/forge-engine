@@ -72,8 +72,19 @@ pub struct AppliedChangeEvidence {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BoundedTextEvidence {
+    pub text: String,
+    pub total_bytes: u64,
+    pub sha256: String,
+    pub truncated: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ApplyEvidence {
     pub changes: Vec<AppliedChangeEvidence>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diff: Option<BoundedTextEvidence>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -87,6 +98,17 @@ pub struct VerificationEvidence {
     pub stdout_bytes: u64,
     pub stderr_bytes: u64,
     pub output_truncated: bool,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CandidateRetentionEvidence {
+    pub boundary_id: String,
+    pub retained: bool,
+    pub original_workspace_unchanged: bool,
+    pub final_diff: BoundedTextEvidence,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -119,6 +141,8 @@ pub enum ChangeTransactionPhase {
     CandidateApplied,
     #[serde(rename = "verification.completed")]
     VerificationCompleted,
+    #[serde(rename = "candidate.retained")]
+    CandidateRetained,
     #[serde(rename = "candidate.verified")]
     CandidateVerified,
     #[serde(rename = "recovery.completed")]
@@ -155,6 +179,8 @@ pub struct ChangeTransactionArtifact {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verification: Option<VerificationEvidence>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub retention: Option<CandidateRetentionEvidence>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub recovery: Option<RecoveryEvidence>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failure: Option<String>,
@@ -175,7 +201,10 @@ pub trait ChangeTransactionAdapter {
         &mut self,
         boundary: &BoundaryEvidence,
         selection: &VerificationSelection,
+        cancellation: &dyn Cancellation,
     ) -> Result<VerificationEvidence, String>;
+    fn retain(&mut self, boundary: &BoundaryEvidence)
+    -> Result<CandidateRetentionEvidence, String>;
     fn recover(&mut self, boundary: &BoundaryEvidence, cause: &str) -> Result<String, String>;
 }
 
@@ -451,6 +480,7 @@ pub fn execute_candidate_transaction<A: ChangeTransactionAdapter>(
         boundary: None,
         application: None,
         verification: None,
+        retention: None,
         recovery: None,
         failure: None,
         cancellation_reason: None,
@@ -554,7 +584,7 @@ pub fn execute_candidate_transaction<A: ChangeTransactionAdapter>(
         return recover(&mut artifact, adapter, &boundary, reason, true);
     }
 
-    let verification = match adapter.verify(&boundary, &request.verification) {
+    let verification = match adapter.verify(&boundary, &request.verification, cancellation) {
         Ok(value) => value,
         Err(error) => {
             return recover(
@@ -580,6 +610,7 @@ pub fn execute_candidate_transaction<A: ChangeTransactionAdapter>(
             false,
         );
     }
+    let verification_cancelled = verification.cancelled;
     let verified = verification.success;
     artifact.verification = Some(verification);
     step(
@@ -592,6 +623,12 @@ pub fn execute_candidate_transaction<A: ChangeTransactionAdapter>(
             "The policy-named verification check failed."
         },
     );
+    if verification_cancelled {
+        let reason = cancellation
+            .reason()
+            .unwrap_or_else(|| "Candidate verification was cancelled.".to_owned());
+        return recover(&mut artifact, adapter, &boundary, reason, true);
+    }
     if !verified {
         return recover(
             &mut artifact,
@@ -601,6 +638,38 @@ pub fn execute_candidate_transaction<A: ChangeTransactionAdapter>(
             false,
         );
     }
+
+    let retention = match adapter.retain(&boundary) {
+        Ok(value) => value,
+        Err(error) => {
+            return recover(
+                &mut artifact,
+                adapter,
+                &boundary,
+                format!("Candidate retention failed: {error}"),
+                false,
+            );
+        }
+    };
+    if retention.boundary_id != boundary.boundary_id
+        || !retention.retained
+        || !retention.original_workspace_unchanged
+    {
+        return recover(
+            &mut artifact,
+            adapter,
+            &boundary,
+            "Candidate retention evidence is inconsistent with the prepared boundary.".to_owned(),
+            false,
+        );
+    }
+    artifact.retention = Some(retention);
+    step(
+        &mut artifact,
+        ChangeTransactionPhase::CandidateRetained,
+        true,
+        "The verified candidate boundary was retained for explicit later promotion.",
+    );
 
     artifact.status = ChangeTransactionStatus::VerifiedCandidate;
     step(
