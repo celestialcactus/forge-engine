@@ -18,11 +18,25 @@ either accept or recover a small change with every phase represented as evidence
 | --- | --- | --- |
 | Read base | implemented | canonical path, bounded content, SHA-256 digest, snapshot ID |
 | Propose | implemented | deterministic proposal ID, before/after digests, bounded unified diff |
-| Approve | pending | explicit decision tied to proposal ID and exact capabilities |
+| Approve | Rust contract implemented; host flow pending | explicit decision tied to transaction, proposal, snapshot, verification, and exact capability call |
 | Isolate | candidate proven for a clean committed base; production lifecycle pending | selected worktree or equivalent boundary with reported guarantees |
-| Apply | pending | atomic or recoverable write record; no hidden partial success |
-| Verify | candidate direct-child transport proven; policy and process-tree handling pending | fixed executable/argument contract, timeout, bounded output, exit result |
+| Apply | Rust state machine implemented; production adapter pending | exact internal manifest, validated applied paths/digests, recoverable candidate-only mutation |
+| Verify | Rust evidence contract implemented; worktree/process adapter pending | policy-owned check ID, bounded output counts, timeout/cancellation, validated result |
 | Accept or recover | pending | final diff, verification outcome, cleanup and rollback status |
+
+## Slice 2B transaction authority
+
+Increment 2B-1 adds the Rust-owned candidate transaction contract. An internal
+application manifest binds exact replacement text to the Slice 2A proposal ID and
+snapshot. Rust validates the capability subject, content digests, policy result,
+adapter evidence, phase order, cancellation, and recovery outcome.
+
+A successful contract run ends at verified_candidate inside an isolated boundary.
+It does not promote changes into the active workspace. The production clean-base
+worktree and policy-named process adapter remain Increment 2B-2, and neither
+increment expands the seven-tool MCP surface.
+
+See ADR-0007 and Checkpoint 16.
 
 ## Slice 2A contract
 

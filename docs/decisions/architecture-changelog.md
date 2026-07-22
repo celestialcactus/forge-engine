@@ -78,3 +78,10 @@ checkpoint records.
   the Windows/macOS TypeScript matrix, and an exact-commit one-call VS Code test
   pass. Benchmark scripts now have their own TypeScript gate after hosted closure
   caught a stale constructor fixture. See Checkpoint 15.
+- Began Slice 2B with a Rust-owned candidate transaction contract. An internal
+  application manifest now binds exact replacement content to the Slice 2A
+  proposal, snapshot, approved capability subject, and policy-named verification.
+  Rust alone assigns verified, recovered, cancelled, or failed status and rejects
+  malformed adapter evidence. Eleven focused tests and the complete hybrid gate
+  pass; the production worktree/process adapter and final promotion remain
+  pending. See ADR-0007 and Checkpoint 16.
