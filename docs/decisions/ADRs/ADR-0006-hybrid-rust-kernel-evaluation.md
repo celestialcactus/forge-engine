@@ -23,12 +23,16 @@ runtimes.
 Accept the following ownership split as Forge's target architecture:
 
 - Rust is the sole authority for runtime state, event sequence, context records,
-  capability correlation, approval recording, terminal artifacts, and future
-  transactions, process supervision, indexing, and durable state.
+  capability correlation, final policy resolution and approval recording, terminal
+  artifacts, and future transactions, process supervision, indexing, and durable
+  state.
 - TypeScript remains responsible for MCP/IDE presentation, TypeScript semantic
-  intelligence, and fast-moving vendor integrations behind a versioned protocol.
-- TypeScript adapters may answer planner, policy, and capability requests. Their
-  answers do not become run state until Rust records them.
+  intelligence, workflow definitions, tool implementations, and fast-moving
+  vendor integrations behind a versioned protocol.
+- TypeScript adapters may answer planner and capability requests and may supply
+  user-consent results or host-policy facts. Rust produces the final Forge policy
+  outcome, and no adapter answer becomes run state until Rust accepts and records
+  it.
 - The accepted TypeScript kernel remains the shipped reference and differential
   oracle until a later explicit production-cutover ADR.
 - The standalone sovereign CLI must eventually perform baseline workspace, process,
@@ -67,6 +71,9 @@ Hosted Windows/macOS/Linux remains mandatory SGU-003 closure evidence.
 
 - No second run, session, event, policy, approval, or transaction model may exist
   in a TypeScript adapter.
+- TypeScript may define workflows and implement integration-specific tools; Rust
+  owns their authoritative execution state, scheduling, budgets, cancellation,
+  policy, and evidence.
 - Rust owns baseline sovereign operation; TypeScript is loaded where compiler,
   host, or vendor integration value justifies it.
 - The bridge remains private and versioned. Malformed kernel output is never
@@ -86,6 +93,13 @@ Hosted Windows/macOS/Linux remains mandatory SGU-003 closure evidence.
   plus a native binary. The small native binary does not justify claiming that the
   current MCP package is simpler than Node alone.
 - A successful closure authorizes a staged reconstruction, not a flag-day rewrite.
+- The target is permanently hybrid, not an eventual all-Rust rewrite. Rust ports
+  require an authority, sovereign-baseline, performance, recovery, or isolation
+  justification; integration velocity alone favors TypeScript.
+- The near-term enterprise adoption path is apprentice-first through MCP and, only
+  where necessary, optional adapters for existing central harnesses.
+- Public prototype promotion is gated on an explicit open-source license decision,
+  complete root license text, and consistent package/Cargo metadata.
 - A failed closure leaves the disposable spike branch isolated from Slice 2A.
 
 ## Closure and rollback

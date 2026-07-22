@@ -15,8 +15,16 @@ result was verified.
 
 It is sovereign-first: local execution and local models are first-class choices.
 It is not isolationist: a user or host policy may deliberately escalate a task to a
-cloud provider. Forge does not try to replace Codex, Copilot, or an IDE; it makes
-their interaction with a workspace more evidence-driven and controllable.
+cloud provider. In V1 Forge complements Codex, Copilot, IDEs, and organization
+harnesses by making their interaction with a workspace more evidence-driven and
+controllable. Those integrations are an adoption path, not a permanent product
+dependency or ceiling.
+
+The delivery amendment in `forgeengine-v1-demo-and-interop-plan.md` prioritizes a
+demonstrable prototype by 2026-08-22: TypeScript remains the high-velocity tool,
+workflow-definition, provider, MCP, and IDE integration layer; Rust owns final
+policy resolution, workflow execution state, evidence ordering, and the machinery
+required for baseline sovereign operation.
 
 ## Design invariants
 
@@ -37,6 +45,11 @@ their interaction with a workspace more evidence-driven and controllable.
 7. **Security is layered.** Early V1 prevents obvious foot-guns and exposes
    approvals/intent. Strong process/filesystem/network isolation is a separately
    testable hardening layer, not a claim made by the initial TypeScript runtime.
+8. **Interoperability is bidirectional.** Forge can be exposed as an apprentice or
+   consume another harness's tools without importing host-private state into the
+   kernel. Delegations carry origin, depth, budget, cancellation, and idempotency.
+9. **One policy authority.** TypeScript may collect host policy facts and user
+   consent; Rust resolves and records the final Forge allow, deny, or ask outcome.
 
 ## V1 vertical slices
 
@@ -141,8 +154,24 @@ research. They occur immediately before the relevant slice, while Slice 0 procee
 | 2 | TypeScript editing and diagnostics | Which LSP/TypeScript integration provides symbols and diagnostics without making the kernel IDE-specific? |
 | 4 | Local durable store | Which SQLite binding/migration approach satisfies Windows packaging, replay, and corruption recovery needs? |
 | 6 | VS Code MCP interoperability | Which MCP cancellation/progress/task features are actually supported in the target VS Code version and transport? |
+| 6 | Existing harness interoperability | Can MCP represent the target central "agents" harness accurately; if not, what minimal optional adapter maps its tool, cancellation, approval-fact, progress, and trace contracts without creating a second run model? |
 | 7 | Provider normalization | Can the selected local and cloud providers satisfy Forge's stream, tool, cancellation, and error contract? |
 | 3/7 | Evaluation harness | What representative fixture set measures accepted outcome, evidence recall, token/cost, latency, and corrective turns? |
+
+## Prototype and open-source delivery gate
+
+The near-term prototype should demonstrate one evidence-backed workflow through
+VS Code/MCP apprentice mode, a corresponding CLI inspection path, deliberate
+local/cloud execution, and complete run provenance. It should not delay working
+utility to port integration-specific tools to Rust.
+
+Before public promotion, the repository must contain a complete root license and
+consistent package/Cargo metadata. Apache-2.0 is the current technical candidate
+for an enterprise-forkable project because of its explicit patent terms; MIT is
+the existing manifest declaration. License selection requires an explicit owner
+decision and appropriate company legal/open-source review. Contribution guidance,
+provenance, dependency-license review, and third-party notices follow the selected
+license rather than being inferred from package metadata.
 
 ## Confidence and decision gates
 

@@ -16,12 +16,13 @@ contract and Rust is the sole producer of authoritative run artifacts.
 VS Code / MCP / future provider SDK / TypeScript compiler
                          |
                 TypeScript host adapter
-              presentation and evidence I/O
+       tools, workflow definitions, presentation,
+           provider/compiler/host integration
                          |
             forge.kernel.bridge.v1 over NDJSON
                          |
                  Rust kernel authority
-       context -> plan -> approve -> invoke -> record
+     validate -> authorize -> schedule -> invoke -> record
                          |
                    RunArtifact v1
 ```
@@ -54,8 +55,9 @@ Every message is one UTF-8 JSON object followed by LF. Every message carries
   optional pre-start cancellation reason.
 - `planner.turn`: a complete output or one capability call in response to the
   kernel's matching planner request.
-- `approval.decision`: the TypeScript policy adapter's decision for the exact
-  call requested by Rust.
+- `approval.decision`: the spike adapter's approval response for the exact call
+  requested by Rust. In the target boundary this message carries user consent and
+  host-policy facts; Rust resolves the final Forge policy outcome.
 - `capability.result`: bounded adapter evidence correlated to the requested call.
 - `run.cancel`: explicit cancellation reason while the kernel awaits an adapter.
 - `runtime.error`: a planner, policy, or integration callback failure that Rust
@@ -82,7 +84,8 @@ Rust owns:
 - logical sequence numbers;
 - context plan construction;
 - maximum-turn enforcement;
-- policy decision recording;
+- final policy evaluation, enforcement, and decision recording;
+- workflow execution state, scheduling, budgets, and cancellation;
 - capability request/result correlation and ordering;
 - the only transition from adapter answers to run state;
 - terminal status and failure taxonomy;
@@ -93,13 +96,27 @@ TypeScript owns:
 - spawning and supervising the spike kernel process;
 - translating `AbortSignal` into `run.cancel`;
 - planner/provider calls requested by Rust;
-- evaluating current policy rules when Rust requests `approval.decide`;
+- collecting user-consent results and host-policy facts when Rust requests an
+  approval input;
+- workflow definitions and rapidly changing orchestration integrations;
 - workspace, Git, TypeScript, and other integration-specific capabilities;
 - MCP schemas and compact host presentation.
+
+The current executable spike delegates a complete `ApprovalDecision` to the
+TypeScript callback so it can remain differentially compatible with the accepted
+TypeScript oracle. That is temporary spike behavior, not permission for a second
+production policy engine. Before production cutover, the bridge must separate
+external approval facts from the final decision produced by Rust.
 
 TypeScript must not synthesize missing Rust events or repair a malformed artifact.
 The host either accepts one schema-valid terminal artifact or records a bridge
 failure outside the run.
+
+TypeScript is intentionally the high-velocity product surface. A feature should
+remain there when it is host-, compiler-, provider-, or tool-ecosystem-specific.
+It moves into Rust only when necessary for authoritative state, baseline sovereign
+operation, measured performance, recovery, or process isolation. The architecture
+does not pursue a future all-Rust rewrite.
 
 ## Compatibility strategy
 
@@ -160,6 +177,22 @@ semantics, IDE presentation, or vendor SDKs. If the production design cannot mee
 that constraint, the bridge must be redesigned rather than normalized as permanent
 two-runtime overhead.
 
+## Apprentice-first interoperability
+
+Enterprise adoption is expected to begin primarily by exposing Forge as an MCP
+apprentice to an IDE or central agent harness. Forge may also consume tools from
+that harness. Both directions terminate at the same Rust capability and evidence
+contracts; a host adapter cannot create a separate run, approval, or workflow
+state model.
+
+MCP is the first public compatibility surface. A proprietary harness adapter is
+optional and justified only by a measured contract gap. Delegated calls carry
+origin, delegation ID, depth, budget, cancellation, and idempotency so recursive
+master/apprentice relationships cannot silently loop or expand authority.
+
+See `forgeengine-v1-demo-and-interop-plan.md` for delivery gates and comparative
+harness metrics.
+
 ## Production questions deliberately left open
 
 - long-lived kernel lifecycle and multi-run concurrency;
@@ -168,8 +201,10 @@ two-runtime overhead.
 - provider streaming and partial-result semantics;
 - process-tree containment and sandbox backends;
 - whether the MCP adapter should eventually move into Rust;
-- stable public schemas beyond bridge v1.
-- signed, reproducible multi-target packaging and update delivery.
+- stable public schemas beyond bridge v1;
+- signed, reproducible multi-target packaging and update delivery;
+- mapping the target organization harness after its actual contract is inspected;
+- separating host/user approval facts from Rust's final policy result.
 
 SGU-003 may recommend the hybrid direction without pretending these production
 questions are already solved.

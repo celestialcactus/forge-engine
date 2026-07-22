@@ -58,3 +58,9 @@ checkpoint records.
   correlation, terminal artifacts, and future durable/process machinery. Retained
   TypeScript for MCP/IDE/compiler/vendor integrations and prohibited a permanent
   Node sidecar for baseline sovereign CLI operation.
+- Clarified that Forge is permanently hybrid rather than on a path to an all-Rust
+  rewrite: TypeScript owns rapid tool, workflow-definition, provider, MCP, IDE,
+  and compiler integration, while Rust owns final policy and authoritative
+  execution state. Recorded the one-month demo plan, apprentice-first enterprise
+  adoption, bidirectional central-harness compatibility, comparative efficiency
+  metrics, and the open-source license gate in Checkpoint 13.

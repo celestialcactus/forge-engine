@@ -48,6 +48,26 @@ No integration mode is architecturally privileged over standalone CLI. An extern
 host may enrich the experience, but the kernel must never require an external
 host's private state, prompt format, or proprietary tool semantics to function.
 
+## Adoption sequencing
+
+The near-term enterprise adoption path is apprentice-first. Existing IDE agents,
+provider runtimes, and central organization harnesses should be able to invoke
+Forge's evidence, local-compute, context, and verification capabilities without
+being replaced. MCP is the default public surface; an additional adapter is
+justified only after inspecting a target harness whose contract cannot be mapped
+cleanly to MCP.
+
+This is a delivery priority rather than an architectural privilege. Forge as an
+apprentice and Forge as a standalone or master runtime use the same authoritative
+run, policy, evidence, and capability contracts. The product competes by producing
+better accepted outcomes, clearer provenance, fewer corrective turns, and more
+deliberate local/cloud use—not by forcing developers to abandon a working host.
+
+TypeScript owns the fast-moving host and tool integration layer. Rust owns the
+authoritative workflow execution, policy resolution, and evidence machinery.
+Organization-specific harness adapters remain optional and must not introduce a
+second run model or proprietary semantics into the kernel.
+
 ## Architectural consequences
 
 1. **Forge CLI is a first-party host, not a debug shell.** The event protocol,
@@ -94,6 +114,9 @@ With this:
   commands.
 - Keep interoperability real: a developer should be able to begin through an MCP
   host and continue the same attributable session through Forge CLI later.
+
+The concrete one-month delivery and harness-compatibility plan is recorded in
+`forgeengine-v1-demo-and-interop-plan.md`.
 
 ## Decision
 
