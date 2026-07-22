@@ -1,6 +1,6 @@
 # Hybrid runtime candidate: Rust kernel and TypeScript adapters
 
-**Status:** local and VS Code boundary validated; hosted platform gate pending
+**Status:** accepted target boundary; hosted and VS Code gates passed; production adoption staged
 **Date:** 2026-07-22
 
 ## Architectural claim
@@ -163,9 +163,13 @@ The local Windows spike established the boundary, not a production cutover:
   control. This is acceptable for the spike's 500 ms ceiling but argues for a
   supervised long-lived kernel before high-frequency production workloads.
 
-The result is a conditional architecture go. It proves that Rust can be the sole
+The result is an architecture go. Commit
+`a3e220c9e7091a15ed4da19feebcc876e9487374` passed clean hosted Windows,
+macOS, and Ubuntu hybrid conformance, and the exact pushed branch passed the
+controlled one-call VS Code apprentice test. It proves that Rust can be the sole
 run authority behind TypeScript integrations. It does not prove that today's
-Node-plus-native MCP package is simpler to distribute than Node alone.
+Node-plus-native MCP package is simpler to distribute than Node alone or accept
+the spike transport as the production lifecycle.
 
 ## Sovereign CLI constraint
 

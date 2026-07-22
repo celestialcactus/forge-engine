@@ -144,7 +144,9 @@ licensing.
 
 ## Immediate next gate
 
-Push SGU-003 as an evaluation branch and run the hosted platform matrix. Do not
-merge the spike or resume Slice 2B until the matrix passes and the target policy
-boundary is recorded: TypeScript supplies integration results and approval facts;
-Rust produces the final policy decision and authoritative artifact.
+SGU-003 passed its hosted Windows/macOS/Ubuntu matrix and exact-branch VS Code
+test. SGU-004 now implements the smallest remaining authority correction:
+TypeScript supplies integration results, user-consent results, and host-policy
+facts; Rust produces the final policy decision and authoritative artifact. The
+one-process-per-run bridge remains available as a conformance transport while the
+long-lived lifecycle is designed separately from the one-month demo critical path.

@@ -1,9 +1,9 @@
 # ADR-0006: adopt a Rust kernel with TypeScript adapters
 
-- **Status:** conditionally accepted architecture direction; production cutover not accepted
+- **Status:** accepted target architecture; production cutover remains staged
 - **Date:** 2026-07-22
 - **Revisits:** ADR-0001 runtime-language choice
-- **Blocks:** Slice 2B until SGU-003 closure gates pass
+- **Unblocks:** SGU-004 policy-authority correction; Slice 2B remains gated on that correction
 
 ## Context
 
@@ -65,7 +65,13 @@ and the existing Node.js 22 TypeScript host.
 - The accepted TypeScript suite still passes 37 tests; the Rust suite passes eight
   tests; the hybrid suite passes 15 tests locally.
 
-Hosted Windows/macOS/Linux remains mandatory SGU-003 closure evidence.
+Commit `a3e220c9e7091a15ed4da19feebcc876e9487374` passed the hosted
+Windows, macOS, and Ubuntu hybrid jobs in
+[Hybrid kernel conformance run 29937948367](https://github.com/celestialcactus/forge-engine/actions/runs/29937948367).
+The existing Windows/macOS TypeScript matrix also passed in
+[Cross-platform conformance run 29937948916](https://github.com/celestialcactus/forge-engine/actions/runs/29937948916).
+A fresh VS Code test on the pushed branch retained one summary call, no retry, and
+complete provenance. SGU-003 is closed as a go.
 
 ## Constraints adopted
 
@@ -86,7 +92,8 @@ Hosted Windows/macOS/Linux remains mandatory SGU-003 closure evidence.
 
 ## Consequences
 
-- Slice 2B remains paused until SGU-003 closes.
+- SGU-003 is closed. Slice 2B remains paused only for the bounded SGU-004
+  policy-authority correction and its conformance gate.
 - The accepted Slice 2A branch remains unchanged and is still the shipped control.
 - No production mutation capability is introduced by this evaluation.
 - MCP distribution is temporarily more complex because the spike requires Node

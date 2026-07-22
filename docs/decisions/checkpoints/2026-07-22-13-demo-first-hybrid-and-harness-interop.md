@@ -1,6 +1,6 @@
 # Checkpoint 2026-07-22-13: Demo-first hybrid and harness interoperability
 
-- **Status:** accepted planning checkpoint; hosted SGU-003 validation pending
+- **Status:** accepted; hosted SGU-003 validation passed in Checkpoint 14
 - **Date:** 2026-07-22
 - **Related ADRs:** ADR-0006
 - **Scope:** next-month prototype sequencing, apprentice-first enterprise adoption,
@@ -58,7 +58,7 @@ product destinations.
 | `npm run check:hybrid` with the pinned gnullvm toolchain | Passed | Rust format/lint/build, 8 Rust tests, 37 TypeScript tests, 15 hybrid/MCP tests, and production build |
 | Prior controlled VS Code run | Passed locally | Checkpoint 12 and ADR-0006 |
 | Architecture reconciliation against product and delivery intent | Passed | Demo/interoperability plan and amended ownership tables |
-| Hosted Windows/macOS/Linux SGU-003 matrix | Pending | Requires pushed evaluation branch |
+| Hosted Windows/macOS/Linux SGU-003 matrix | Passed | Exact commit and CI links are recorded in Checkpoint 14 |
 
 ## Failures and surprises
 
@@ -72,7 +72,7 @@ product destinations.
 ## Known limitations
 
 - The organization-specific "agents" harness contract has not been inspected.
-- Hosted cross-platform validation and native release packaging remain pending.
+- Hosted cross-platform validation passed; signed, reproducible release packaging remains pending.
 - The one-child-process-per-run bridge is not the production lifecycle.
 - The demo schedule will be reduced in breadth rather than bypassing a failed
   architecture or conformance gate.
@@ -89,14 +89,15 @@ product destinations.
 ## Repository state
 
 - Branch: `spike/SGU-003-rust-kernel-hybrid-evaluation`
-- Baseline spike implementation: `7935cf4`; this checkpoint records the planning
-  amendment applied before hosted validation
+- Baseline spike implementation: `7935cf4`; planning amendment: `a3e220c`; hosted
+  validation passed against the full planning-amendment commit
 - Files changed: architecture plan, ADR, checkpoint, and changelog only
 - Production behavior available: unchanged; this checkpoint changes delivery and
   ownership decisions, not runtime behavior
 
 ## Next checkpoint
 
-Push SGU-003, run the same commit on hosted Windows/macOS/Linux, and close or
-redesign the spike based on executable evidence. Before Slice 2B, record the
-long-lived-kernel and approval-fact protocol follow-on boundaries.
+SGU-003 closed as an architecture go in Checkpoint 14. Execute SGU-004's bounded
+approval-fact protocol and Rust policy-authority correction before Slice 2B;
+design the long-lived kernel lifecycle as a separate follow-on unless demo evidence
+makes it critical.

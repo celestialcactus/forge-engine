@@ -64,3 +64,10 @@ checkpoint records.
   execution state. Recorded the one-month demo plan, apprentice-first enterprise
   adoption, bidirectional central-harness compatibility, comparative efficiency
   metrics, and the open-source license gate in Checkpoint 13.
+- Closed SGU-003 as an architecture go after the exact pushed commit passed the
+  Windows/macOS/Ubuntu hybrid matrix, the Windows/macOS TypeScript matrix, and a
+  one-call controlled VS Code apprentice test. Production adoption remains staged;
+  the spike process topology is not the production lifecycle. See Checkpoint 14.
+- Opened SGU-004 to replace the spike's TypeScript-computed approval decision with
+  attributable host/user facts and a final Rust-owned policy result before Slice
+  2B mutation work resumes.

@@ -1,6 +1,6 @@
 # SGU-003: Rust kernel and TypeScript adapter evaluation
 
-- **Status:** local and controlled VS Code gates passed; hosted platform gate pending
+- **Status:** passed; hybrid target accepted, production adoption remains staged
 - **Started:** 2026-07-22
 - **Base:** `feature/SGU-002-v1-reconstruction-slice-2` at `4900ee0`
 - **Spike branch:** `spike/SGU-003-rust-kernel-hybrid-evaluation`
@@ -108,12 +108,19 @@ Until the gate closes, the TypeScript branch remains authoritative for shipped
 behavior and the Rust branch remains disposable. A successful spike authorizes a
 planned reconstruction; it is not itself a production migration.
 
-## Current gate position
+## Closure result
 
-The executable local result is a conditional architecture go. Artifact parity,
-authority isolation, cancellation, malformed-process handling, official MCP
-conformance, static Windows packaging, the latency ceiling, and the controlled
-VS Code test pass. The clean retest used exactly seven Forge tools and one summary
-call, with no retry loop. Hosted Windows/macOS/Linux results still require the
-spike branch to be committed and pushed. That gate is not waived, and Slice 2B
-remains paused.
+**Go.** Commit `a3e220c9e7091a15ed4da19feebcc876e9487374` passed the
+hosted Windows, macOS, and Ubuntu hybrid matrix plus the existing Windows/macOS
+TypeScript conformance matrix. The exact pushed branch then passed a fresh
+controlled VS Code test with exactly one Forge Workspace Summary call, no fallback
+or retry, run `run:f21a5d72-9c9d-43e8-9cbe-6c123a2a44f9`, snapshot
+`workspace:9417adda28f7c4a9`, 172 legitimate files, correct truncation, and the
+six ordered events.
+
+SGU-003 therefore accepts the permanent hybrid target. It does not accept the
+one-process-per-run spike transport as the production lifecycle or make the Rust
+path the default shipped runtime. SGU-004 must separate host/user approval facts
+from Rust's final policy decision before production mutation work relies on the
+hybrid kernel. The TypeScript control remains the differential oracle during that
+bounded adoption.

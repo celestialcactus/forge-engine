@@ -1,6 +1,6 @@
 # Checkpoint 2026-07-22-12: Hybrid Rust kernel evaluation
 
-- **Status:** in-progress
+- **Status:** closed by Checkpoint 14; SGU-003 passed
 - **Date:** 2026-07-22
 - **Related ADRs:** ADR-0001, ADR-0002, ADR-0006
 - **Scope:** SGU-003 authority-boundary spike; Slice 2B remains paused
@@ -78,7 +78,7 @@ differential testing simple, but it is not the presumed production lifecycle.
   not excluded. A shared ignore policy now excludes `target/` from both scans and
   watcher invalidation; the regression passed and the clean retest counted 170
   legitimate source/configuration/documentation files.
-| Hosted Windows/macOS/Linux matrix | Pending explicit user-approved push | Workflow is defined and the spike is committed locally; external export was not attempted after the safety review blocked an unapproved push |
+| Hosted Windows/macOS/Linux matrix | Passed | Exact commit and CI links are recorded in Checkpoint 14 |
 
 ## Failures and surprises
 
@@ -98,7 +98,7 @@ differential testing simple, but it is not the presumed production lifecycle.
 
 ## Known limitations
 
-- Hosted macOS and Linux results are not yet recorded.
+- Hosted macOS and Linux passed; release signing and reproducibility remain future gates.
 - The bridge permits one active run per process and has no long-lived concurrency,
   backpressure, crash recovery, or compatibility negotiation.
 - Rust and TypeScript contract types are hand-maintained duplicates during the
@@ -122,8 +122,8 @@ differential testing simple, but it is not the presumed production lifecycle.
 
 ## Repository state
 
-- Branch/commit: `spike/SGU-003-rust-kernel-hybrid-evaluation`, based on `4900ee0`;
-  spike committed locally; remote push awaits explicit user authorization.
+- Branch/commit: `spike/SGU-003-rust-kernel-hybrid-evaluation` at
+  `a3e220c9e7091a15ed4da19feebcc876e9487374`, pushed to the public remote.
 - Files changed: Rust workspace/kernel, TypeScript bridge and opt-in, hybrid tests,
   benchmark, CI workflow, ADR/task/architecture/checkpoint documentation.
 - Production behavior available: unchanged TypeScript control by default; Rust
@@ -131,7 +131,6 @@ differential testing simple, but it is not the presumed production lifecycle.
 
 ## Next checkpoint
 
-Close the controlled VS Code test and the hosted Windows/macOS/Linux matrix on one
-commit. If both pass without artifact or tool-call regression, mark SGU-003 passed,
-record the commit and CI run, and present the staged reconstruction plan before any
-Slice 2B mutation work begins.
+SGU-003 closed successfully in Checkpoint 14. Execute SGU-004's approval-facts and
+Rust-policy-authority correction before any Slice 2B mutation work relies on the
+hybrid kernel.
