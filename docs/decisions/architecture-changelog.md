@@ -89,3 +89,8 @@ checkpoint records.
   Windows/macOS/Ubuntu hybrid matrix, the Windows/macOS TypeScript matrix, and a
   controlled one-call VS Code apprentice test. The production clean-revision
   worktree/process adapter remains Increment 2B-2.
+- Accepted Slice 2B Increment 2B-2 after clean-revision, adversarial recovery,
+  and descendant-process fixtures passed on hosted Windows, macOS, and Ubuntu,
+  the TypeScript matrix passed on Windows and macOS, and a reloaded VS Code Agent
+  completed a one-call seven-tool apprentice regression. Promotion and sandbox
+  isolation remain separate gates. See Checkpoint 17.

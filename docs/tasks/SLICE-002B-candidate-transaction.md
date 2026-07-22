@@ -1,6 +1,6 @@
 # Slice 2B: Rust-authoritative candidate transaction
 
-- **Status:** Increment 2B-1 accepted; Increment 2B-2 local gate passed, hosted acceptance pending
+- **Status:** Increment 2B-1 and Increment 2B-2 accepted; promotion deferred
 - **Opened:** 2026-07-22
 - **Branch:** feature/slice-2b-change-transaction
 - **Predecessor:** SGU-004 accepted at 69d2b743fc472ff00658c108f74450286f9044f8

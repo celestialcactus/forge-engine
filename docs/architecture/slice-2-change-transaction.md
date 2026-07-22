@@ -19,7 +19,7 @@ either accept or recover a small change with every phase represented as evidence
 | Read base | implemented | canonical path, bounded content, SHA-256 digest, snapshot ID |
 | Propose | implemented | deterministic proposal ID, before/after digests, bounded unified diff |
 | Approve | Rust contract implemented; host flow pending | explicit decision tied to transaction, proposal, snapshot, verification, and exact capability call |
-| Isolate | private Rust clean-revision worktree adapter implemented; hosted acceptance pending | clean HEAD, matching snapshot/digests, tracked-file reproducibility, detached boundary |
+| Isolate | private Rust clean-revision worktree adapter accepted | clean HEAD, matching snapshot/digests, tracked-file reproducibility, detached boundary |
 | Apply | private Rust candidate-only replacement adapter implemented | exact manifest, applied digests, bounded application diff |
 | Verify | private policy-named process adapter implemented | fixed executable/arguments, bounded output, timeout/cancellation, process-tree termination |
 | Accept or recover | private retain/recover path implemented; promotion deferred | post-verification digests/path set, final diff, explicit retention or cleanup |
@@ -33,9 +33,8 @@ adapter evidence, phase order, cancellation, and recovery outcome.
 
 A successful contract run ends at verified_candidate inside an isolated boundary.
 It does not promote changes into the active workspace. Increment 2B-2 now supplies
-the private Rust clean-revision worktree and policy-named process adapter. Hosted
-cross-platform acceptance remains open, and neither increment expands the
-seven-tool MCP surface.
+the accepted private Rust clean-revision worktree and policy-named process adapter.
+Neither increment expands the seven-tool MCP surface.
 
 See ADR-0007 and Checkpoints 16-17.
 

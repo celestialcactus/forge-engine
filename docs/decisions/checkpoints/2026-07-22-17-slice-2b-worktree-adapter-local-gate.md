@@ -1,6 +1,6 @@
 # Checkpoint 2026-07-22-17: Slice 2B clean-revision adapter local gate
 
-- **Status:** Local gate passed; hosted Windows/macOS/Linux and VS Code gates pending
+- **Status:** Accepted
 - **Date:** 2026-07-22
 - **Related ADR:** ADR-0007
 - **Scope:** Private Rust worktree/application/verification/retention adapter
@@ -33,7 +33,7 @@ into the active workspace.
 - final diff and retention evidence are recorded;
 - failure or cancellation removes and prunes the candidate.
 
-## Local validation
+## Acceptance validation
 
 - npm run check:hybrid passed.
 - Rust: 1 context test, 11 transaction tests, 5 policy tests, 7 runtime tests,
@@ -48,10 +48,20 @@ into the active workspace.
 - The first Windows run caught Git for Windows rejecting canonical extended-length
   path spelling. The adapter now preserves canonical filesystem paths internally
   and projects ordinary Windows paths only at the Git argument boundary.
+- Hosted hybrid conformance passed on Windows, macOS, and Ubuntu for exact commit
+  `99357c0` ([run 29947454166](https://github.com/celestialcactus/forge-engine/actions/runs/29947454166)).
+- Hosted TypeScript conformance passed on Windows and macOS for the same commit
+  ([run 29947453918](https://github.com/celestialcactus/forge-engine/actions/runs/29947453918)).
+- After a VS Code window reload, Configure Tools showed exactly seven selected
+  Forge tools. A fresh Agent chat made one Forge Workspace Summary call and no
+  terminal, built-in file search, retry, or non-Forge tool call.
+- The VS Code call returned run `run:455150e2-06e2-4cc1-b5f1-b4073ee1d455`,
+  snapshot `workspace:f9e2813c78122442`, 185 files, truncated evidence, and the
+  expected six ordered lifecycle events.
 
 ## Known limitations
 
-- Hosted macOS/Linux/Windows acceptance has not yet run on this checkpoint.
+
 - The adapter is private Rust library functionality; bridge/CLI/MCP wiring is
   intentionally absent.
 - A worktree is not an OS sandbox. Policy-owned verifiers retain developer-process
@@ -63,8 +73,6 @@ into the active workspace.
 
 ## Next gate
 
-Commit and push the exact local-green revision, require the hybrid matrix on
-Windows/macOS/Ubuntu and the TypeScript matrix on Windows/macOS, then repeat the
-controlled one-call VS Code apprentice test. If all pass, accept Increment 2B-2;
-do not call complete Slice 2 until the host flow and deferred promotion boundary
-are separately decided.
+Increment 2B-2 is accepted. The next change must separately decide the host-facing
+transaction flow and the deferred promotion contract. Do not expose generic write
+or shell tools, and do not describe worktree recoverability as security isolation.
