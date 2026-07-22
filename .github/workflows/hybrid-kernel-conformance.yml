@@ -3,7 +3,8 @@ name: Hybrid kernel conformance
 on:
   push:
     branches:
-      - spike/SGU-003-rust-kernel-hybrid-evaluation
+      - 'spike/**'
+      - 'feature/**'
   pull_request:
   workflow_dispatch:
 
