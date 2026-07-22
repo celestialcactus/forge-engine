@@ -85,3 +85,7 @@ checkpoint records.
   malformed adapter evidence. Eleven focused tests and the complete hybrid gate
   pass; the production worktree/process adapter and final promotion remain
   pending. See ADR-0007 and Checkpoint 16.
+- Accepted Slice 2B Increment 2B-1 after the exact pushed commit passed the
+  Windows/macOS/Ubuntu hybrid matrix, the Windows/macOS TypeScript matrix, and a
+  controlled one-call VS Code apprentice test. The production clean-revision
+  worktree/process adapter remains Increment 2B-2.

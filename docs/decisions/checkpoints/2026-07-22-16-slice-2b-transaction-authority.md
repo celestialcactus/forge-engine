@@ -1,6 +1,6 @@
 # Checkpoint 2026-07-22-16: Slice 2B transaction authority
 
-- **Status:** 2B-1 contract gate passed; production adapter pending
+- **Status:** 2B-1 accepted; production adapter pending
 - **Date:** 2026-07-22
 - **Related ADRs:** ADR-0005, ADR-0006, ADR-0007
 - **Scope:** Rust-authoritative candidate transaction contract and failure semantics
@@ -69,6 +69,16 @@ projection.
 | Tampered and oversized replacement fixtures | passed | rejected before adapter work |
 | Apply, verification, malformed evidence, and cancellation fixtures | passed | deterministic recovery |
 | Cleanup failure fixture | passed | explicit terminal failure |
+| Hosted hybrid kernel matrix | passed | exact commit `f47267c`; Windows, macOS, and Ubuntu; [run 29944643950](https://github.com/celestialcactus/forge-engine/actions/runs/29944643950) |
+| Hosted TypeScript conformance matrix | passed | exact commit `f47267c`; Windows and macOS; [run 29944643938](https://github.com/celestialcactus/forge-engine/actions/runs/29944643938) |
+| Controlled VS Code apprentice test | passed | one actual Forge Workspace Summary call; no terminal, built-in file search, or non-Forge tool |
+
+The controlled VS Code call returned run
+`run:67ed93cc-4e5e-4aff-9e96-dce4948250c0`, snapshot
+`workspace:256988fd702fb27c`, 182 total files, and bounded/truncated evidence.
+Its ordered event types were `run.started`, `context.planned`,
+`capability.requested`, `approval.decided`, `capability.completed`, and
+`run.completed`.
 
 ## Failures and surprises
 
@@ -106,6 +116,7 @@ projection.
 
 - Branch: feature/slice-2b-change-transaction
 - Base: 69d2b743fc472ff00658c108f74450286f9044f8
+- Accepted implementation commit: f47267cbd4c8f467c1cd5a84a0ded8f43a887b95
 - Production behavior available: none; service and MCP surfaces remain unchanged
 
 ## Next checkpoint
