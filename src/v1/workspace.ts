@@ -4,8 +4,7 @@ import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { basename, relative, resolve } from 'node:path';
 import type { Capability, CapabilityCall, CapabilityResult, WorkspaceFile, WorkspaceSnapshot } from '../slice0/contracts.js';
 import { canonicalSnapshotFilePath } from './workspace-path.js';
-
-const ignoredDirectoryNames = new Set(['.git', '.forge', 'dist', 'node_modules']);
+import { isIgnoredWorkspaceDirectory } from './workspace-ignore.js';
 const comparePaths = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
 const portablePath = (path: string): string => path.replaceAll('\\', '/');
 
@@ -34,7 +33,7 @@ export async function createWorkspaceSnapshot(
       if (entry.isSymbolicLink()) continue;
       const absolute = resolve(directory, entry.name);
       if (entry.isDirectory()) {
-        if (!ignoredDirectoryNames.has(entry.name)) pending.push(absolute);
+        if (!isIgnoredWorkspaceDirectory(entry.name)) pending.push(absolute);
         continue;
       }
       if (!entry.isFile()) continue;

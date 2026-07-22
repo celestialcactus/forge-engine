@@ -1,0 +1,67 @@
+name: Hybrid kernel conformance
+
+on:
+  push:
+    branches:
+      - spike/SGU-003-rust-kernel-hybrid-evaluation
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hybrid:
+    name: Rust kernel + TypeScript adapter / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            binary-suffix: .exe
+          - os: macos-latest
+            binary-suffix: ''
+          - os: ubuntu-latest
+            binary-suffix: ''
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.97.1 --profile minimal --component clippy --component rustfmt
+
+      - name: Install locked Node dependencies
+        run: npm ci
+
+      - name: Format, lint, test, and build Rust
+        run: |
+          npm run rust:fmt
+          npm run rust:lint
+          npm run rust:test
+          npm run rust:build
+
+      - name: Preserve accepted TypeScript behavior
+        run: npm run check
+
+      - name: Exercise differential and MCP hybrid contract
+        env:
+          FORGE_KERNEL_BINARY: ${{ github.workspace }}/target/debug/forge-kernel${{ matrix.binary-suffix }}
+        run: npm run test:hybrid
+
+      - name: Build optimized kernel
+        run: npm run rust:build:release
+
+      - name: Enforce process-bridge latency ceiling
+        env:
+          FORGE_KERNEL_BINARY: ${{ github.workspace }}/target/release/forge-kernel${{ matrix.binary-suffix }}
+          FORGE_BENCHMARK_SAMPLES: '20'
+        run: npm run benchmark:hybrid -- --assert

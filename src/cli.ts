@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { RunArtifact } from './slice0/contracts.js';
 import { startForgeMcpServer } from './mcp/server.js';
-import { artifactPayload, ForgeWorkspaceService } from './v1/service.js';
+import { artifactPayload, ForgeWorkspaceService, type ForgeWorkspaceServiceOptions } from './v1/service.js';
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -25,9 +25,13 @@ const { positionals, values } = parseArgs({
 
 const command = positionals[0] ?? 'help';
 const workspaceRoot = resolve(values.workspace ?? process.cwd());
+const configuredKernel = process.env.FORGE_KERNEL_BINARY?.trim();
+const serviceOptions: ForgeWorkspaceServiceOptions = configuredKernel === undefined || configuredKernel.length === 0
+  ? {}
+  : { kernel: { binaryPath: configuredKernel } };
 let service: ForgeWorkspaceService | undefined;
 const workspaceService = (): ForgeWorkspaceService => {
-  service ??= new ForgeWorkspaceService(workspaceRoot);
+  service ??= new ForgeWorkspaceService(workspaceRoot, serviceOptions);
   return service;
 };
 
@@ -57,7 +61,7 @@ try {
       ok: true,
       node: process.version,
       platform: process.platform,
-      runtime: 'slice-1-read-only-evidence',
+      runtime: configuredKernel === undefined || configuredKernel.length === 0 ? 'typescript-control' : 'rust-kernel-typescript-adapter',
       mcp: 'stdio',
       workspaceRoot,
       readOnlyFeatures: ['summary', 'search', 'read', 'symbols', 'typescript-diagnostics', 'git-status', 'git-diff'],

@@ -10,7 +10,8 @@ import type {
   TaskPlanner,
   WorkspaceSnapshot,
 } from '../slice0/contracts.js';
-import { Slice0Runtime } from '../slice0/runtime.js';
+import { Slice0Runtime, type Slice0RuntimeOptions } from '../slice0/runtime.js';
+import { RustKernelRuntime } from '../hybrid/rust-kernel-runtime.js';
 import {
   createChangeProposalCapability,
   type ChangeProposalOptions,
@@ -73,16 +74,24 @@ export interface GitDiffOptions {
   readonly maxBytes?: number;
 }
 
+export interface RustKernelServiceOptions {
+  readonly binaryPath: string;
+  readonly arguments?: readonly string[];
+  readonly environment?: Readonly<NodeJS.ProcessEnv>;
+}
+
 export interface ForgeWorkspaceServiceOptions {
   readonly snapshotProvider?: WorkspaceSnapshotProvider;
   readonly snapshotObserver?: WorkspaceChangeObserver;
   readonly snapshotMaxReuseMs?: number;
   readonly runIdFactory?: () => string;
+  readonly kernel?: RustKernelServiceOptions;
 }
 
 export class ForgeWorkspaceService {
   readonly #snapshots: WorkspaceSnapshotCache;
   readonly #runIdFactory: () => string;
+  readonly #kernel: RustKernelServiceOptions | undefined;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -94,6 +103,7 @@ export class ForgeWorkspaceService {
       ...(options.snapshotMaxReuseMs === undefined ? {} : { maxReuseMs: options.snapshotMaxReuseMs }),
     });
     this.#runIdFactory = options.runIdFactory ?? (() => `run:${randomUUID()}`);
+    this.#kernel = options.kernel;
   }
 
   async run(task: string, maxFiles = 200, signal?: AbortSignal): Promise<RunArtifact> {
@@ -172,11 +182,20 @@ export class ForgeWorkspaceService {
     const snapshot = await this.#workspaceSnapshot();
     signal?.throwIfAborted();
     const call: CapabilityCall = { id: 'call-1', capabilityId: capability.id, input };
-    return new Slice0Runtime({
+    const runtimeOptions: Slice0RuntimeOptions = {
       planner: new SingleCapabilityPlanner(call),
       approvalPolicy: readOnlyPolicy,
       capabilities: [capability],
-    }).run({
+    };
+    const runtime = this.#kernel === undefined
+      ? new Slice0Runtime(runtimeOptions)
+      : new RustKernelRuntime({
+          ...runtimeOptions,
+          kernelPath: this.#kernel.binaryPath,
+          ...(this.#kernel.arguments === undefined ? {} : { kernelArguments: this.#kernel.arguments }),
+          ...(this.#kernel.environment === undefined ? {} : { environment: this.#kernel.environment }),
+        });
+    return runtime.run({
       runId: this.#runIdFactory(),
       task,
       snapshot,

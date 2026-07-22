@@ -49,3 +49,12 @@ checkpoint records.
   macOS passed. Added a repository LF checkout contract and reran the same commit
   lineage successfully on hosted Windows and macOS. Slice 2A is accepted; apply,
   verify, accept/recover, and rollback remain later Slice 2 gates.
+
+- Paused Slice 2B and opened SGU-003 to evaluate a Rust machinery kernel behind
+  TypeScript integration adapters. Local differential, cancellation, official MCP,
+  static Windows packaging, latency, and controlled VS Code gates pass; hosted
+  Windows/macOS/Linux remains the closure gate. See ADR-0006 and Checkpoint 12.
+- Conditionally accepted Rust as the target authority for run state, events,
+  correlation, terminal artifacts, and future durable/process machinery. Retained
+  TypeScript for MCP/IDE/compiler/vendor integrations and prohibited a permanent
+  Node sidecar for baseline sovereign CLI operation.

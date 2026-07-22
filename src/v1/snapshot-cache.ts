@@ -2,6 +2,7 @@ import { watch, type FSWatcher } from 'node:fs';
 import { resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { WorkspaceSnapshot } from '../slice0/contracts.js';
+import { isIgnoredWorkspaceDirectory } from './workspace-ignore.js';
 
 export type WorkspaceSnapshotProvider = (workspaceRoot: string) => Promise<WorkspaceSnapshot>;
 
@@ -15,7 +16,6 @@ export type WorkspaceChangeObserver = (
   onUnavailable: () => void,
 ) => WorkspaceChangeSubscription | undefined;
 
-const ignoredRoots = new Set(['.git', '.forge', 'dist', 'node_modules']);
 const portablePath = (path: string): string => path.replaceAll('\\', '/');
 
 /**
@@ -32,7 +32,7 @@ export const observeWorkspaceChanges: WorkspaceChangeObserver = (workspaceRoot, 
         return;
       }
       const firstSegment = portablePath(String(filename)).split('/')[0];
-      if (firstSegment === undefined || !ignoredRoots.has(firstSegment)) onChange();
+      if (firstSegment === undefined || !isIgnoredWorkspaceDirectory(firstSegment)) onChange();
     });
   } catch {
     return undefined;

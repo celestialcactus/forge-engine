@@ -14,6 +14,14 @@
     "typecheck": "tsc -p tsconfig.v1.json --noEmit",
     "check": "npm run typecheck && npm test && npm run build",
     "smoke": "node dist/src/cli.js doctor --json && node dist/src/cli.js run smoke",
+    "rust:fmt": "cargo fmt --all -- --check",
+    "rust:lint": "cargo clippy --workspace --all-targets --locked -- -D warnings",
+    "rust:test": "cargo test --workspace --locked",
+    "rust:build": "cargo build --workspace --locked",
+    "rust:build:release": "cargo build --workspace --release --locked",
+    "test:hybrid": "tsx --test tests/hybrid/**/*.hybrid.ts",
+    "benchmark:hybrid": "tsx scripts/benchmark-hybrid.mts",
+    "check:hybrid": "npm run rust:fmt && npm run rust:lint && npm run rust:test && npm run rust:build && npm run check && npm run test:hybrid",
     "prebuild": "node scripts/clean.mjs"
   },
   "engines": {

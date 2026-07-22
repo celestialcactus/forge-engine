@@ -3,7 +3,7 @@ import { isAbsolute, relative, resolve } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import * as z from 'zod/v4';
-import { ForgeWorkspaceService } from '../v1/service.js';
+import { ForgeWorkspaceService, type ForgeWorkspaceServiceOptions } from '../v1/service.js';
 import {
   forgeMcpArtifactPayload,
   forgeMcpArtifactResult,
@@ -79,8 +79,11 @@ class ForgeMcpServer extends McpServer {
   }
 }
 
-export function createForgeMcpServer(workspaceRoot: string): McpServer {
-  const service = new ForgeWorkspaceService(workspaceRoot);
+export function createForgeMcpServer(
+  workspaceRoot: string,
+  serviceOptions: ForgeWorkspaceServiceOptions = {},
+): McpServer {
+  const service = new ForgeWorkspaceService(workspaceRoot, serviceOptions);
   const server = new ForgeMcpServer(() => service.close());
   const readCache = new Map<string, ReadCacheEntry>();
   const canonicalRoot = realpath(resolve(workspaceRoot));
@@ -264,7 +267,10 @@ export function createForgeMcpServer(workspaceRoot: string): McpServer {
 }
 
 export async function startForgeMcpServer(workspaceRoot: string): Promise<void> {
-  const server = createForgeMcpServer(workspaceRoot);
+  const configuredKernel = process.env.FORGE_KERNEL_BINARY?.trim();
+  const server = createForgeMcpServer(workspaceRoot, configuredKernel === undefined || configuredKernel.length === 0
+    ? {}
+    : { kernel: { binaryPath: configuredKernel } });
   const transport = new StdioServerTransport();
   process.once('SIGINT', () => {
     void server.close().finally(() => process.exit(0));

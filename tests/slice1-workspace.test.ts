@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { resolve } from 'node:path';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { equivalentTrace } from '../src/slice0/contracts.js';
 import { artifactPayload, ForgeWorkspaceService } from '../src/v1/service.js';
@@ -13,6 +15,19 @@ test('creates a stable real workspace snapshot with canonical path ordering', as
   assert.equal(first.id, second.id);
   assert.deepEqual(first.files.map((file) => file.path), ['README.md', 'src/example.ts']);
   assert.equal(first.rootLabel, 'slice1-workspace');
+});
+
+test('excludes Rust target output while retaining source and Cargo evidence', async (context) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'forge-rust-workspace-'));
+  context.after(async () => rm(workspace, { recursive: true, force: true }));
+  await mkdir(join(workspace, 'src'), { recursive: true });
+  await mkdir(join(workspace, 'target', 'debug'), { recursive: true });
+  await writeFile(join(workspace, 'Cargo.toml'), '[package]\nname = "fixture"\n', 'utf8');
+  await writeFile(join(workspace, 'src', 'lib.rs'), 'pub fn fixture() {}\n', 'utf8');
+  await writeFile(join(workspace, 'target', 'debug', 'forge-kernel.exe'), 'build output', 'utf8');
+
+  const snapshot = await createWorkspaceSnapshot(workspace);
+  assert.deepEqual(snapshot.files.map((file) => file.path), ['Cargo.toml', 'src/lib.rs']);
 });
 
 test('preserves the developer task and repeats the same real-adapter trace for fixed inputs', async () => {
