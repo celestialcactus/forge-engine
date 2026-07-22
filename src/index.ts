@@ -8,5 +8,6 @@ export * from './v1/snapshot-cache.js';
 export * from './v1/files.js';
 export * from './v1/typescript-evidence.js';
 export * from './v1/git-evidence.js';
+export * from './v1/change-proposal.js';
 export * from './v1/service.js';
 export * from './mcp/server.js';

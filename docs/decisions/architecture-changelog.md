@@ -22,7 +22,7 @@ checkpoint records.
 - Added deterministic repository evidence using Forge-owned file adapters, the
   TypeScript compiler API, and fixed read-only Git commands. See ADR-0003.
 - Reached Developer Test Milestone A with seven read-only MCP tools and a controlled
-  VS Code test guide. See Checkpoints 07–09.
+  VS Code test guide. See Checkpoints 07-09.
 
 ## 2026-07-22
 
@@ -35,3 +35,13 @@ checkpoint records.
 - Accepted and closed Slice 1 with a single runtime, seven bounded evidence
   capabilities, CLI/MCP/embedded host paths, and explicit scale limitations. See
   Checkpoint 10.
+- Began Slice 2 with a service-only, digest-bound, deterministic change proposal;
+  no production write or eighth MCP tool was added. See ADR-0005.
+- Validated the first Windows worktree/process experiment: worktree edits isolate
+  the original workspace, dirty state and ignored dependencies do not transfer,
+  and bounded direct-child verification can distinguish timeout and cancellation.
+  Worktree isolation is recoverability, not a security sandbox. See Checkpoint 11.
+
+- Added a locked Node 22 conformance matrix for Windows and macOS plus a controlled
+  VS Code Slice 2A record. The VS Code boundary retained exactly seven read-only
+  tools; macOS acceptance remains pending the hosted runner.

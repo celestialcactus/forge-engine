@@ -11,6 +11,11 @@ import type {
   WorkspaceSnapshot,
 } from '../slice0/contracts.js';
 import { Slice0Runtime } from '../slice0/runtime.js';
+import {
+  createChangeProposalCapability,
+  type ChangeProposalOptions,
+  type TextChangeRequest,
+} from './change-proposal.js';
 import { createWorkspaceReadCapability, createWorkspaceSymbolsCapability } from './files.js';
 import { createGitDiffCapability, createGitStatusCapability } from './git-evidence.js';
 import { createTypeScriptDiagnosticsCapability } from './typescript-evidence.js';
@@ -123,6 +128,19 @@ export class ForgeWorkspaceService {
       options.query === undefined ? 'List workspace declarations.' : `Find workspace declarations matching: ${options.query}`,
       createWorkspaceSymbolsCapability(this.workspaceRoot),
       { query: options.query, maxFiles: options.maxFiles ?? 200, maxSymbols: options.maxSymbols ?? 500 },
+      signal,
+    );
+  }
+
+  async proposeChanges(
+    changes: readonly TextChangeRequest[],
+    options: ChangeProposalOptions = {},
+    signal?: AbortSignal,
+  ): Promise<RunArtifact> {
+    return this.#runCapability(
+      'Propose a digest-bound workspace change.',
+      createChangeProposalCapability(this.workspaceRoot),
+      { changes, maxDiffBytes: options.maxDiffBytes ?? 100_000 },
       signal,
     );
   }
