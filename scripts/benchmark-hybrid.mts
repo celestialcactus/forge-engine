@@ -2,6 +2,7 @@ import { stat } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 import { resolve } from 'node:path';
 import { RustKernelRuntime } from '../src/hybrid/rust-kernel-runtime.js';
+import type { ApprovalFacts, CapabilityCall } from '../src/slice0/contracts.js';
 import { allowAll, ScriptedPlanner, slice0Workspace, workspaceInventory } from '../src/slice0/fixtures.js';
 import { Slice0Runtime, type Slice0RuntimeOptions } from '../src/slice0/runtime.js';
 
@@ -13,6 +14,27 @@ const profile = process.env.FORGE_KERNEL_PROFILE ?? 'release';
 const kernelBinary = process.env.FORGE_KERNEL_BINARY
   ?? resolve('target', profile, process.platform === 'win32' ? 'forge-kernel.exe' : 'forge-kernel');
 const inspectCall = { id: 'call-1', capabilityId: 'workspace.inventory', input: {} };
+
+const benchmarkApprovalFacts = {
+  async collect(call: CapabilityCall, signal: AbortSignal): Promise<ApprovalFacts> {
+    signal.throwIfAborted();
+    return {
+      schemaVersion: 1,
+      callId: call.id,
+      capabilityId: call.capabilityId,
+      hostPolicy: {
+        posture: 'allow',
+        source: 'benchmark.host-policy',
+        reason: 'The benchmark exercises an in-memory read-only fixture.',
+      },
+      userConsent: {
+        status: 'notRequired',
+        source: 'benchmark.host-ui',
+        reason: 'The benchmark does not require interactive consent.',
+      },
+    };
+  },
+};
 
 const runtimeOptions = (): Slice0RuntimeOptions => ({
   planner: new ScriptedPlanner([
@@ -52,13 +74,13 @@ const summarize = (values: readonly number[]) => {
 
 const typescriptDurations: number[] = [];
 const rustDurations: number[] = [];
-await new RustKernelRuntime({ ...runtimeOptions(), kernelPath: kernelBinary }).run(request(-1));
+await new RustKernelRuntime({ ...runtimeOptions(), approvalFacts: benchmarkApprovalFacts, kernelPath: kernelBinary }).run(request(-1));
 
 for (let index = 0; index < samples; index += 1) {
   typescriptDurations.push(await measure(async () =>
     new Slice0Runtime(runtimeOptions()).run(request(index))));
   rustDurations.push(await measure(async () =>
-    new RustKernelRuntime({ ...runtimeOptions(), kernelPath: kernelBinary }).run(request(index))));
+    new RustKernelRuntime({ ...runtimeOptions(), approvalFacts: benchmarkApprovalFacts, kernelPath: kernelBinary }).run(request(index))));
 }
 
 const binary = await stat(kernelBinary);
