@@ -62,7 +62,9 @@ Candidate lifecycle is part of the bridge contract. A per-transaction child cann
 return a retained worktree and then forget its location at process exit. Rust will
 issue an opaque candidate ID backed by a minimal atomic lifecycle record outside
 the governed workspace. The record supports restart-safe lookup and discard; it
-does not contain replacement content and is not the general event store.
+does not contain replacement content and is not the general event store. This
+2C-0 lifecycle contract passed hosted Windows, macOS, and Ubuntu conformance at
+`a985119`; the private transaction protocol remains the next gate.
 
 This first bridge increment is private and `trusted`-only. `host_managed` fails
 closed until an authenticated handshake exists, and `restricted` fails closed

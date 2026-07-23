@@ -111,3 +111,9 @@ checkpoint records.
   followed by a separate bounded transaction protocol and embedded TypeScript
   adapter. Trusted mode only; host-managed handshake, restricted isolation,
   promotion, transaction CLI, and MCP mutation remain deferred. See Checkpoint 19.
+- Accepted Slice 2C Increment 2C-0 after a Rust-owned opaque candidate lease,
+  approved base-revision binding, restart-safe lookup/discard, cleanup-failure
+  retry, and replacement-text exclusion passed the complete local gate. The first
+  hosted run exposed an Ubuntu advisory-lock release defect; explicit RAII unlock
+  corrected it. Exact commit `a985119` passed Windows/macOS TypeScript conformance
+  and Windows/macOS/Ubuntu hybrid conformance. See Checkpoint 20.

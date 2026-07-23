@@ -1,6 +1,6 @@
 # Slice 2C: private host transaction bridge
 
-- **Status:** design gate opened; implementation not yet accepted
+- **Status:** Increment 2C-0 accepted at `a985119`; private protocol and TypeScript adapter pending
 - **Opened:** 2026-07-23
 - **Branch:** feature/slice-2c-host-transaction-bridge
 - **Predecessor:** Slice 2 draft PR #1 at `bfb670a`
