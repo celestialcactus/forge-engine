@@ -13,8 +13,9 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     ApplicationChange, AppliedChangeEvidence, ApplyEvidence, BaselineIsolationProvider,
-    BoundaryEvidence, BoundedTextEvidence, Cancellation, CandidateRetentionEvidence,
-    ChangeApplicationManifest, ChangeTransactionAdapter, IsolatedProcessSpec, IsolationPolicy,
+    BoundaryEvidence, BoundedTextEvidence, Cancellation, CandidateLeaseChange,
+    CandidateLeaseRegistration, CandidateRetentionEvidence, ChangeApplicationManifest,
+    ChangeTransactionAdapter, FileCandidateLeaseStore, IsolatedProcessSpec, IsolationPolicy,
     IsolationProvider, VerificationEvidence, VerificationSelection, validate_isolation_policy,
 };
 
@@ -43,6 +44,7 @@ pub struct VerificationCheck {
 pub struct WorktreeAdapterConfig {
     pub repository_root: PathBuf,
     pub candidate_parent: PathBuf,
+    pub candidate_lease_root: PathBuf,
     pub expected_base_revision: String,
     pub git_executable: PathBuf,
     pub verification_checks: Vec<VerificationCheck>,
@@ -56,9 +58,12 @@ impl WorktreeAdapterConfig {
         expected_base_revision: impl Into<String>,
         verification_checks: Vec<VerificationCheck>,
     ) -> Self {
+        let candidate_parent = candidate_parent.into();
+        let candidate_lease_root = candidate_parent.join(".forge-leases");
         Self {
             repository_root: repository_root.into(),
-            candidate_parent: candidate_parent.into(),
+            candidate_parent,
+            candidate_lease_root,
             expected_base_revision: expected_base_revision.into(),
             git_executable: PathBuf::from("git"),
             verification_checks,
@@ -78,6 +83,7 @@ struct PreparedBoundary {
     boundary_id: String,
     candidate_path: PathBuf,
     base_revision: String,
+    proposal_id: String,
     snapshot_id: String,
     original_fingerprint: String,
     changes: Vec<ApplicationChange>,
@@ -93,7 +99,9 @@ pub struct CleanRevisionWorktreeAdapter {
     config: WorktreeAdapterConfig,
     checks: HashMap<String, VerificationCheck>,
     isolation_provider: Arc<dyn IsolationProvider>,
+    lease_store: FileCandidateLeaseStore,
     boundary: Option<PreparedBoundary>,
+    retained_candidate_id: Option<String>,
 }
 
 impl CleanRevisionWorktreeAdapter {
@@ -142,11 +150,18 @@ impl CleanRevisionWorktreeAdapter {
                 ));
             }
         }
+        let lease_store = FileCandidateLeaseStore::try_new(
+            &config.repository_root,
+            &config.candidate_parent,
+            &config.candidate_lease_root,
+        )?;
         Ok(Self {
             config,
             checks,
             isolation_provider,
+            lease_store,
             boundary: None,
+            retained_candidate_id: None,
         })
     }
 
@@ -156,17 +171,27 @@ impl CleanRevisionWorktreeAdapter {
             .map(|boundary| boundary.candidate_path.as_path())
     }
 
+    pub fn retained_candidate_id(&self) -> Option<&str> {
+        self.retained_candidate_id.as_deref()
+    }
+
     pub fn discard_retained_candidate(&mut self) -> Result<String, String> {
+        let candidate_id = self
+            .retained_candidate_id
+            .clone()
+            .ok_or_else(|| "No candidate lease is retained.".to_owned())?;
         let boundary = self
             .boundary
-            .as_ref()
+            .clone()
             .ok_or_else(|| "No candidate boundary is retained.".to_owned())?;
-        let evidence = BoundaryEvidence {
-            boundary_id: boundary.boundary_id.clone(),
-            base_revision: boundary.base_revision.clone(),
-            original_workspace_unchanged: true,
-        };
-        self.recover(&evidence, "Explicit candidate discard.")
+        self.lease_store
+            .discard(&candidate_id, &self.config.git_executable)?;
+        self.boundary = None;
+        self.retained_candidate_id = None;
+        if !self.original_workspace_unchanged(&boundary)? {
+            return Err("Candidate was discarded, but the original workspace changed.".to_owned());
+        }
+        Ok(format!("Discarded retained candidate {candidate_id}."))
     }
 
     fn run_git(&self, cwd: &Path, arguments: &[OsString]) -> Result<CommandResult, String> {
@@ -422,6 +447,7 @@ impl ChangeTransactionAdapter for CleanRevisionWorktreeAdapter {
             boundary_id: boundary_id.clone(),
             candidate_path,
             base_revision: base_revision.clone(),
+            proposal_id: manifest.proposal_id.clone(),
             snapshot_id,
             original_fingerprint,
             changes: manifest.changes.clone(),
@@ -587,18 +613,45 @@ impl ChangeTransactionAdapter for CleanRevisionWorktreeAdapter {
         if !original_workspace_unchanged {
             return Err("Original workspace changed before candidate retention.".to_owned());
         }
+        let final_diff = self.candidate_diff(&prepared)?;
+        let lease = self
+            .lease_store
+            .register_retained(CandidateLeaseRegistration {
+                boundary_id: prepared.boundary_id.clone(),
+                candidate_path: prepared.candidate_path.clone(),
+                base_revision: prepared.base_revision.clone(),
+                proposal_id: prepared.proposal_id.clone(),
+                snapshot_id: prepared.snapshot_id.clone(),
+                changes: prepared
+                    .changes
+                    .iter()
+                    .map(|change| CandidateLeaseChange {
+                        path: change.path.clone(),
+                        before_sha256: change.before_sha256.clone(),
+                        after_sha256: change.after_sha256.clone(),
+                    })
+                    .collect(),
+                final_diff_sha256: final_diff.sha256.clone(),
+            })?;
+        self.retained_candidate_id = Some(lease.candidate_id.clone());
         Ok(CandidateRetentionEvidence {
+            candidate_id: lease.candidate_id,
             boundary_id: prepared.boundary_id.clone(),
             retained: true,
             original_workspace_unchanged,
-            final_diff: self.candidate_diff(&prepared)?,
+            final_diff,
         })
     }
 
     fn recover(&mut self, boundary: &BoundaryEvidence, _cause: &str) -> Result<String, String> {
         let prepared = self.matching_boundary(boundary)?;
         let message = self.cleanup_boundary(&prepared)?;
+        if let Some(candidate_id) = self.retained_candidate_id.as_deref() {
+            self.lease_store
+                .record_discarded_after_cleanup(candidate_id)?;
+        }
         self.boundary = None;
+        self.retained_candidate_id = None;
         if !self.original_workspace_unchanged(&prepared)? {
             return Err(
                 "Candidate boundary was removed, but the original workspace changed.".to_owned(),

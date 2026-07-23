@@ -293,10 +293,10 @@ test('Rust bridge cancellation interrupts approval-facts collection without hang
   const run = new RustKernelRuntime({
     ...toRustOptions(successfulOptions()),
     approvalFacts: {
-      async collect(_call, signal) {
-        await new Promise<void>((resolveAbort) => signal.addEventListener('abort', () => resolveAbort(), { once: true }));
-        signal.throwIfAborted();
-        throw new Error('Approval facts collector resumed without cancellation.');
+      collect() {
+        return new Promise<never>(() => {
+          // Deliberately non-cooperative: the bridge cancellation race must still terminate the run.
+        });
       },
     },
     kernelPath: kernelBinary,

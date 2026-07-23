@@ -41,6 +41,7 @@ pub struct VerificationSelection {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ChangeTransactionRequest {
     pub transaction_id: String,
+    pub expected_base_revision: String,
     pub call: CapabilityCall,
     pub manifest: ChangeApplicationManifest,
     pub approval_facts: ApprovalFacts,
@@ -51,6 +52,7 @@ pub struct ChangeTransactionRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ChangeApplyCallInput {
     transaction_id: String,
+    expected_base_revision: String,
     proposal_id: String,
     snapshot_id: String,
     verification_check_id: String,
@@ -110,6 +112,7 @@ pub struct VerificationEvidence {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CandidateRetentionEvidence {
+    pub candidate_id: String,
     pub boundary_id: String,
     pub retained: bool,
     pub original_workspace_unchanged: bool,
@@ -283,6 +286,12 @@ fn validate(request: &ChangeTransactionRequest) -> Result<(), String> {
     if request.transaction_id.trim().is_empty() || request.call.id.trim().is_empty() {
         return Err("Transaction and call IDs must not be empty.".to_owned());
     }
+    if request.expected_base_revision.trim().is_empty()
+        || request.expected_base_revision.len() > 128
+        || request.expected_base_revision.chars().any(char::is_control)
+    {
+        return Err("expectedBaseRevision must be a bounded non-empty revision.".to_owned());
+    }
     if request.call.capability_id != CHANGE_APPLY_CAPABILITY_ID {
         return Err(format!(
             "Slice 2B requires capabilityId {CHANGE_APPLY_CAPABILITY_ID}."
@@ -291,6 +300,7 @@ fn validate(request: &ChangeTransactionRequest) -> Result<(), String> {
     let call_input: ChangeApplyCallInput = serde_json::from_value(request.call.input.clone())
         .map_err(|error| format!("Invalid workspace.change.apply input: {error}"))?;
     if call_input.transaction_id != request.transaction_id
+        || call_input.expected_base_revision != request.expected_base_revision
         || call_input.proposal_id != request.manifest.proposal_id
         || call_input.snapshot_id != request.manifest.snapshot_id
         || call_input.verification_check_id != request.verification.check_id
@@ -560,7 +570,7 @@ pub fn execute_candidate_transaction<A: ChangeTransactionAdapter>(
     };
     artifact.boundary = Some(boundary.clone());
     if boundary.boundary_id.trim().is_empty()
-        || boundary.base_revision.trim().is_empty()
+        || boundary.base_revision != request.expected_base_revision
         || !boundary.original_workspace_unchanged
     {
         return recover(
@@ -683,7 +693,8 @@ pub fn execute_candidate_transaction<A: ChangeTransactionAdapter>(
             );
         }
     };
-    if retention.boundary_id != boundary.boundary_id
+    if retention.candidate_id.trim().is_empty()
+        || retention.boundary_id != boundary.boundary_id
         || !retention.retained
         || !retention.original_workspace_unchanged
     {

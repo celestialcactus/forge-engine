@@ -9,13 +9,13 @@ use std::{
 };
 
 use forge_core::{
-    ApplicationChange, ApprovalFacts, CapabilityCall, ChangeApplicationManifest,
-    ChangeTransactionRequest, ChangeTransactionStatus, CleanRevisionWorktreeAdapter,
-    HostIsolationAttestation, HostPolicyFact, HostPolicyPosture, IsolationControl,
-    IsolationEnforcement, IsolationPolicy, IsolationProfile, IsolationRequest, NoCancellation,
-    UserConsentFact, UserConsentStatus, VerificationCheck, VerificationSelection,
-    WorktreeAdapterConfig, execute_candidate_transaction, proposal_id_for_manifest,
-    workspace_snapshot_id,
+    ApplicationChange, ApprovalFacts, CandidateLeaseState, CapabilityCall,
+    ChangeApplicationManifest, ChangeTransactionRequest, ChangeTransactionStatus,
+    CleanRevisionWorktreeAdapter, FileCandidateLeaseStore, HostIsolationAttestation,
+    HostPolicyFact, HostPolicyPosture, IsolationControl, IsolationEnforcement, IsolationPolicy,
+    IsolationProfile, IsolationRequest, NoCancellation, UserConsentFact, UserConsentStatus,
+    VerificationCheck, VerificationSelection, WorktreeAdapterConfig, execute_candidate_transaction,
+    proposal_id_for_manifest, workspace_snapshot_id,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -93,11 +93,13 @@ impl Fixture {
     fn request(&self, check_id: &str) -> ChangeTransactionRequest {
         ChangeTransactionRequest {
             transaction_id: "transaction:fixture".to_owned(),
+            expected_base_revision: self.base_revision.clone(),
             call: CapabilityCall {
                 id: "call-apply".to_owned(),
                 capability_id: "workspace.change.apply".to_owned(),
                 input: json!({
                     "transactionId": "transaction:fixture",
+                    "expectedBaseRevision": self.base_revision,
                     "proposalId": self.manifest.proposal_id,
                     "snapshotId": self.manifest.snapshot_id,
                     "verificationCheckId": check_id,
@@ -227,6 +229,70 @@ fn clean_revision_is_applied_verified_and_retained_without_mutating_the_workspac
     assert!(!retention.final_diff.truncated);
     adapter.discard_retained_candidate().unwrap();
     assert!(adapter.retained_candidate_path().is_none());
+}
+
+#[test]
+fn retained_candidate_is_restart_discoverable_and_discardable_by_opaque_id() {
+    let fixture = Fixture::new();
+    let (candidate_id, candidate_path) = {
+        let mut adapter = fixture.adapter(check("verifier_pass_helper", Duration::from_secs(5)));
+        let artifact = execute_candidate_transaction(
+            &fixture.request("fixture.check"),
+            &mut adapter,
+            &NoCancellation,
+        );
+        assert_eq!(artifact.status, ChangeTransactionStatus::VerifiedCandidate);
+        let retention = artifact.retention.unwrap();
+        assert_eq!(
+            adapter.retained_candidate_id(),
+            Some(retention.candidate_id.as_str())
+        );
+        (
+            retention.candidate_id,
+            adapter.retained_candidate_path().unwrap().to_path_buf(),
+        )
+    };
+
+    let state_root = fixture.candidates.join(".forge-leases");
+    let retained_files = fs::read_dir(&state_root)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|value| value == "json"))
+        .collect::<Vec<_>>();
+    assert_eq!(retained_files.len(), 1);
+    let stored = fs::read_to_string(&retained_files[0]).unwrap();
+    assert!(!stored.contains("replacementText"));
+    assert!(!stored.contains("after\\n"));
+
+    let store =
+        FileCandidateLeaseStore::try_new(&fixture.repository, &fixture.candidates, &state_root)
+            .unwrap();
+    let retained = store.load(&candidate_id).unwrap();
+    assert_eq!(retained.state, CandidateLeaseState::Retained);
+    assert_eq!(Path::new(&retained.candidate_path), candidate_path);
+
+    let missing_git = fixture.candidates.join("missing-git");
+    assert!(store.discard(&candidate_id, &missing_git).is_err());
+    let cleanup_failed = store.load(&candidate_id).unwrap();
+    assert_eq!(cleanup_failed.state, CandidateLeaseState::CleanupFailed);
+    assert!(cleanup_failed.cleanup_failure.is_some());
+    assert!(candidate_path.exists());
+
+    let discarded = store.discard(&candidate_id, "git").unwrap();
+    assert_eq!(discarded.state, CandidateLeaseState::Discarded);
+    assert!(!candidate_path.exists());
+    assert_eq!(
+        store.load(&candidate_id).unwrap().state,
+        CandidateLeaseState::Discarded
+    );
+    assert_eq!(
+        store.discard(&candidate_id, "git").unwrap().state,
+        CandidateLeaseState::Discarded
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.repository.join("evidence.txt")).unwrap(),
+        "before\n"
+    );
 }
 
 #[test]

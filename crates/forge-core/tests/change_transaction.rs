@@ -38,11 +38,13 @@ fn manifest() -> ChangeApplicationManifest {
 fn request(posture: HostPolicyPosture) -> ChangeTransactionRequest {
     ChangeTransactionRequest {
         transaction_id: "transaction:fixture".to_owned(),
+        expected_base_revision: "fixture-revision".to_owned(),
         call: CapabilityCall {
             id: "call-apply".to_owned(),
             capability_id: "workspace.change.apply".to_owned(),
             input: json!({
                 "transactionId": "transaction:fixture",
+                "expectedBaseRevision": "fixture-revision",
                 "proposalId": manifest().proposal_id,
                 "snapshotId": "workspace:fixture",
                 "verificationCheckId": "fixture.check",
@@ -170,6 +172,7 @@ impl ChangeTransactionAdapter for FakeAdapter {
     ) -> Result<CandidateRetentionEvidence, String> {
         self.operations.push("retain");
         Ok(CandidateRetentionEvidence {
+            candidate_id: "candidate:fixture".to_owned(),
             boundary_id: boundary.boundary_id.clone(),
             retained: true,
             original_workspace_unchanged: true,
@@ -425,6 +428,25 @@ fn approval_call_cannot_be_reused_for_a_different_proposal() {
             .failure
             .as_deref()
             .is_some_and(|message| message.contains("approved capability call"))
+    );
+}
+
+#[test]
+fn prepared_boundary_must_match_the_approved_base_revision() {
+    let mut request = request(HostPolicyPosture::Allow);
+    request.expected_base_revision = "different-revision".to_owned();
+    request.call.input["expectedBaseRevision"] = json!("different-revision");
+    let mut adapter = FakeAdapter::passing();
+
+    let artifact = execute_candidate_transaction(&request, &mut adapter, &NoCancellation);
+
+    assert_eq!(artifact.status, ChangeTransactionStatus::Recovered);
+    assert_eq!(adapter.operations, ["prepare", "recover"]);
+    assert!(
+        artifact
+            .failure
+            .as_deref()
+            .is_some_and(|message| message.contains("Boundary evidence"))
     );
 }
 
