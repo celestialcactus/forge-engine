@@ -7,7 +7,7 @@ use forge_core::{
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::protocol::{CANDIDATE_PROTOCOL_VERSION, MAX_START_FRAME_BYTES, send_json};
+use crate::protocol::{CANDIDATE_PROTOCOL_VERSION, MAX_CANDIDATE_START_FRAME_BYTES, send_json};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
