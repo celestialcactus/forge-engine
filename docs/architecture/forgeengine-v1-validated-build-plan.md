@@ -146,6 +146,17 @@ allowlisted host attestation, and unavailable Forge-restricted execution fails
 closed. Windows, macOS, and Linux restricted mechanisms still require separate
 spikes and adversarial platform gates.
 
+### Honest current limitations
+
+- No Forge-enforced operating-system sandbox exists yet.
+- Host-managed isolation evidence is an allowlisted assertion, not independently
+  verified containment; the authenticated host handshake is not yet built.
+- The baseline verification child inherits the Forge process environment and
+  operating-system permissions.
+- No host-facing transaction CLI, MCP mutation tool, verified-candidate promotion
+  flow, or public workspace-write capability exists yet. The current CLI and seven
+  MCP tools remain read-only.
+
 ## Research spikes that are still required
 
 These are bounded investigations with a decision, not further open-ended feature
