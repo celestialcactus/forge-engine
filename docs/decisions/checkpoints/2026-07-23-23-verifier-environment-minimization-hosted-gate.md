@@ -1,8 +1,9 @@
-# Checkpoint 23: verifier environment minimization local gate
+# Checkpoint 23: verifier environment minimization hosted gate
 
 **Date:** 2026-07-23
-**Status:** local Windows gate passed; hosted Windows/macOS/Linux gate pending
+**Status:** Increment 2D-0 accepted
 **Branch:** `feature/slice-2d-candidate-promotion`
+**Accepted implementation:** `1339f5342085ff39492d745bd9971b794eed4fc1`
 
 ## Decision checkpoint
 
@@ -50,9 +51,18 @@ then passed three focused consecutive repetitions plus the subsequent full gate.
 This is recorded as test-timing evidence rather than hidden or attributed to the
 environment change without reproduction.
 
+## Hosted validation
+
+Exact implementation `1339f53` passed:
+
+- [Cross-platform conformance](https://github.com/celestialcactus/forge-engine/actions/runs/30038561292):
+  Windows and macOS TypeScript, build, and packaged read-only CLI;
+- [Hybrid kernel conformance](https://github.com/celestialcactus/forge-engine/actions/runs/30038561238):
+  Windows, macOS, and Ubuntu Rust, TypeScript, hybrid, MCP, secret-exclusion,
+  release build, and process-bridge latency gates.
+
 ## Honest remaining boundary
 
-- Hosted macOS/Linux behavior is not accepted until the matrix passes.
 - The Rust kernel process itself still inherits the TypeScript host environment.
 - No privilege reduction or Forge-enforced sandbox exists.
 - Candidate inspection/promotion and a controlled local surface remain pending.
@@ -60,6 +70,5 @@ environment change without reproduction.
 
 ## Next gate
 
-Run the exact commit through hosted Windows, macOS, and Ubuntu conformance. If it
-passes, accept 2D-0 and implement the Rust-owned restart-safe candidate inspection
-and promotion contract before adding any local command surface.
+Implement the Rust-owned restart-safe candidate inspection and all-or-nothing
+promotion contract before adding any local command surface.

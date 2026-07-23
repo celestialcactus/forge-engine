@@ -1,6 +1,6 @@
 # Slice 2D: credible candidate completion loop
 
-- **Status:** Increment 2D-0 environment minimization passes the local Windows gate; hosted gate and promotion increments pending
+- **Status:** Increment 2D-0 accepted at `1339f53`; candidate inspection/promotion increments pending
 - **Opened:** 2026-07-23
 - **Branch:** feature/slice-2d-candidate-promotion
 - **Predecessor:** Slice 2C accepted at `fa9898f`; checkpoint consolidation at `e5d4698`

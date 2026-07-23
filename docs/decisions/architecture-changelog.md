@@ -129,9 +129,9 @@ checkpoint records.
   retention, original-workspace preservation, authority rejection, redacted
   malformed input, and in-flight cancellation with recovery across hosted
   Windows, macOS, and Ubuntu gates. See Checkpoint 22.
-- Opened Slice 2D from the accepted Slice 2C checkpoint. The first increment
-  clears and reconstructs verifier environments from a bounded baseline plus
-  explicit trusted policy, records names without values, and proves secret-like
-  variables are absent through the real private bridge. Local Windows gates pass;
-  hosted macOS/Linux acceptance remains pending. Candidate promotion remains the
-  next Rust-owned gate. See Checkpoint 23.
+- Opened Slice 2D from the accepted Slice 2C checkpoint. Increment 2D-0 clears and
+  reconstructs verifier environments from a bounded baseline plus explicit trusted
+  policy, records names without values, and proves secret-like variables are absent
+  through the real private bridge. Exact implementation `1339f53` passed hosted
+  Windows, macOS, and Ubuntu conformance. Candidate promotion remains the next
+  Rust-owned gate. See Checkpoint 23.
