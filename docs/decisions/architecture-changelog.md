@@ -94,3 +94,10 @@ checkpoint records.
   the TypeScript matrix passed on Windows and macOS, and a reloaded VS Code Agent
   completed a one-call seven-tool apprentice regression. Promotion and sandbox
   isolation remain separate gates. See Checkpoint 17.
+- Added ADR-0008 and SGU-005: verification processes now route through a
+  Rust-owned isolation-provider contract. `trusted` records no OS containment,
+  `host_managed` requires an allowlisted inherited-boundary attestation, and
+  `restricted` fails closed until a Forge-enforced platform backend exists. The
+  exact capability call and terminal evidence bind the isolation selection. Local
+  Rust tests and Clippy pass; hosted cross-platform acceptance remains pending.
+  See Checkpoint 18.

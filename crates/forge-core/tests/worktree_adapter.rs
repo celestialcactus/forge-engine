@@ -10,9 +10,11 @@ use std::{
 use forge_core::{
     ApplicationChange, ApprovalFacts, CapabilityCall, ChangeApplicationManifest,
     ChangeTransactionRequest, ChangeTransactionStatus, CleanRevisionWorktreeAdapter,
-    HostPolicyFact, HostPolicyPosture, NoCancellation, UserConsentFact, UserConsentStatus,
-    VerificationCheck, VerificationSelection, WorktreeAdapterConfig, execute_candidate_transaction,
-    proposal_id_for_manifest, workspace_snapshot_id,
+    HostIsolationAttestation, HostPolicyFact, HostPolicyPosture, IsolationControl,
+    IsolationEnforcement, IsolationPolicy, IsolationProfile, IsolationRequest, NoCancellation,
+    UserConsentFact, UserConsentStatus, VerificationCheck, VerificationSelection,
+    WorktreeAdapterConfig, execute_candidate_transaction, proposal_id_for_manifest,
+    workspace_snapshot_id,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -95,6 +97,9 @@ impl Fixture {
                     "proposalId": self.manifest.proposal_id,
                     "snapshotId": self.manifest.snapshot_id,
                     "verificationCheckId": check_id,
+                    "isolationProfile": "trusted",
+                    "isolationProviderId": null,
+                    "isolationBoundaryId": null,
                 }),
             },
             manifest: self.manifest.clone(),
@@ -115,6 +120,7 @@ impl Fixture {
             },
             verification: VerificationSelection {
                 check_id: check_id.to_owned(),
+                isolation: IsolationRequest::trusted(),
             },
         }
     }
@@ -171,6 +177,7 @@ fn check(helper: &str, timeout: Duration) -> VerificationCheck {
             "--nocapture".to_owned(),
         ],
         environment: Vec::new(),
+        isolation_policy: IsolationPolicy::trusted(),
         timeout,
         max_output_bytes: 1_024,
     }
@@ -201,6 +208,16 @@ fn clean_revision_is_applied_verified_and_retained_without_mutating_the_workspac
         fs::read_to_string(candidate.join("evidence.txt")).unwrap(),
         "after\n"
     );
+    let isolation = &artifact.verification.as_ref().unwrap().isolation;
+    assert_eq!(isolation.requested_profile, IsolationProfile::Trusted);
+    assert_eq!(isolation.enforcement, IsolationEnforcement::None);
+    assert!(!isolation.forge_enforced);
+    assert!(
+        isolation
+            .limitations
+            .iter()
+            .any(|item| item.contains("does not restrict filesystem"))
+    );
     let retention = artifact.retention.as_ref().unwrap();
     assert!(retention.final_diff.text.contains("+after"));
     assert!(!retention.final_diff.truncated);
@@ -208,6 +225,151 @@ fn clean_revision_is_applied_verified_and_retained_without_mutating_the_workspac
     assert!(adapter.retained_candidate_path().is_none());
 }
 
+#[test]
+fn host_managed_execution_records_attestation_without_claiming_forge_enforcement() {
+    let fixture = Fixture::new();
+    let mut host_check = check("verifier_pass_helper", Duration::from_secs(5));
+    host_check.isolation_policy = IsolationPolicy::host_managed(
+        vec!["fixture.host".to_owned()],
+        vec![IsolationControl::Process, IsolationControl::Filesystem],
+    );
+    let mut request = fixture.request("fixture.check");
+    request.call.input["isolationProfile"] = json!("host_managed");
+    request.call.input["isolationProviderId"] = json!("fixture.host");
+    request.call.input["isolationBoundaryId"] = json!("boundary:host-fixture");
+    request.verification.isolation = IsolationRequest {
+        profile: IsolationProfile::HostManaged,
+        host_attestation: Some(HostIsolationAttestation {
+            provider_id: "fixture.host".to_owned(),
+            boundary_id: "boundary:host-fixture".to_owned(),
+            process_boundary_inherited: true,
+            attested_controls: vec![IsolationControl::Process, IsolationControl::Filesystem],
+        }),
+    };
+    let mut adapter = fixture.adapter(host_check);
+
+    let artifact = execute_candidate_transaction(&request, &mut adapter, &NoCancellation);
+
+    assert_eq!(artifact.status, ChangeTransactionStatus::VerifiedCandidate);
+    let isolation = &artifact.verification.as_ref().unwrap().isolation;
+    assert_eq!(isolation.enforcement, IsolationEnforcement::HostAttested);
+    assert_eq!(isolation.provider_id, "fixture.host");
+    assert_eq!(
+        isolation.boundary_id.as_deref(),
+        Some("boundary:host-fixture")
+    );
+    assert!(!isolation.forge_enforced);
+    assert!(
+        isolation
+            .limitations
+            .iter()
+            .any(|item| item.contains("not independently enforced"))
+    );
+    adapter.discard_retained_candidate().unwrap();
+}
+
+#[test]
+fn host_managed_execution_must_satisfy_every_policy_required_control() {
+    let fixture = Fixture::new();
+    let mut host_check = check("verifier_pass_helper", Duration::from_secs(5));
+    host_check.isolation_policy = IsolationPolicy::host_managed(
+        vec!["fixture.host".to_owned()],
+        vec![IsolationControl::Process, IsolationControl::Network],
+    );
+    let mut request = fixture.request("fixture.check");
+    request.call.input["isolationProfile"] = json!("host_managed");
+    request.call.input["isolationProviderId"] = json!("fixture.host");
+    request.call.input["isolationBoundaryId"] = json!("boundary:host-fixture");
+    request.verification.isolation = IsolationRequest {
+        profile: IsolationProfile::HostManaged,
+        host_attestation: Some(HostIsolationAttestation {
+            provider_id: "fixture.host".to_owned(),
+            boundary_id: "boundary:host-fixture".to_owned(),
+            process_boundary_inherited: true,
+            attested_controls: vec![IsolationControl::Process],
+        }),
+    };
+    let mut adapter = fixture.adapter(host_check);
+
+    let artifact = execute_candidate_transaction(&request, &mut adapter, &NoCancellation);
+
+    assert_eq!(artifact.status, ChangeTransactionStatus::Recovered);
+    assert_eq!(
+        artifact.requested_isolation.profile,
+        IsolationProfile::HostManaged
+    );
+    assert!(
+        artifact.failure.as_deref().is_some_and(
+            |message| message.contains("does not satisfy every policy-required control")
+        )
+    );
+    assert!(artifact.verification.is_none());
+}
+#[test]
+fn unsupported_restricted_execution_fails_closed_and_recovers_the_candidate() {
+    let fixture = Fixture::new();
+    let mut restricted_check = check("verifier_pass_helper", Duration::from_secs(5));
+    restricted_check.isolation_policy =
+        IsolationPolicy::restricted(vec![IsolationControl::Process]);
+    let mut request = fixture.request("fixture.check");
+    request.call.input["isolationProfile"] = json!("restricted");
+    request.verification.isolation = IsolationRequest {
+        profile: IsolationProfile::Restricted,
+        host_attestation: None,
+    };
+    let mut adapter = fixture.adapter(restricted_check);
+
+    let artifact = execute_candidate_transaction(&request, &mut adapter, &NoCancellation);
+
+    assert_eq!(artifact.status, ChangeTransactionStatus::Recovered);
+    assert_eq!(
+        artifact.requested_isolation.profile,
+        IsolationProfile::Restricted
+    );
+    assert!(
+        artifact
+            .failure
+            .as_deref()
+            .is_some_and(|message| message.contains("cannot enforce the restricted profile"))
+    );
+    assert!(artifact.verification.is_none());
+    assert!(adapter.retained_candidate_path().is_none());
+}
+
+#[test]
+fn unapproved_host_isolation_provider_fails_closed() {
+    let fixture = Fixture::new();
+    let mut host_check = check("verifier_pass_helper", Duration::from_secs(5));
+    host_check.isolation_policy = IsolationPolicy::host_managed(
+        vec!["approved.host".to_owned()],
+        vec![IsolationControl::Process],
+    );
+    let mut request = fixture.request("fixture.check");
+    request.call.input["isolationProfile"] = json!("host_managed");
+    request.call.input["isolationProviderId"] = json!("unapproved.host");
+    request.call.input["isolationBoundaryId"] = json!("boundary:host-fixture");
+    request.verification.isolation = IsolationRequest {
+        profile: IsolationProfile::HostManaged,
+        host_attestation: Some(HostIsolationAttestation {
+            provider_id: "unapproved.host".to_owned(),
+            boundary_id: "boundary:host-fixture".to_owned(),
+            process_boundary_inherited: true,
+            attested_controls: vec![IsolationControl::Process],
+        }),
+    };
+    let mut adapter = fixture.adapter(host_check);
+
+    let artifact = execute_candidate_transaction(&request, &mut adapter, &NoCancellation);
+
+    assert_eq!(artifact.status, ChangeTransactionStatus::Recovered);
+    assert!(
+        artifact
+            .failure
+            .as_deref()
+            .is_some_and(|message| message.contains("is not allowed by policy"))
+    );
+    assert!(artifact.verification.is_none());
+}
 #[test]
 fn dirty_workspace_is_rejected_before_a_boundary_exists() {
     let fixture = Fixture::new();
@@ -285,7 +447,7 @@ fn missing_or_failing_verifier_recovers_the_candidate_boundary() {
         artifact
             .failure
             .unwrap()
-            .contains("Could not start policy verification")
+            .contains("Could not start isolated process")
     );
 
     let fixture = Fixture::new();

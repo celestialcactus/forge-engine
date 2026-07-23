@@ -4,7 +4,8 @@ use forge_core::{
     ApplicationChange, AppliedChangeEvidence, ApplyEvidence, ApprovalFacts, BoundaryEvidence,
     BoundedTextEvidence, CandidateRetentionEvidence, CapabilityCall, ChangeApplicationManifest,
     ChangeTransactionAdapter, ChangeTransactionPhase, ChangeTransactionRequest,
-    ChangeTransactionStatus, HostPolicyFact, HostPolicyPosture, NoCancellation, UserConsentFact,
+    ChangeTransactionStatus, HostPolicyFact, HostPolicyPosture, IsolationEnforcement,
+    IsolationEvidence, IsolationProfile, IsolationRequest, NoCancellation, UserConsentFact,
     UserConsentStatus, VerificationEvidence, VerificationSelection, execute_candidate_transaction,
     proposal_id_for_manifest,
 };
@@ -45,6 +46,9 @@ fn request(posture: HostPolicyPosture) -> ChangeTransactionRequest {
                 "proposalId": manifest().proposal_id,
                 "snapshotId": "workspace:fixture",
                 "verificationCheckId": "fixture.check",
+                "isolationProfile": "trusted",
+                "isolationProviderId": null,
+                "isolationBoundaryId": null,
             }),
         },
         manifest: manifest(),
@@ -65,6 +69,7 @@ fn request(posture: HostPolicyPosture) -> ChangeTransactionRequest {
         },
         verification: VerificationSelection {
             check_id: "fixture.check".to_owned(),
+            isolation: IsolationRequest::trusted(),
         },
     }
 }
@@ -75,6 +80,7 @@ struct FakeAdapter {
     fail_apply: bool,
     fail_recovery: bool,
     malformed_apply: bool,
+    malformed_isolation: bool,
     verification_success: bool,
 }
 
@@ -141,6 +147,20 @@ impl ChangeTransactionAdapter for FakeAdapter {
             output_truncated: false,
             stdout: "fixture".to_owned(),
             stderr: String::new(),
+            isolation: IsolationEvidence {
+                requested_profile: IsolationProfile::Trusted,
+                effective_profile: IsolationProfile::Trusted,
+                enforcement: if self.malformed_isolation {
+                    IsolationEnforcement::HostAttested
+                } else {
+                    IsolationEnforcement::None
+                },
+                provider_id: "fixture.provider".to_owned(),
+                boundary_id: None,
+                forge_enforced: false,
+                controls: Vec::new(),
+                limitations: vec!["Fixture executes without containment.".to_owned()],
+            },
         })
     }
 
@@ -312,6 +332,30 @@ fn malformed_apply_evidence_is_recovered_and_never_verified() {
 }
 
 #[test]
+fn inconsistent_isolation_evidence_is_recovered_before_retention() {
+    let mut adapter = FakeAdapter {
+        malformed_isolation: true,
+        ..FakeAdapter::passing()
+    };
+    let artifact = execute_candidate_transaction(
+        &request(HostPolicyPosture::Allow),
+        &mut adapter,
+        &NoCancellation,
+    );
+
+    assert_eq!(artifact.status, ChangeTransactionStatus::Recovered);
+    assert_eq!(
+        adapter.operations,
+        ["prepare", "apply", "verify", "recover"]
+    );
+    assert!(
+        artifact
+            .failure
+            .as_deref()
+            .is_some_and(|message| message.contains("Verification evidence is inconsistent"))
+    );
+}
+#[test]
 fn cleanup_failure_is_terminal_and_explicit() {
     let mut adapter = FakeAdapter {
         fail_apply: true,
@@ -370,6 +414,27 @@ fn proposal_identity_matches_the_typescript_slice_2a_contract() {
 fn approval_call_cannot_be_reused_for_a_different_proposal() {
     let mut request = request(HostPolicyPosture::Allow);
     request.call.input["proposalId"] = json!("change:swapped");
+    let mut adapter = FakeAdapter::passing();
+
+    let artifact = execute_candidate_transaction(&request, &mut adapter, &NoCancellation);
+
+    assert_eq!(artifact.status, ChangeTransactionStatus::Failed);
+    assert!(adapter.operations.is_empty());
+    assert!(
+        artifact
+            .failure
+            .as_deref()
+            .is_some_and(|message| message.contains("approved capability call"))
+    );
+}
+
+#[test]
+fn approval_call_cannot_be_reused_for_a_different_isolation_profile() {
+    let mut request = request(HostPolicyPosture::Allow);
+    request.verification.isolation = IsolationRequest {
+        profile: IsolationProfile::Restricted,
+        host_attestation: None,
+    };
     let mut adapter = FakeAdapter::passing();
 
     let artifact = execute_candidate_transaction(&request, &mut adapter, &NoCancellation);

@@ -139,9 +139,12 @@ heavy enterprise friction. It must still provide:
 - no implication that an in-process rule is a containment boundary;
 - adapter points for organisational egress, DLP, identity, and audit systems.
 
-Robust enforcement is planned as a platform-specific backend, starting with
-Windows. Forge must accurately report whether it has a genuine isolation backend,
-host-enforced policy, or only advisory approval mode.
+Robust enforcement remains a platform-specific backend. ADR-0008 now defines the
+Rust provider and evidence boundary before a backend is selected: developer-
+permission execution records no containment, host-managed execution records an
+allowlisted host attestation, and unavailable Forge-restricted execution fails
+closed. Windows, macOS, and Linux restricted mechanisms still require separate
+spikes and adversarial platform gates.
 
 ## Research spikes that are still required
 

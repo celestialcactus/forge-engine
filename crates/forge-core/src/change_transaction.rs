@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     ApprovalDecision, ApprovalFacts, ApprovalOutcome, Cancellation, CapabilityCall,
-    resolve_approval,
+    IsolationEvidence, IsolationProfile, IsolationRequest, resolve_approval,
 };
 
 pub const CHANGE_APPLY_CAPABILITY_ID: &str = "workspace.change.apply";
@@ -34,6 +34,7 @@ pub struct ApplicationChange {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VerificationSelection {
     pub check_id: String,
+    pub isolation: IsolationRequest,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -53,6 +54,9 @@ struct ChangeApplyCallInput {
     proposal_id: String,
     snapshot_id: String,
     verification_check_id: String,
+    isolation_profile: IsolationProfile,
+    isolation_provider_id: Option<String>,
+    isolation_boundary_id: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,6 +104,7 @@ pub struct VerificationEvidence {
     pub output_truncated: bool,
     pub stdout: String,
     pub stderr: String,
+    pub isolation: IsolationEvidence,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -169,6 +174,7 @@ pub struct ChangeTransactionArtifact {
     pub transaction_id: String,
     pub proposal_id: String,
     pub snapshot_id: String,
+    pub requested_isolation: IsolationRequest,
     pub status: ChangeTransactionStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval: Option<ApprovalDecision>,
@@ -288,6 +294,21 @@ fn validate(request: &ChangeTransactionRequest) -> Result<(), String> {
         || call_input.proposal_id != request.manifest.proposal_id
         || call_input.snapshot_id != request.manifest.snapshot_id
         || call_input.verification_check_id != request.verification.check_id
+        || call_input.isolation_profile != request.verification.isolation.profile
+        || call_input.isolation_provider_id.as_deref()
+            != request
+                .verification
+                .isolation
+                .host_attestation
+                .as_ref()
+                .map(|attestation| attestation.provider_id.as_str())
+        || call_input.isolation_boundary_id.as_deref()
+            != request
+                .verification
+                .isolation
+                .host_attestation
+                .as_ref()
+                .map(|attestation| attestation.boundary_id.as_str())
     {
         return Err(
             "The approved capability call does not match the transaction manifest and verification."
@@ -304,6 +325,13 @@ fn validate(request: &ChangeTransactionRequest) -> Result<(), String> {
     }
     if request.verification.check_id.trim().is_empty() {
         return Err("verification.checkId must not be empty.".to_owned());
+    }
+    if request.verification.isolation.profile != IsolationProfile::HostManaged
+        && request.verification.isolation.host_attestation.is_some()
+    {
+        return Err(
+            "Host isolation attestation is valid only for host-managed execution.".to_owned(),
+        );
     }
     if request.approval_facts.call_id != request.call.id
         || request.approval_facts.capability_id != request.call.capability_id
@@ -475,6 +503,7 @@ pub fn execute_candidate_transaction<A: ChangeTransactionAdapter>(
         transaction_id: request.transaction_id.clone(),
         proposal_id: request.manifest.proposal_id.clone(),
         snapshot_id: request.manifest.snapshot_id.clone(),
+        requested_isolation: request.verification.isolation.clone(),
         status: ChangeTransactionStatus::Failed,
         approval: None,
         boundary: None,
@@ -597,6 +626,9 @@ pub fn execute_candidate_transaction<A: ChangeTransactionAdapter>(
         }
     };
     if verification.check_id != request.verification.check_id
+        || !verification
+            .isolation
+            .is_consistent_with(&request.verification.isolation)
         || (verification.success
             && (verification.exit_code != Some(0)
                 || verification.timed_out

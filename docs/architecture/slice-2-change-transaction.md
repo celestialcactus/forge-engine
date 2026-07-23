@@ -21,7 +21,7 @@ either accept or recover a small change with every phase represented as evidence
 | Approve | Rust contract implemented; host flow pending | explicit decision tied to transaction, proposal, snapshot, verification, and exact capability call |
 | Isolate | private Rust clean-revision worktree adapter accepted | clean HEAD, matching snapshot/digests, tracked-file reproducibility, detached boundary |
 | Apply | private Rust candidate-only replacement adapter implemented | exact manifest, applied digests, bounded application diff |
-| Verify | private policy-named process adapter implemented | fixed executable/arguments, bounded output, timeout/cancellation, process-tree termination |
+| Verify | private process adapter accepted; isolation-provider contract at local gate | fixed executable/arguments, bounded output, timeout/cancellation, process-tree termination, requested/effective isolation provenance |
 | Accept or recover | private retain/recover path implemented; promotion deferred | post-verification digests/path set, final diff, explicit retention or cleanup |
 
 ## Slice 2B transaction authority
@@ -37,6 +37,18 @@ the accepted private Rust clean-revision worktree and policy-named process adapt
 Neither increment expands the seven-tool MCP surface.
 
 See ADR-0007 and Checkpoints 16-17.
+
+## Execution isolation contract
+
+SGU-005 moves process launch and lifecycle beneath a Rust `IsolationProvider`.
+Policy selects `trusted`, `host_managed`, or `restricted`; the approved capability
+call binds that selection, and verification evidence records who enforced what.
+
+The baseline provider supports honest developer-permission execution and
+allowlisted host-attested boundaries. It rejects `restricted` rather than silently
+falling back. A real Forge-enforced backend remains a separate platform milestone.
+This contract is at the local gate and requires hosted Windows, macOS, and Linux
+conformance before acceptance. See ADR-0008 and Checkpoint 18.
 
 ## Slice 2A contract
 
@@ -89,10 +101,13 @@ No public source-write, generic shell, package-installation, promotion, CLI, or 
 mutation API exists in this slice. The private Rust adapter can create and mutate a
 detached candidate only after exact policy and clean-revision checks.
 
-A Git worktree is a recoverability boundary, not a security sandbox. Policy-owned
-verification still runs with the developer process permissions. Forge detects
-governed-workspace drift and refuses retention, but organizational sandbox, DLP,
-and egress controls remain separate layers.
+A Git worktree is a recoverability boundary, not a security sandbox. Verification
+now routes through one Rust isolation-provider contract. The baseline `trusted`
+profile still runs with the Forge process permissions; `host_managed` records an
+allowlisted host assertion without claiming Forge enforcement; `restricted` fails
+closed because no Forge OS backend exists yet. Forge detects governed-workspace
+drift and refuses retention, but organizational sandbox, DLP, and egress controls
+remain separate layers.
 
 ## Slice 2 exit gate
 

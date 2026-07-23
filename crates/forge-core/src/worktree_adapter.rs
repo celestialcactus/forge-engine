@@ -3,28 +3,19 @@ use std::{
     collections::{HashMap, HashSet},
     ffi::OsString,
     fs,
-    io::Read,
     path::{Component, Path, PathBuf},
-    process::{Child, Command, ExitStatus, Stdio},
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering as AtomicOrdering},
-    },
-    thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    process::{Command, ExitStatus, Stdio},
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
-
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
 
 use sha2::{Digest, Sha256};
 
 use crate::{
-    ApplicationChange, AppliedChangeEvidence, ApplyEvidence, BoundaryEvidence, BoundedTextEvidence,
-    Cancellation, CandidateRetentionEvidence, ChangeApplicationManifest, ChangeTransactionAdapter,
-    VerificationEvidence, VerificationSelection,
+    ApplicationChange, AppliedChangeEvidence, ApplyEvidence, BaselineIsolationProvider,
+    BoundaryEvidence, BoundedTextEvidence, Cancellation, CandidateRetentionEvidence,
+    ChangeApplicationManifest, ChangeTransactionAdapter, IsolatedProcessSpec, IsolationPolicy,
+    IsolationProvider, VerificationEvidence, VerificationSelection, validate_isolation_policy,
 };
 
 const MAX_GIT_OUTPUT: usize = 32 * 1_048_576;
@@ -43,6 +34,7 @@ pub struct VerificationCheck {
     pub executable: PathBuf,
     pub arguments: Vec<String>,
     pub environment: Vec<(String, String)>,
+    pub isolation_policy: IsolationPolicy,
     pub timeout: Duration,
     pub max_output_bytes: usize,
 }
@@ -97,19 +89,22 @@ struct CommandResult {
     stderr: Vec<u8>,
 }
 
-struct CapturedStream {
-    bytes: Vec<u8>,
-    total_bytes: u64,
-}
-
 pub struct CleanRevisionWorktreeAdapter {
     config: WorktreeAdapterConfig,
     checks: HashMap<String, VerificationCheck>,
+    isolation_provider: Arc<dyn IsolationProvider>,
     boundary: Option<PreparedBoundary>,
 }
 
 impl CleanRevisionWorktreeAdapter {
-    pub fn try_new(mut config: WorktreeAdapterConfig) -> Result<Self, String> {
+    pub fn try_new(config: WorktreeAdapterConfig) -> Result<Self, String> {
+        Self::try_new_with_isolation_provider(config, Arc::new(BaselineIsolationProvider))
+    }
+
+    pub fn try_new_with_isolation_provider(
+        mut config: WorktreeAdapterConfig,
+        isolation_provider: Arc<dyn IsolationProvider>,
+    ) -> Result<Self, String> {
         if config.expected_base_revision.trim().is_empty() {
             return Err("expected_base_revision must not be empty.".to_owned());
         }
@@ -150,6 +145,7 @@ impl CleanRevisionWorktreeAdapter {
         Ok(Self {
             config,
             checks,
+            isolation_provider,
             boundary: None,
         })
     }
@@ -533,7 +529,28 @@ impl ChangeTransactionAdapter for CleanRevisionWorktreeAdapter {
             return Err("Original workspace changed before candidate verification.".to_owned());
         }
 
-        let result = run_bounded_process(&check, &prepared.candidate_path, cancellation)?;
+        let process = IsolatedProcessSpec {
+            executable: check.executable.clone(),
+            arguments: check.arguments.clone(),
+            environment: check.environment.clone(),
+            working_directory: prepared.candidate_path.clone(),
+            timeout: check.timeout,
+            max_output_bytes: check.max_output_bytes,
+        };
+        let result = self
+            .isolation_provider
+            .execute(
+                &check.isolation_policy,
+                &selection.isolation,
+                &process,
+                cancellation,
+            )
+            .map_err(|error| {
+                format!(
+                    "Could not execute policy verification check {}: {error}",
+                    check.check_id
+                )
+            })?;
         if !self.original_workspace_unchanged(&prepared)? {
             return Err("Original workspace changed during candidate verification.".to_owned());
         }
@@ -555,6 +572,7 @@ impl ChangeTransactionAdapter for CleanRevisionWorktreeAdapter {
                 > check.max_output_bytes as u64,
             stdout: String::from_utf8_lossy(&result.stdout.bytes).into_owned(),
             stderr: String::from_utf8_lossy(&result.stderr.bytes).into_owned(),
+            isolation: result.isolation,
         })
     }
 
@@ -631,6 +649,12 @@ fn validate_check(check: &VerificationCheck) -> Result<(), String> {
             check.check_id
         ));
     }
+    validate_isolation_policy(&check.isolation_policy).map_err(|error| {
+        format!(
+            "Verification check {} has invalid isolation policy: {error}",
+            check.check_id
+        )
+    })?;
     Ok(())
 }
 fn strings(values: &[&str]) -> Vec<OsString> {
@@ -839,177 +863,3 @@ fn bounded_text(bytes: &[u8], maximum_bytes: usize) -> BoundedTextEvidence {
         truncated: bytes.len() > end,
     }
 }
-
-struct BoundedProcessResult {
-    status: Option<ExitStatus>,
-    timed_out: bool,
-    cancelled: bool,
-    stdout: CapturedStream,
-    stderr: CapturedStream,
-}
-
-fn run_bounded_process(
-    check: &VerificationCheck,
-    cwd: &Path,
-    cancellation: &dyn Cancellation,
-) -> Result<BoundedProcessResult, String> {
-    let mut command = Command::new(&check.executable);
-    command
-        .current_dir(cwd)
-        .args(&check.arguments)
-        .envs(check.environment.iter().cloned())
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(unix)]
-    command.process_group(0);
-    #[cfg(windows)]
-    command.creation_flags(0x0000_0200);
-
-    let mut child = command.spawn().map_err(|error| {
-        format!(
-            "Could not start policy verification check {}: {error}",
-            check.check_id
-        )
-    })?;
-    let process_id = child.id();
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "Verification stdout pipe is unavailable.".to_owned())?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| "Verification stderr pipe is unavailable.".to_owned())?;
-    let budget = Arc::new(AtomicUsize::new(0));
-    let stdout_capture = capture_stream(stdout, Arc::clone(&budget), check.max_output_bytes);
-    let stderr_capture = capture_stream(stderr, Arc::clone(&budget), check.max_output_bytes);
-
-    let started = Instant::now();
-    let mut timed_out = false;
-    let mut cancelled = false;
-    let status = loop {
-        if cancellation.reason().is_some() {
-            cancelled = true;
-            terminate_process_tree(&mut child, process_id);
-            break child.wait().ok();
-        }
-        if started.elapsed() >= check.timeout {
-            timed_out = true;
-            terminate_process_tree(&mut child, process_id);
-            break child.wait().ok();
-        }
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                terminate_remaining_descendants(&mut child, process_id);
-                break Some(status);
-            }
-            Ok(None) => thread::sleep(Duration::from_millis(10)),
-            Err(error) => {
-                terminate_process_tree(&mut child, process_id);
-                let _ = child.wait();
-                return Err(format!("Could not observe verification process: {error}"));
-            }
-        }
-    };
-
-    let stdout = stdout_capture
-        .join()
-        .map_err(|_| "Verification stdout capture panicked.".to_owned())??;
-    let stderr = stderr_capture
-        .join()
-        .map_err(|_| "Verification stderr capture panicked.".to_owned())??;
-    Ok(BoundedProcessResult {
-        status,
-        timed_out,
-        cancelled,
-        stdout,
-        stderr,
-    })
-}
-
-fn capture_stream<R: Read + Send + 'static>(
-    mut stream: R,
-    budget: Arc<AtomicUsize>,
-    maximum_bytes: usize,
-) -> thread::JoinHandle<Result<CapturedStream, String>> {
-    thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let mut total_bytes = 0_u64;
-        let mut buffer = [0_u8; 8_192];
-        loop {
-            let count = stream
-                .read(&mut buffer)
-                .map_err(|error| format!("Could not capture verification output: {error}"))?;
-            if count == 0 {
-                break;
-            }
-            total_bytes = total_bytes.saturating_add(count as u64);
-            let reserved = reserve_output(&budget, maximum_bytes, count);
-            bytes.extend_from_slice(&buffer[..reserved]);
-        }
-        Ok(CapturedStream { bytes, total_bytes })
-    })
-}
-
-fn reserve_output(budget: &AtomicUsize, maximum_bytes: usize, requested: usize) -> usize {
-    let mut current = budget.load(AtomicOrdering::Relaxed);
-    loop {
-        if current >= maximum_bytes {
-            return 0;
-        }
-        let reserved = requested.min(maximum_bytes - current);
-        match budget.compare_exchange_weak(
-            current,
-            current + reserved,
-            AtomicOrdering::AcqRel,
-            AtomicOrdering::Relaxed,
-        ) {
-            Ok(_) => return reserved,
-            Err(actual) => current = actual,
-        }
-    }
-}
-
-#[cfg(unix)]
-fn terminate_process_tree(child: &mut Child, process_id: u32) {
-    // SAFETY: the child was placed in a new process group whose ID is its PID.
-    unsafe {
-        libc::kill(-(process_id as i32), libc::SIGKILL);
-    }
-    let _ = child.kill();
-}
-
-#[cfg(windows)]
-fn terminate_process_tree(child: &mut Child, process_id: u32) {
-    let _ = Command::new("taskkill")
-        .args(["/PID", &process_id.to_string(), "/T", "/F"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-    let _ = child.kill();
-}
-
-#[cfg(not(any(unix, windows)))]
-fn terminate_process_tree(child: &mut Child, _process_id: u32) {
-    let _ = child.kill();
-}
-
-#[cfg(unix)]
-fn terminate_remaining_descendants(child: &mut Child, process_id: u32) {
-    terminate_process_tree(child, process_id);
-}
-
-#[cfg(windows)]
-fn terminate_remaining_descendants(_child: &mut Child, process_id: u32) {
-    let _ = Command::new("taskkill")
-        .args(["/PID", &process_id.to_string(), "/T", "/F"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-}
-
-#[cfg(not(any(unix, windows)))]
-fn terminate_remaining_descendants(_child: &mut Child, _process_id: u32) {}

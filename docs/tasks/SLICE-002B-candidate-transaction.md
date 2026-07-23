@@ -1,6 +1,6 @@
 # Slice 2B: Rust-authoritative candidate transaction
 
-- **Status:** Increment 2B-1 and Increment 2B-2 accepted; promotion deferred
+- **Status:** Increment 2B-1 and Increment 2B-2 accepted; SGU-005 isolation contract at local gate; promotion deferred
 - **Opened:** 2026-07-22
 - **Branch:** feature/slice-2b-change-transaction
 - **Predecessor:** SGU-004 accepted at 69d2b743fc472ff00658c108f74450286f9044f8
@@ -68,6 +68,12 @@ Acceptance:
 - dirty, stale, untracked-dependent, missing-tool, timeout, cancellation, failed
   verification, and cleanup-failure fixtures remain explicit;
 - official MCP and controlled VS Code tests still expose seven read-only tools.
+
+## Companion isolation hardening
+
+SGU-005 defines the Rust provider and evidence seam for `trusted`, `host_managed`,
+and future `restricted` execution. It does not reopen the accepted worktree
+adapter or imply that a restricted backend exists. See ADR-0008.
 
 ## Deferred promotion gate
 
