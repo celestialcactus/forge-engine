@@ -20,6 +20,7 @@ const MAX_CHANGES: usize = 20;
 pub enum CandidateLeaseState {
     Retained,
     CleanupFailed,
+    Promoted,
     Discarded,
 }
 
@@ -63,7 +64,7 @@ pub struct CandidateLeaseRecord {
     pub cleanup_failure: Option<String>,
 }
 
-struct CandidateLeaseLock(File);
+pub(crate) struct CandidateLeaseLock(File);
 
 impl Drop for CandidateLeaseLock {
     fn drop(&mut self) {
@@ -178,6 +179,7 @@ impl FileCandidateLeaseStore {
         validate_candidate_id(candidate_id)?;
         for (suffix, state) in [
             ("discarded", CandidateLeaseState::Discarded),
+            ("promoted", CandidateLeaseState::Promoted),
             ("cleanup-failed", CandidateLeaseState::CleanupFailed),
             ("retained", CandidateLeaseState::Retained),
         ] {
@@ -198,6 +200,14 @@ impl FileCandidateLeaseStore {
     ) -> Result<CandidateLeaseRecord, String> {
         let _lock = self.lock(candidate_id)?;
         let record = self.load(candidate_id)?;
+        self.discard_locked(record, git_executable.as_ref())
+    }
+
+    pub(crate) fn discard_locked(
+        &self,
+        record: CandidateLeaseRecord,
+        git_executable: &Path,
+    ) -> Result<CandidateLeaseRecord, String> {
         if record.state == CandidateLeaseState::Discarded {
             return Ok(record);
         }
@@ -207,7 +217,7 @@ impl FileCandidateLeaseStore {
         let cleanup = (|| -> Result<(), String> {
             if candidate_path.exists() {
                 successful_git(
-                    git_executable.as_ref(),
+                    git_executable,
                     &self.repository_root,
                     &[
                         OsString::from("worktree"),
@@ -219,7 +229,7 @@ impl FileCandidateLeaseStore {
                 )?;
             }
             successful_git(
-                git_executable.as_ref(),
+                git_executable,
                 &self.repository_root,
                 &strings(&["worktree", "prune", "--expire", "now"]),
                 "Git worktree metadata prune",
@@ -235,13 +245,46 @@ impl FileCandidateLeaseStore {
             failed.state = CandidateLeaseState::CleanupFailed;
             failed.updated_at_unix_ms = unix_ms()?;
             failed.cleanup_failure = Some(bounded_message(&error));
-            if !self.state_path(candidate_id, "cleanup-failed")?.exists() {
+            if !self
+                .state_path(&failed.candidate_id, "cleanup-failed")?
+                .exists()
+            {
                 self.write_transition(&failed, "cleanup-failed")?;
             }
             return Err(error);
         }
 
         self.record_discarded_locked(record)
+    }
+
+    pub(crate) fn acquire_lock(&self, candidate_id: &str) -> Result<CandidateLeaseLock, String> {
+        self.lock(candidate_id)
+    }
+
+    pub(crate) fn validate_candidate_path_for_lifecycle(
+        &self,
+        candidate_path: &Path,
+    ) -> Result<(), String> {
+        self.validate_candidate_path(candidate_path)
+    }
+
+    pub(crate) fn record_promoted_locked(
+        &self,
+        mut record: CandidateLeaseRecord,
+    ) -> Result<CandidateLeaseRecord, String> {
+        if record.state == CandidateLeaseState::Promoted {
+            return Ok(record);
+        }
+        if record.state != CandidateLeaseState::Retained {
+            return Err("Only a retained candidate can be promoted.".to_owned());
+        }
+        record.state = CandidateLeaseState::Promoted;
+        record.updated_at_unix_ms = unix_ms()?;
+        record.cleanup_failure = None;
+        if !self.state_path(&record.candidate_id, "promoted")?.exists() {
+            self.write_transition(&record, "promoted")?;
+        }
+        Ok(record)
     }
 
     pub fn record_discarded_after_cleanup(
@@ -260,7 +303,6 @@ impl FileCandidateLeaseStore {
         }
         self.record_discarded_locked(record)
     }
-
     fn record_discarded_locked(
         &self,
         mut record: CandidateLeaseRecord,

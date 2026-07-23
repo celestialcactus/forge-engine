@@ -12,7 +12,12 @@ import {
   type CandidateTransactionRequest,
   type RustCandidateTransactionRuntimeOptions,
 } from '../../src/hybrid/rust-candidate-transaction-runtime.js';
-import { createChangeProposalCapability, type ChangeProposalArtifact } from '../../src/v1/change-proposal.js';
+import {
+  RustCandidateLifecycleRuntime,
+  type CandidateLifecycleSubject,
+  type CandidatePromotionRequest,
+  type CandidateDiscardRequest,
+} from '../../src/hybrid/rust-candidate-lifecycle-runtime.js';import { createChangeProposalCapability, type ChangeProposalArtifact } from '../../src/v1/change-proposal.js';
 import { createWorkspaceSnapshot } from '../../src/v1/workspace.js';
 
 const execFileAsync = promisify(execFile);
@@ -214,6 +219,127 @@ test('TypeScript abort is carried into Rust verification and recovers the candid
     assert.equal(await readFile(join(value.repository, 'evidence.txt'), 'utf8'), 'before\n');
     const candidates = (await readdir(value.candidates)).filter((entry) => entry !== '.forge-leases');
     assert.deepEqual(candidates, []);
+  } finally {
+    await rm(value.root, { recursive: true, force: true });
+  }
+});
+test('TypeScript transport inspects, promotes, and discards through the Rust lifecycle authority', async () => {
+  assert.equal(existsSync(kernelBinary), true, 'Build forge-kernel or set FORGE_KERNEL_BINARY.');
+  const value = await fixture();
+  try {
+    const transaction = new RustCandidateTransactionRuntime(runtimeOptions(
+      value,
+      "const fs=require('node:fs');process.exit(fs.readFileSync('evidence.txt','utf8')==='after\\n'?0:1)",
+    ));
+    const candidate = await transaction.execute(value.request);
+    const candidateId = candidate.retention?.candidateId;
+    assert.match(candidateId ?? '', /^candidate:/u);
+
+    const lifecycle = new RustCandidateLifecycleRuntime({
+      kernelPath: kernelBinary,
+      repositoryRoot: value.repository,
+      candidateParent: value.candidates,
+      requestIdFactory: () => 'request:lifecycle-fixture',
+    });
+    const inspection = await lifecycle.inspect(candidateId as string);
+    assert.equal(inspection.state, 'retained');
+    assert.equal(inspection.candidateValid, true);
+    assert.equal(inspection.activeWorkspaceClean, true);
+    const approval = (
+      callId: string,
+      capabilityId: string,
+    ): CandidatePromotionRequest['approvalFacts'] => ({
+      schemaVersion: 1,
+      callId,
+      capabilityId,
+      hostPolicy: {
+        posture: 'allow',
+        source: 'fixture.policy',
+        reason: 'Fixture allows this exact lifecycle call.',
+      },
+      userConsent: {
+        status: 'notRequired',
+        source: 'fixture.ui',
+        reason: 'Fixture does not require interactive consent.',
+      },
+    });
+    const promoteCallId = 'call:promote-fixture';
+    const promotion: CandidatePromotionRequest = {
+      promotionId: 'promotion:typescript-fixture',
+      subject: inspection.subject,
+      call: {
+        id: promoteCallId,
+        capabilityId: 'workspace.candidate.promote',
+        input: {
+          promotionId: 'promotion:typescript-fixture',
+          subject: inspection.subject,
+        },
+      },
+      approvalFacts: approval(promoteCallId, 'workspace.candidate.promote'),
+    };
+    const promoted = await lifecycle.promote(promotion);
+    assert.equal(promoted.status, 'promoted');
+    assert.equal(await readFile(join(value.repository, 'evidence.txt'), 'utf8'), 'after\n');
+    assert.equal((await lifecycle.inspect(candidateId as string)).state, 'promoted');
+
+    const discardCallId = 'call:discard-fixture';
+    const discard: CandidateDiscardRequest = {
+      discardId: 'discard:typescript-fixture',
+      subject: inspection.subject as CandidateLifecycleSubject,
+      call: {
+        id: discardCallId,
+        capabilityId: 'workspace.candidate.discard',
+        input: {
+          discardId: 'discard:typescript-fixture',
+          subject: inspection.subject,
+        },
+      },
+      approvalFacts: approval(discardCallId, 'workspace.candidate.discard'),
+    };
+    const discarded = await lifecycle.discard(discard);
+    assert.equal(discarded.status, 'discarded');
+    const candidates = (await readdir(value.candidates)).filter((entry) => entry !== '.forge-leases');
+    assert.deepEqual(candidates, []);
+    assert.equal(await readFile(join(value.repository, 'evidence.txt'), 'utf8'), 'after\n');
+  } finally {
+    await rm(value.root, { recursive: true, force: true });
+  }
+});
+test('CLI requires explicit consent and delegates candidate mutation to Rust', async () => {
+  assert.equal(existsSync(kernelBinary), true, 'Build forge-kernel or set FORGE_KERNEL_BINARY.');
+  const value = await fixture();
+  try {
+    const transaction = new RustCandidateTransactionRuntime(runtimeOptions(
+      value,
+      "const fs=require('node:fs');process.exit(fs.readFileSync('evidence.txt','utf8')==='after\\n'?0:1)",
+    ));
+    const candidate = await transaction.execute(value.request);
+    const candidateId = candidate.retention?.candidateId as string;
+    const cli = resolve('node_modules/tsx/dist/cli.mjs');
+    const common = [
+      resolve('src/cli.ts'),
+      '--workspace', value.repository,
+      '--candidate-parent', value.candidates,
+      '--json',
+    ];
+    const environment = { ...process.env, FORGE_KERNEL_BINARY: kernelBinary };
+    const runCandidate = async (action: string, approve = false): Promise<Record<string, unknown>> => {
+      const { stdout } = await execFileAsync(process.execPath, [
+        cli,
+        common[0] as string,
+        'candidate', action, candidateId,
+        ...common.slice(1),
+        ...(approve ? ['--approve'] : []),
+      ], { encoding: 'utf8', env: environment, windowsHide: true });
+      return JSON.parse(stdout) as Record<string, unknown>;
+    };
+
+    assert.equal((await runCandidate('inspect')).state, 'retained');
+    await assert.rejects(runCandidate('accept'), /requires --approve/u);
+    assert.equal(await readFile(join(value.repository, 'evidence.txt'), 'utf8'), 'before\n');
+    assert.equal((await runCandidate('accept', true)).status, 'promoted');
+    assert.equal(await readFile(join(value.repository, 'evidence.txt'), 'utf8'), 'after\n');
+    assert.equal((await runCandidate('discard', true)).status, 'discarded');
   } finally {
     await rm(value.root, { recursive: true, force: true });
   }

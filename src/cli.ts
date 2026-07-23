@@ -1,9 +1,13 @@
 #!/usr/bin/env node
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { RunArtifact } from './slice0/contracts.js';
 import { startForgeMcpServer } from './mcp/server.js';
-import { artifactPayload, ForgeWorkspaceService, type ForgeWorkspaceServiceOptions } from './v1/service.js';
+import {
+  RustCandidateLifecycleRuntime,
+  type CandidateLifecycleSubject,
+} from './hybrid/rust-candidate-lifecycle-runtime.js';import { artifactPayload, ForgeWorkspaceService, type ForgeWorkspaceServiceOptions } from './v1/service.js';
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -20,6 +24,8 @@ const { positionals, values } = parseArgs({
     'max-symbols': { type: 'string' },
     'max-diagnostics': { type: 'string' },
     'max-bytes': { type: 'string' },
+    'candidate-parent': { type: 'string' },
+    approve: { type: 'boolean', default: false },
   },
 });
 
@@ -35,6 +41,64 @@ const workspaceService = (): ForgeWorkspaceService => {
   return service;
 };
 
+const candidateLifecycle = (): RustCandidateLifecycleRuntime => {
+  if (configuredKernel === undefined || configuredKernel.length === 0) {
+    throw new Error('Candidate lifecycle commands require FORGE_KERNEL_BINARY.');
+  }
+  const configuredParent = values['candidate-parent'] ?? process.env.FORGE_CANDIDATE_PARENT;
+  if (configuredParent === undefined || configuredParent.trim().length === 0) {
+    throw new Error('Candidate lifecycle commands require --candidate-parent <path> or FORGE_CANDIDATE_PARENT.');
+  }
+  return new RustCandidateLifecycleRuntime({
+    kernelPath: configuredKernel,
+    repositoryRoot: workspaceRoot,
+    candidateParent: resolve(configuredParent),
+  });
+};
+
+const printCandidateArtifact = (artifact: unknown): void => {
+  console.log(JSON.stringify(artifact, null, values.json ? 2 : 2));
+};
+
+const lifecycleApproval = (callId: string, capabilityId: string) => ({
+  schemaVersion: 1 as const,
+  callId,
+  capabilityId,
+  hostPolicy: {
+    posture: 'ask' as const,
+    source: 'forge.cli.explicit-operation',
+    reason: 'The local CLI requires explicit consent for candidate mutation.',
+  },
+  userConsent: {
+    status: 'granted' as const,
+    source: 'forge.cli.--approve',
+    reason: 'The developer supplied --approve for this exact lifecycle call.',
+  },
+});
+
+const requireCandidateConsent = (): void => {
+  if (!values.approve) {
+    throw new Error('Candidate accept/discard requires --approve after inspecting the candidate.');
+  }
+};
+
+const candidateCall = (
+  capabilityId: string,
+  operationIdName: 'promotionId' | 'discardId',
+  operationId: string,
+  subject: CandidateLifecycleSubject,
+) => {
+  const callId = `candidate-cli:${randomUUID()}`;
+  return {
+    callId,
+    call: {
+      id: callId,
+      capabilityId,
+      input: { [operationIdName]: operationId, subject },
+    },
+    approvalFacts: lifecycleApproval(callId, capabilityId),
+  };
+};
 const integerOption = (raw: string | undefined, fallback: number, name: string): number => {
   if (raw === undefined) return fallback;
   const value = Number(raw);
@@ -102,7 +166,50 @@ try {
       staged: values.staged,
       maxBytes: integerOption(values['max-bytes'], 100_000, '--max-bytes'),
     }));
-  } else if (command === 'run') {
+  } else if (command === 'candidate') {
+    const action = positionals[1];
+    const candidateId = positionals[2]?.trim();
+    if (candidateId === undefined || candidateId.length === 0) {
+      throw new Error('Usage: forge candidate <inspect|accept|discard> <candidate-id> --candidate-parent <path> [--approve]');
+    }
+    const lifecycle = candidateLifecycle();
+    if (action === 'inspect') {
+      printCandidateArtifact(await lifecycle.inspect(candidateId));
+    } else if (action === 'accept') {
+      requireCandidateConsent();
+      const subject = (await lifecycle.inspect(candidateId)).subject;
+      const promotionId = `promotion:cli:${randomUUID()}`;
+      const exact = candidateCall(
+        'workspace.candidate.promote',
+        'promotionId',
+        promotionId,
+        subject,
+      );
+      printCandidateArtifact(await lifecycle.promote({
+        promotionId,
+        subject,
+        call: exact.call,
+        approvalFacts: exact.approvalFacts,
+      }));
+    } else if (action === 'discard') {
+      requireCandidateConsent();
+      const subject = (await lifecycle.inspect(candidateId)).subject;
+      const discardId = `discard:cli:${randomUUID()}`;
+      const exact = candidateCall(
+        'workspace.candidate.discard',
+        'discardId',
+        discardId,
+        subject,
+      );
+      printCandidateArtifact(await lifecycle.discard({
+        discardId,
+        subject,
+        call: exact.call,
+        approvalFacts: exact.approvalFacts,
+      }));
+    } else {
+      throw new Error('Usage: forge candidate <inspect|accept|discard> <candidate-id> --candidate-parent <path> [--approve]');
+    }  } else if (command === 'run') {
     const task = positionals.slice(1).join(' ').trim();
     if (task.length === 0) throw new Error('Usage: forge run <task> [--workspace <path>] [--json]');
     printArtifact(await workspaceService().run(task, integerOption(values['max-files'], 200, '--max-files')));
@@ -122,6 +229,9 @@ try {
       '  forge git-status [--json]',
       '  forge git-diff [--staged] [--json] [--max-bytes <count>]',
       '  forge run <task> [--json]                    # deterministic read-only inventory plan',
+      '  forge candidate inspect <id> --candidate-parent <path> [--json]',
+      '  forge candidate accept <id> --candidate-parent <path> --approve [--json]',
+      '  forge candidate discard <id> --candidate-parent <path> --approve [--json]',
       '  forge mcp [--workspace <path>]               # stdio; invoked by an MCP host',
       '',
       'All workspace commands also accept --workspace <path>.',

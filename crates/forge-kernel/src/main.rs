@@ -1,3 +1,4 @@
+mod candidate_bridge;
 mod protocol;
 mod transaction_bridge;
 
@@ -417,6 +418,21 @@ fn main() {
         return;
     }
 
+    if discriminator.message_type == "candidate.start"
+        && discriminator.protocol_version == protocol::CANDIDATE_PROTOCOL_VERSION
+    {
+        if let Err(failure) = candidate_bridge::execute(&frame, &mut writer) {
+            send_protocol_error(
+                &mut writer,
+                protocol::CANDIDATE_PROTOCOL_VERSION,
+                failure.request_id.as_deref(),
+                failure.code,
+                &failure.message,
+            );
+            std::process::exit(2);
+        }
+        return;
+    }
     send_protocol_error(
         &mut writer,
         RUN_PROTOCOL_VERSION,

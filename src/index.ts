@@ -13,3 +13,4 @@ export * from './v1/git-evidence.js';
 export * from './v1/change-proposal.js';
 export * from './v1/service.js';
 export * from './mcp/server.js';
+export * from './hybrid/rust-candidate-lifecycle-runtime.js';

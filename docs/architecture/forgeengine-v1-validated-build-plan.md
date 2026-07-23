@@ -170,14 +170,18 @@ spikes and adversarial platform gates.
   from a small baseline plus explicit policy values/names; exact implementation
   `1339f53` passed hosted Windows, macOS, and Ubuntu conformance. This is exposure
   reduction, not sandboxing.
-- No host-facing transaction CLI, MCP mutation tool, verified-candidate promotion
-  flow, or public workspace-write capability exists yet. The current CLI and seven
-  MCP tools remain read-only.
-- Slice 2C now persists opaque candidate leases and has a bounded, trusted-only
-  private transaction protocol plus an embedded TypeScript adapter. Exact
-  implementation `fa9898f` passed hosted Windows, macOS, and Ubuntu conformance.
-- A candidate can be retained and discarded by Rust, but it cannot yet be promoted
-  into the active workspace through a fresh policy and digest/revision gate.
+- The seven MCP tools remain read-only. No MCP mutation tool, generic shell/write
+  tool, public workspace-write capability, or public transaction API exists.
+- Slice 2C persists opaque candidate leases and provides the hosted-accepted,
+  trusted-only `forge.kernel.transaction.v1` bridge (`fa9898f`). Slice 2D adds the
+  private `forge.kernel.candidate.v1` inspection/promotion/discard bridge and a thin
+  experimental `forge candidate` CLI; its local gate is accepted and hosted
+  cross-platform acceptance is pending.
+- Promotion is bounded to existing regular files. It uses Git applicability checks,
+  exact-byte atomic replacement, durable recovery backups/journals, fresh approval,
+  and revision/path/digest revalidation. It is process-crash recoverable, not a
+  power-loss filesystem transaction, and external editors do not honor Forge's
+  advisory repository lock.
 
 ### Prototype-first priority policy
 
@@ -224,6 +228,10 @@ would bypass the transaction and policy model.
 6. Re-run the controlled VS Code apprentice scenario using the existing seven
    read-only tools. Add a high-level MCP transaction workflow only if it materially
    improves the one-month demo and the CLI/embedded contract is already stable.
+
+The first five steps now pass the local Slice 2D gate. Cross-platform hosted
+acceptance for the candidate lifecycle remains required before the slice closes;
+the MCP transaction workflow remains deferred.
 
 This sequence permits a useful prototype without waiting for an OS sandbox or
 enterprise handshake. It does not permit Forge to describe trusted execution as

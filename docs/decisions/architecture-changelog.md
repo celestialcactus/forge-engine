@@ -135,3 +135,12 @@ checkpoint records.
   through the real private bridge. Exact implementation `1339f53` passed hosted
   Windows, macOS, and Ubuntu conformance. Candidate promotion remains the next
   Rust-owned gate. See Checkpoint 23.
+- Completed the local Slice 2D candidate-loop gate. Rust now owns fresh-subject
+  inspection, promotion, exact rollback/restart recovery, and fresh-approved
+  discard through `forge.kernel.candidate.v1`; TypeScript is a bounded transport
+  and thin `forge candidate` CLI. Windows line-ending tests rejected direct Git
+  apply as the byte-authority mechanism, so Git now proves applicability while
+  exact verified bytes land through platform atomic replacement with durable
+  recovery backups. Two-file partial failure, tamper/extra/missing path, replay,
+  divergence, CLI-consent, and seven-tool MCP conformance pass the complete local
+  gate. Hosted Windows/macOS/Ubuntu acceptance is pending. See Checkpoint 24.
