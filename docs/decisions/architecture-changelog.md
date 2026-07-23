@@ -117,3 +117,9 @@ checkpoint records.
   hosted run exposed an Ubuntu advisory-lock release defect; explicit RAII unlock
   corrected it. Exact commit `a985119` passed Windows/macOS TypeScript conformance
   and Windows/macOS/Ubuntu hybrid conformance. See Checkpoint 20.
+- Prioritized the honest limitation backlog for the one-month prototype. The
+  private transaction bridge is P0; environment minimization, promotion/discard,
+  and a thin experimental candidate CLI are P1. Authenticated host handshake and
+  high-level MCP mutation are P2; Forge-owned sandboxing, privilege separation,
+  and speculative long-lived-kernel work are P3. Generic shell/write tools remain
+  architectural non-goals. See Checkpoint 21.

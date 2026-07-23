@@ -2,6 +2,7 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
+**Last groomed:** 2026-07-23 for prototype-first limitation priority
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
 
@@ -69,9 +70,22 @@ slice has usable behavior, trace evidence, and a passing fixture.
 | 7. Providers and escalation | A user can select local or cloud execution under an explicit policy. | One local provider adapter, one cloud adapter, streaming/tool-call normalization, provider policy, cost/latency telemetry. | Identical capability scenario passes provider conformance tests; escalation is explainable and opt-in. |
 | 8. Hardening and release | A developer can rely on documented, tested runtime boundaries. | Windows process/filesystem isolation backend, migration/upgrade, packaging, observability, recovery, compatibility matrix. | Threat-model claims are backed by platform tests and release gates; unsupported boundaries are documented as such. |
 
-## The first build target: Slice 0 and the narrow Slice 1 spine
+### Current delivery focus
 
-Begin now, but only with this deliberate first vertical slice:
+Slices 0 and 1 are accepted. Slice 2 has accepted proposal, Rust transaction,
+worktree verification, isolation-profile, and restart-safe candidate-lease
+machinery. The current branch is completing Slice 2C: first the private Rust
+transaction protocol, then the embedded TypeScript adapter. The first increment
+after Slice 2C is the explicit promote-or-discard gate.
+
+The priority is one credible end-to-end developer change loop. Context compiler,
+durable sessions, learned skills, provider routing, authenticated enterprise host
+attestation, and Forge-owned sandbox backends remain sequenced behind that proof.
+
+## Historical first build target: Slice 0 and the narrow Slice 1 spine
+
+This was the deliberate initial vertical slice and is retained to explain the
+accepted sequencing. Slices 0 and 1 are complete; current work is listed above.
 
 ```text
 fixture workspace
@@ -156,28 +170,87 @@ spikes and adversarial platform gates.
 - No host-facing transaction CLI, MCP mutation tool, verified-candidate promotion
   flow, or public workspace-write capability exists yet. The current CLI and seven
   MCP tools remain read-only.
+- Slice 2C now persists opaque candidate leases, but the private transaction
+  protocol and embedded TypeScript transaction adapter are not implemented yet.
+- A candidate can be retained and discarded by Rust, but it cannot yet be promoted
+  into the active workspace through a fresh policy and digest/revision gate.
 
-## Research spikes that are still required
+### Prototype-first priority policy
 
-These are bounded investigations with a decision, not further open-ended feature
-research. They occur immediately before the relevant slice, while Slice 0 proceeds.
+Priority is based on the fastest route to a well-groomed, useful developer proof,
+not on making every eventual security or enterprise feature equally urgent:
 
-| Before slice | Spike | Decision it must answer |
-| --- | --- | --- |
-| 2 | Windows worktree/process boundary | Can Forge use a safe, debuggable worktree/process execution model on the supported Windows versions? |
-| 2 | TypeScript editing and diagnostics | Which LSP/TypeScript integration provides symbols and diagnostics without making the kernel IDE-specific? |
-| 4 | Local durable store | Which SQLite binding/migration approach satisfies Windows packaging, replay, and corruption recovery needs? |
-| 6 | VS Code MCP interoperability | Which MCP cancellation/progress/task features are actually supported in the target VS Code version and transport? |
-| 6 | Existing harness interoperability | Can MCP represent the target central "agents" harness accurately; if not, what minimal optional adapter maps its tool, cancellation, approval-fact, progress, and trace contracts without creating a second run model? |
-| 7 | Provider normalization | Can the selected local and cloud providers satisfy Forge's stream, tool, cancellation, and error contract? |
-| 3/7 | Evaluation harness | What representative fixture set measures accepted outcome, evidence recall, token/cost, latency, and corrective turns? |
+- **P0 — demo blocker:** build next; the prototype cannot demonstrate its core
+  claim without it.
+- **P1 — functional-first-pass blocker:** may follow the first controlled demo,
+  but must exist before Forge is presented as a usable developer change loop.
+- **P2 — pilot blocker:** required before a broader IDE or enterprise apprentice
+  pilot, not before the one-month controlled prototype.
+- **P3 — hardening/release:** important before strong containment or production
+  claims; deliberately deferred while the product loop is still changing.
+
+| Gap | Priority | Prototype decision | Required gate |
+| --- | --- | --- | --- |
+| Private Rust transaction protocol and embedded TypeScript adapter | P0 | Build now. This is the narrow bridge from rapid integration code to Rust-owned policy and transaction machinery. | A disposable repository crosses TypeScript to Rust, verifies a candidate, returns the authoritative artifact/lease ID, and leaves the active workspace unchanged on Windows, macOS, and Linux. |
+| One controlled local invocation surface | P0 | Add only after the private bridge. Start with an embedded/scripted demo surface; do not expose a generic write or shell command. | The demo invokes exactly one policy-bound transaction and can inspect/discard its candidate without internal Rust test helpers. |
+| Child environment minimization | P1 | Keep inherited OS permissions for the prototype, but stop blindly forwarding the entire Forge environment before executing non-fixture verification on real repositories. Preserve only platform-required variables plus policy-allowlisted values. | Cross-platform checks prove required tools still launch and representative secret-like variables are absent unless explicitly allowed. |
+| Explicit verified-candidate promotion | P1 | Implement immediately after the bridge. A retained worktree is enough for a machinery demo, but not a complete developer change loop. Promotion requires new approval and fresh base revision, path, and digest checks. | Accept promotes only the exact verified candidate; stale workspace state fails without partial mutation; discard remains restart-safe. |
+| Experimental transaction CLI | P1 | Add as a thin TypeScript integration over the same private protocol once promotion/discard semantics are stable. This is the fastest sovereign local-developer demo path. | `forge candidate` commands expose inspect, verify/status, accept, and discard without duplicating policy or transaction state in TypeScript. |
+| MCP mutation workflow | P2 | Defer until CLI/embedded behavior is stable. If added, expose one high-level transaction workflow rather than file-write or shell tools. The seven current MCP tools remain read-only until this gate. | Official MCP and controlled VS Code tests prove approvals, cancellation, compact evidence, no retry storm, no hidden promotion, and unchanged tool behavior on failure. |
+| Authenticated host handshake for `host_managed` | P2 | Defer for the controlled local prototype. The future bridge must reject `host_managed` until host identity and inherited controls are authenticated. | Host identity, boundary, controls, freshness, and replay protection are verified; spoofed or stale attestations fail closed. |
+| Public workspace-write capability/API | P2 | Do not publish a generic write API. A future public capability may expose only the accepted transaction contract after promotion policy is stable. | Public schema, size bounds, approval subject, idempotency, recovery, compatibility, and audit/export tests pass. |
+| Forge-enforced OS sandbox / `restricted` backend | P3 | Defer. Trusted mode may drive the prototype with explicit no-containment evidence; `restricted` continues to fail closed. | Separate adversarial Windows, macOS, and Linux process/filesystem/network containment gates support every advertised claim. |
+| Reduced OS privilege/token for the baseline child | P3 | Defer with the sandbox work. Environment minimization is the cheap P1 risk reduction; privilege separation is platform machinery. | Platform tests prove effective identity/permissions and descendant cleanup rather than inferring them from configuration. |
+| Long-lived Rust kernel and transaction scheduling | P3 unless measured latency blocks the demo | Keep one child per transaction while it remains within the latency budget. Do not optimize topology speculatively. | Benchmarks show a material accepted-outcome or p95 latency benefit and preserve cancellation/crash isolation. |
+
+A **generic shell tool, unrestricted file-write tool, or model-authored verification
+command is not a deferred feature**. It remains outside the architecture because it
+would bypass the transaction and policy model.
+
+### Fastest credible prototype sequence
+
+1. Complete `forge.kernel.transaction.v1` with bounded frames, trusted-only policy,
+   in-flight cancellation, and the exact Rust artifact.
+2. Add the embedded TypeScript adapter and one disposable-repository demo driver.
+3. Minimize the verifier environment before running against a real developer
+   repository.
+4. Add explicit candidate promotion with fresh approval/revision/digest checks and
+   preserve restart-safe discard.
+5. Add a thin experimental candidate CLI for the sovereign local workflow.
+6. Re-run the controlled VS Code apprentice scenario using the existing seven
+   read-only tools. Add a high-level MCP transaction workflow only if it materially
+   improves the one-month demo and the CLI/embedded contract is already stable.
+
+This sequence permits a useful prototype without waiting for an OS sandbox or
+enterprise handshake. It does not permit Forge to describe trusted execution as
+contained or host-managed execution as authenticated. See Checkpoint 21 for the
+plain-language decision record.
+
+## Research spike and gate status
+
+These are bounded investigations with a decision, not open-ended feature research.
+A pending spike runs immediately before the increment that needs it. Accepted work
+is not repeated unless new evidence invalidates its checkpoint.
+
+| Gate | Spike | Status | Decision it must answer |
+| --- | --- | --- | --- |
+| Slice 2 | Windows worktree/process boundary | Accepted; Checkpoints 11, 17, and 18 | Can Forge use a safe, debuggable worktree/process execution model across supported Windows, macOS, and Linux environments? |
+| Slice 2 | TypeScript symbols and diagnostics | Accepted for the deterministic read-only path | Which compiler integration supplies symbols and diagnostics without making the kernel IDE-specific? Provider-generated edit fidelity remains behind the transaction proposal contract rather than a new LSP authority. |
+| Slice 4 | Local durable store | Pending | Which SQLite binding/migration approach satisfies Windows packaging, replay, and corruption recovery needs? |
+| Slice 6 | VS Code MCP interoperability | Read-only tether accepted; mutation workflow pending P2 | Which MCP cancellation/progress/task features are supported by the target VS Code version and transport without expanding into generic write tools? |
+| Slice 6 | Existing harness interoperability | Pending P2 | Can MCP represent the target central "agents" harness accurately; if not, what minimal optional adapter maps its tool, cancellation, approval-fact, progress, and trace contracts without creating a second run model? |
+| Slice 7 | Provider normalization | Pending | Can the selected local and cloud providers satisfy Forge's stream, tool, cancellation, and error contract? |
+| Slices 3/7 | Evaluation harness | Pending; do before enabling transforms/providers by default | What representative fixture set measures accepted outcome, evidence recall, token/cost, latency, and corrective turns? |
 
 ## Prototype and open-source delivery gate
 
 The near-term prototype should demonstrate one evidence-backed workflow through
-VS Code/MCP apprentice mode, a corresponding CLI inspection path, deliberate
-local/cloud execution, and complete run provenance. It should not delay working
-utility to port integration-specific tools to Rust.
+VS Code/MCP apprentice mode and one sovereign local change loop through the same
+Rust transaction authority. The minimum credible loop is evidence selection,
+reviewable proposal, isolated apply, bounded verification, inspectable artifact,
+and explicit promote or discard. Local/cloud provider routing remains desirable
+but must not displace completion of that loop. Integration-specific tools remain
+in TypeScript unless measurement proves a machinery reason to move them.
 
 Before public promotion, the repository must contain a complete root license and
 consistent package/Cargo metadata. Apache-2.0 is the current technical candidate
@@ -189,29 +262,35 @@ license rather than being inferred from package metadata.
 
 ## Confidence and decision gates
 
-The scores indicate confidence that the slice can be built without material
-architectural rework—not a prediction of adoption or commercial success.
+The scores are the initial planning confidence that each scope could be built
+without material architectural rework—not a prediction of adoption or commercial
+success. The decision column is updated as gates close; scores are not inflated
+merely because implementation has started.
 
 | Scope | Confidence | Rationale | Decision |
 | --- | ---: | --- | --- |
 | Architectural direction | 84 / 100 | The kernel, evidence, artifact, and host-neutral seams are strongly supported by independent implementations. | Hold as the V1 direction. |
-| Slice 0 protocol and fixture suite | 91 / 100 | Fully under Forge control; no vendor, sandbox, or provider dependency. | Begin now. |
-| Slice 1 deterministic read-only spine | 86 / 100 | Small, testable surface with existing provisional scaffolding to replace or keep only where it meets the contract. | Begin immediately after Slice 0. |
-| Slices 2–5 developer loop, context, durable state, skills | 76 / 100 | Design is clear, but editing fidelity, storage, and evaluation quality need targeted spikes. | Build sequentially behind gates. |
-| Slices 6–7 VS Code/MCP and provider escalation | 68 / 100 | Standards exist, but host/provider support and streaming semantics remain integration risk. | Do not start before protocol conformance fixtures. |
+| Slice 0 protocol and fixture suite | 91 / 100 | Fully under Forge control; no vendor, sandbox, or provider dependency. | Accepted. |
+| Slice 1 deterministic read-only spine | 86 / 100 | Small, testable surface with existing provisional scaffolding to replace or keep only where it meets the contract. | Accepted, including the seven-tool MCP tether. |
+| Slices 2–5 developer loop, context, durable state, skills | 76 / 100 | Design is clear, but editing fidelity, storage, and evaluation quality need targeted spikes. | Continue Slice 2 through the P0/P1 developer-loop gates; keep Slices 3–5 sequential. |
+| Slices 6–7 VS Code/MCP and provider escalation | 68 / 100 | Standards exist, but host/provider support and streaming semantics remain integration risk. | Read-only VS Code/MCP is accepted; defer MCP mutation and provider expansion until the local change loop closes. |
 | Slice 8 hardening/release boundary | 55 / 100 | Windows containment and production packaging deserve a dedicated design/test pass. | Research and prototype before making enforcement claims. |
 | Entire V1 as a single committed scope | 69 / 100 | Strong plan, but enough integration uncertainty remains that a one-shot implementation would be irresponsible. | Stage-gate it; do not build it as one batch. |
 
 ## Go/no-go
 
-**Go for Slice 0 now.** Additional broad research is not the highest-value action:
-we have enough validated direction to make the core falsifiable. The right next
-work is building the protocol, fixture repository, event trace tests, and
-read-only deterministic spine.
+**Go for Slice 2C now.** Candidate transaction and lifecycle machinery are proven
+inside Rust. The highest-value work is the bounded private protocol, embedded
+TypeScript adapter, environment minimization, and explicit promotion/discard loop.
+Those increments directly test whether Forge can become a useful developer runtime
+without weakening the hybrid authority boundary.
 
-**No-go for a full V1 build sprint.** Do not start mutation, compression, storage,
-MCP, provider routing, or sandbox work in parallel. Each should follow only after
-the evidence and conformance gate immediately before it.
+**No-go for parallel sandbox, authenticated host-managed, public MCP mutation,
+context compression, durable-session, skills, and multi-provider programs.** They
+remain important, but starting them before the developer change loop closes would
+slow the prototype and create several partially integrated systems. Pull a P2/P3
+item forward only when a measured demo blocker or new threat invalidates the
+trusted controlled-prototype assumptions.
 
 ## Change-control rule
 
