@@ -1,6 +1,6 @@
 # Slice 2D: credible candidate completion loop
 
-- **Status:** Increment 2D-0 hosted-accepted; 2D-1/2D-2 complete and local gate accepted; hosted matrices pending
+- **Status:** Accepted; exact implementation `8693684` passed local and hosted Windows/macOS/Ubuntu gates
 - **Opened:** 2026-07-23
 - **Branch:** feature/slice-2d-candidate-promotion
 - **Predecessor:** Slice 2C accepted at `fa9898f`; checkpoint consolidation at `e5d4698`

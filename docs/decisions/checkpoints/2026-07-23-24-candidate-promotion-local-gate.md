@@ -1,7 +1,8 @@
 # Checkpoint 24: candidate completion loop local gate
 
 **Date:** 2026-07-23
-**Status:** local gate accepted; hosted matrices pending
+**Status:** Slice 2D accepted
+**Accepted implementation:** `86936846d8c2201289cf609d9d765b0cf425a4fa`
 **Branch:** `feature/slice-2d-candidate-promotion`
 
 ## Decision checkpoint
@@ -97,5 +98,18 @@ The complete local `npm run check:hybrid` gate passes:
 
 ## Hosted gate
 
-Push this exact implementation, then require the existing Windows/macOS TypeScript
-matrix and Windows/macOS/Ubuntu hybrid matrix to pass before Slice 2D is accepted.
+Exact implementation `86936846d8c2201289cf609d9d765b0cf425a4fa` passed:
+
+- [Cross-platform conformance](https://github.com/celestialcactus/forge-engine/actions/runs/30041926440):
+  Windows and macOS typecheck, 37 TypeScript tests, production build, and packaged
+  CLI exercise;
+- [Hybrid kernel conformance](https://github.com/celestialcactus/forge-engine/actions/runs/30041926290):
+  Windows, macOS, and Ubuntu Rust format/lint/tests/build, accepted TypeScript
+  behavior, all 27 hybrid/MCP checks including lifecycle and CLI flows, optimized
+  kernel build, and process-bridge latency ceiling.
+
+The first hosted attempt (`cdf67fd`, run `30041694533`) failed deterministically
+before tests because the final 512 KiB frame-limit tightening referenced the new
+constant without importing it. The one-line import correction was locally
+linted/tested/built and the complete replacement matrices above passed. This was a
+pre-execution compile failure, not an atomic-replacement or platform-behavior defect.

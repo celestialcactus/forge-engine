@@ -175,8 +175,8 @@ spikes and adversarial platform gates.
 - Slice 2C persists opaque candidate leases and provides the hosted-accepted,
   trusted-only `forge.kernel.transaction.v1` bridge (`fa9898f`). Slice 2D adds the
   private `forge.kernel.candidate.v1` inspection/promotion/discard bridge and a thin
-  experimental `forge candidate` CLI; its local gate is accepted and hosted
-  cross-platform acceptance is pending.
+  experimental `forge candidate` CLI. Exact implementation `8693684` passed local
+  and hosted Windows, macOS, and Ubuntu conformance.
 - Promotion is bounded to existing regular files. It uses Git applicability checks,
   exact-byte atomic replacement, durable recovery backups/journals, fresh approval,
   and revision/path/digest revalidation. It is process-crash recoverable, not a
@@ -229,9 +229,8 @@ would bypass the transaction and policy model.
    read-only tools. Add a high-level MCP transaction workflow only if it materially
    improves the one-month demo and the CLI/embedded contract is already stable.
 
-The first five steps now pass the local Slice 2D gate. Cross-platform hosted
-acceptance for the candidate lifecycle remains required before the slice closes;
-the MCP transaction workflow remains deferred.
+The first five steps now pass the accepted local and hosted Slice 2D gates. The MCP
+transaction workflow remains deferred.
 
 This sequence permits a useful prototype without waiting for an OS sandbox or
 enterprise handshake. It does not permit Forge to describe trusted execution as

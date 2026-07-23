@@ -143,4 +143,5 @@ checkpoint records.
   exact verified bytes land through platform atomic replacement with durable
   recovery backups. Two-file partial failure, tamper/extra/missing path, replay,
   divergence, CLI-consent, and seven-tool MCP conformance pass the complete local
-  gate. Hosted Windows/macOS/Ubuntu acceptance is pending. See Checkpoint 24.
+  gate. Exact implementation `8693684` passed hosted Windows/macOS/Ubuntu
+  conformance. See Checkpoint 24.
