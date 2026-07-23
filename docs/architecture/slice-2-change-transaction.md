@@ -64,13 +64,15 @@ issue an opaque candidate ID backed by a minimal atomic lifecycle record outside
 the governed workspace. The record supports restart-safe lookup and discard; it
 does not contain replacement content and is not the general event store. This
 2C-0 lifecycle contract passed hosted Windows, macOS, and Ubuntu conformance at
-`a985119`; the private transaction protocol remains the next gate.
+`a985119`. The private transaction protocol and embedded TypeScript adapter now
+pass the complete local Windows gate; hosted cross-platform conformance is the
+remaining acceptance gate.
 
 This first bridge increment is private and `trusted`-only. `host_managed` fails
 closed until an authenticated handshake exists, and `restricted` fails closed
 until Forge has an OS isolation backend. No CLI transaction command, MCP mutation
 tool, promotion flow, or public write capability is introduced. See the Slice 2C
-task and Checkpoint 19.
+task and Checkpoints 19 and 22.
 
 ## Slice 2A contract
 

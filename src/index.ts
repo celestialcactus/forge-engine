@@ -1,5 +1,6 @@
 export * from './runtime.js';
 export * from './hybrid/rust-kernel-runtime.js';
+export * from './hybrid/rust-candidate-transaction-runtime.js';
 export * from './slice0/contracts.js';
 export * from './slice0/context.js';
 export * as v1Protocol from './slice0/contracts.js';

@@ -1,6 +1,9 @@
+mod protocol;
+mod transaction_bridge;
+
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::io::{self, BufRead, BufReader, BufWriter, Write};
+use std::io::{self, BufReader, BufWriter};
 use std::rc::Rc;
 
 use forge_core::{
@@ -11,7 +14,10 @@ use forge_core::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-const PROTOCOL_VERSION: &str = "forge.kernel.bridge.v2";
+use crate::protocol::{
+    MAX_HOST_FRAME_BYTES, MAX_START_FRAME_BYTES, RUN_PROTOCOL_VERSION, StartDiscriminator,
+    read_bounded_frame, send_json, send_protocol_error,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,26 +79,16 @@ struct BridgeIo {
 
 impl BridgeIo {
     fn send(&mut self, message: &Value) -> Result<(), String> {
-        serde_json::to_writer(&mut self.writer, message).map_err(|error| error.to_string())?;
-        self.writer
-            .write_all(b"\n")
-            .map_err(|error| error.to_string())?;
-        self.writer.flush().map_err(|error| error.to_string())
+        send_json(&mut self.writer, message)
     }
 
     fn receive(&mut self) -> Result<HostMessage, String> {
-        let mut line = String::new();
-        let bytes = self
-            .reader
-            .read_line(&mut line)
-            .map_err(|error| error.to_string())?;
-        if bytes == 0 {
-            return Err(
-                "TypeScript adapter closed before returning a terminal response.".to_owned(),
-            );
-        }
-        let message: HostMessage =
-            serde_json::from_str(&line).map_err(|error| format!("Invalid bridge JSON: {error}"))?;
+        let frame =
+            read_bounded_frame(&mut self.reader, MAX_HOST_FRAME_BYTES)?.ok_or_else(|| {
+                "TypeScript adapter closed before returning a terminal response.".to_owned()
+            })?;
+        let message: HostMessage = serde_json::from_slice(&frame)
+            .map_err(|error| format!("Invalid bridge JSON: {error}"))?;
         let (protocol_version, request_id) = match &message {
             HostMessage::PlannerTurn {
                 protocol_version,
@@ -120,7 +116,7 @@ impl BridgeIo {
                 ..
             } => (protocol_version, request_id),
         };
-        if protocol_version != PROTOCOL_VERSION {
+        if protocol_version != RUN_PROTOCOL_VERSION {
             return Err(format!("Unsupported bridge protocol: {protocol_version}"));
         }
         if request_id != &self.request_id {
@@ -141,7 +137,7 @@ impl TaskPlanner for BridgePlanner {
             let request_id = io.request_id.clone();
             io.send(&json!({
                 "type": "planner.next",
-                "protocolVersion": PROTOCOL_VERSION,
+                "protocolVersion": RUN_PROTOCOL_VERSION,
                 "requestId": request_id,
                 "request": request,
             }))
@@ -182,7 +178,7 @@ impl CapabilityAdapter for BridgeCapabilities {
             let request_id = io.request_id.clone();
             io.send(&json!({
                 "type": "capability.invoke",
-                "protocolVersion": PROTOCOL_VERSION,
+                "protocolVersion": RUN_PROTOCOL_VERSION,
                 "requestId": request_id,
                 "call": call,
                 "snapshot": snapshot,
@@ -223,7 +219,7 @@ impl ApprovalPolicy for BridgePolicy {
             let request_id = io.request_id.clone();
             io.send(&json!({
                 "type": "approval.facts.request",
-                "protocolVersion": PROTOCOL_VERSION,
+                "protocolVersion": RUN_PROTOCOL_VERSION,
                 "requestId": request_id,
                 "call": call,
             }))
@@ -270,7 +266,7 @@ impl forge_core::runtime::EventSink for BridgeEventSink {
         let request_id = io.request_id.clone();
         io.send(&json!({
             "type": "run.event",
-            "protocolVersion": PROTOCOL_VERSION,
+            "protocolVersion": RUN_PROTOCOL_VERSION,
             "requestId": request_id,
             "event": event,
         }))
@@ -278,23 +274,16 @@ impl forge_core::runtime::EventSink for BridgeEventSink {
     }
 }
 
-fn read_start(reader: &mut BufReader<io::Stdin>) -> Result<RunStart, String> {
-    let mut line = String::new();
-    let bytes = reader
-        .read_line(&mut line)
-        .map_err(|error| error.to_string())?;
-    if bytes == 0 {
-        return Err("Expected run.start before end of input.".to_owned());
-    }
-    let start: RunStart =
-        serde_json::from_str(&line).map_err(|error| format!("Invalid run.start JSON: {error}"))?;
+fn parse_run_start(frame: &[u8]) -> Result<RunStart, String> {
+    let start: RunStart = serde_json::from_slice(frame)
+        .map_err(|error| format!("Invalid run.start JSON: {error}"))?;
     if start.message_type != "run.start" {
         return Err(format!(
             "Expected run.start, received {}.",
             start.message_type
         ));
     }
-    if start.protocol_version != PROTOCOL_VERSION {
+    if start.protocol_version != RUN_PROTOCOL_VERSION {
         return Err(format!(
             "Unsupported bridge protocol: {}",
             start.protocol_version
@@ -311,35 +300,17 @@ fn send_terminal(io: &Rc<RefCell<BridgeIo>>, artifact: &RunArtifact) -> Result<(
     let request_id = io.request_id.clone();
     io.send(&json!({
         "type": "run.result",
-        "protocolVersion": PROTOCOL_VERSION,
+        "protocolVersion": RUN_PROTOCOL_VERSION,
         "requestId": request_id,
         "artifact": artifact,
     }))
 }
 
-fn send_protocol_error(writer: &mut BufWriter<io::Stdout>, message: &str) {
-    let payload = json!({
-        "type": "protocol.error",
-        "protocolVersion": PROTOCOL_VERSION,
-        "message": message,
-    });
-    let _ = serde_json::to_writer(&mut *writer, &payload);
-    let _ = writer.write_all(b"\n");
-    let _ = writer.flush();
-}
-
-fn main() {
-    let mut reader = BufReader::new(io::stdin());
-    let writer = BufWriter::new(io::stdout());
-    let start = match read_start(&mut reader) {
-        Ok(start) => start,
-        Err(message) => {
-            let mut writer = writer;
-            send_protocol_error(&mut writer, &message);
-            std::process::exit(2);
-        }
-    };
-
+fn execute_run(
+    start: RunStart,
+    reader: BufReader<io::Stdin>,
+    writer: BufWriter<io::Stdout>,
+) -> Result<(), String> {
     let request = start.request;
     let cancellation = InitialCancellation(start.initial_cancellation_reason);
     let capability_ids = start.capability_ids;
@@ -364,8 +335,94 @@ fn main() {
     }
     .run(request);
 
-    if let Err(message) = send_terminal(&io, &artifact) {
-        eprintln!("forge-kernel failed to return terminal artifact: {message}");
-        std::process::exit(3);
+    send_terminal(&io, &artifact)
+}
+
+fn main() {
+    let mut reader = BufReader::new(io::stdin());
+    let mut writer = BufWriter::new(io::stdout());
+    let frame = match read_bounded_frame(&mut reader, MAX_START_FRAME_BYTES) {
+        Ok(Some(frame)) => frame,
+        Ok(None) => {
+            send_protocol_error(
+                &mut writer,
+                RUN_PROTOCOL_VERSION,
+                None,
+                "missing_start",
+                "Expected a protocol start frame before end of input.",
+            );
+            std::process::exit(2);
+        }
+        Err(message) => {
+            send_protocol_error(
+                &mut writer,
+                RUN_PROTOCOL_VERSION,
+                None,
+                "invalid_start_frame",
+                &message,
+            );
+            std::process::exit(2);
+        }
+    };
+    let discriminator: StartDiscriminator = match serde_json::from_slice(&frame) {
+        Ok(discriminator) => discriminator,
+        Err(_) => {
+            send_protocol_error(
+                &mut writer,
+                RUN_PROTOCOL_VERSION,
+                None,
+                "invalid_start_json",
+                "Invalid protocol start JSON.",
+            );
+            std::process::exit(2);
+        }
+    };
+
+    if discriminator.message_type == "run.start"
+        && discriminator.protocol_version == RUN_PROTOCOL_VERSION
+    {
+        let start = match parse_run_start(&frame) {
+            Ok(start) => start,
+            Err(message) => {
+                send_protocol_error(
+                    &mut writer,
+                    RUN_PROTOCOL_VERSION,
+                    None,
+                    "invalid_run_start",
+                    &message,
+                );
+                std::process::exit(2);
+            }
+        };
+        if let Err(message) = execute_run(start, reader, writer) {
+            eprintln!("forge-kernel failed to return terminal artifact: {message}");
+            std::process::exit(3);
+        }
+        return;
     }
+
+    if discriminator.message_type == "transaction.start"
+        && discriminator.protocol_version == protocol::TRANSACTION_PROTOCOL_VERSION
+    {
+        if let Err(failure) = transaction_bridge::execute(&frame, reader, &mut writer) {
+            send_protocol_error(
+                &mut writer,
+                protocol::TRANSACTION_PROTOCOL_VERSION,
+                failure.request_id.as_deref(),
+                failure.code,
+                &failure.message,
+            );
+            std::process::exit(2);
+        }
+        return;
+    }
+
+    send_protocol_error(
+        &mut writer,
+        RUN_PROTOCOL_VERSION,
+        None,
+        "unsupported_protocol",
+        "Unsupported protocol start type or version.",
+    );
+    std::process::exit(2);
 }

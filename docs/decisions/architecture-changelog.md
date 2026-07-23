@@ -123,3 +123,9 @@ checkpoint records.
   high-level MCP mutation are P2; Forge-owned sandboxing, privilege separation,
   and speculative long-lived-kernel work are P3. Generic shell/write tools remain
   architectural non-goals. See Checkpoint 21.
+- Implemented the bounded, trusted-only `forge.kernel.transaction.v1` protocol
+  and embedded TypeScript transaction adapter without moving policy or terminal
+  status out of Rust. Local Windows fixtures prove verified-candidate retention,
+  original-workspace preservation, authority rejection, redacted malformed input,
+  and in-flight cancellation with recovery. Hosted macOS/Linux acceptance remains
+  pending. See Checkpoint 22.
