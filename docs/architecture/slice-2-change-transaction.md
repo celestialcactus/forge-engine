@@ -51,6 +51,25 @@ The contract and baseline provider passed hosted Windows, macOS, and Linux
 conformance. See ADR-0008 and Checkpoint 18. A real Forge-enforced restricted
 backend remains deferred.
 
+## Slice 2C private host bridge
+
+The next increment connects a trusted embedded TypeScript host to the accepted
+Rust candidate transaction without moving policy or terminal-state authority into
+TypeScript. It uses a separate bounded `forge.kernel.transaction.v1` protocol so
+the accepted run protocol v2 remains stable.
+
+Candidate lifecycle is part of the bridge contract. A per-transaction child cannot
+return a retained worktree and then forget its location at process exit. Rust will
+issue an opaque candidate ID backed by a minimal atomic lifecycle record outside
+the governed workspace. The record supports restart-safe lookup and discard; it
+does not contain replacement content and is not the general event store.
+
+This first bridge increment is private and `trusted`-only. `host_managed` fails
+closed until an authenticated handshake exists, and `restricted` fails closed
+until Forge has an OS isolation backend. No CLI transaction command, MCP mutation
+tool, promotion flow, or public write capability is introduced. See the Slice 2C
+task and Checkpoint 19.
+
 ## Slice 2A contract
 
 A proposal:

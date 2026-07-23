@@ -102,3 +102,12 @@ checkpoint records.
   fixture name collision; a test-only atomic sequence fixed it. The accepted
   commit passed Windows/macOS/Ubuntu hybrid and Windows/macOS TypeScript matrices.
   See Checkpoint 18.
+- Opened draft PR #1 from the direct master-descended Slice 2 branch to replace
+  the archived prototype with the validated reconstruction. Added the exact
+  current sandbox, host-attestation, inherited-environment, and read-only public
+  surface limitations to the build plan.
+- Opened Slice 2C on a separate branch. The private host transaction bridge begins
+  with a Rust-owned opaque candidate lease and restart-safe discard contract,
+  followed by a separate bounded transaction protocol and embedded TypeScript
+  adapter. Trusted mode only; host-managed handshake, restricted isolation,
+  promotion, transaction CLI, and MCP mutation remain deferred. See Checkpoint 19.
