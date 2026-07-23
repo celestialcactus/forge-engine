@@ -3,6 +3,7 @@ use std::{
     env, fs,
     path::{Path, PathBuf},
     process::Command,
+    sync::atomic::{AtomicU64, Ordering},
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -19,6 +20,8 @@ use forge_core::{
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
+static FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
 struct Fixture {
     root: PathBuf,
     repository: PathBuf,
@@ -29,12 +32,13 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
+        let sequence = FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
         let root = env::temp_dir().join(format!(
-            "forge-worktree-adapter-{}-{unique}",
+            "forge-worktree-adapter-{}-{unique}-{sequence}",
             std::process::id()
         ));
         let repository = root.join("repository");
