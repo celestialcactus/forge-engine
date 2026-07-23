@@ -163,6 +163,11 @@ impl ChangeTransactionAdapter for FakeAdapter {
                 controls: Vec::new(),
                 limitations: vec!["Fixture executes without containment.".to_owned()],
             },
+            environment: forge_core::ProcessEnvironmentEvidence {
+                cleared: true,
+                inherited_names: Vec::new(),
+                fixed_names: Vec::new(),
+            },
         })
     }
 

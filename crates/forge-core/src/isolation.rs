@@ -1,5 +1,7 @@
 use std::{
     collections::HashSet,
+    env,
+    ffi::OsString,
     io::Read,
     path::PathBuf,
     process::{Child, Command, ExitStatus, Stdio},
@@ -170,9 +172,18 @@ pub struct IsolatedProcessSpec {
     pub executable: PathBuf,
     pub arguments: Vec<String>,
     pub environment: Vec<(String, String)>,
+    pub inherited_environment: Vec<String>,
     pub working_directory: PathBuf,
     pub timeout: Duration,
     pub max_output_bytes: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProcessEnvironmentEvidence {
+    pub cleared: bool,
+    pub inherited_names: Vec<String>,
+    pub fixed_names: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -189,6 +200,7 @@ pub struct IsolatedProcessOutcome {
     pub stdout: CapturedOutput,
     pub stderr: CapturedOutput,
     pub isolation: IsolationEvidence,
+    pub environment: ProcessEnvironmentEvidence,
 }
 
 pub trait IsolationProvider: Send + Sync {
@@ -215,7 +227,7 @@ impl IsolationProvider for BaselineIsolationProvider {
         validate_isolation_policy(policy)?;
         validate_policy_request(policy, request)?;
         validate_process(process)?;
-        let isolation = match request.profile {
+        let mut isolation = match request.profile {
             IsolationProfile::Trusted => IsolationEvidence {
                 requested_profile: request.profile,
                 effective_profile: IsolationProfile::Trusted,
@@ -257,8 +269,12 @@ impl IsolationProvider for BaselineIsolationProvider {
                 );
             }
         };
+        isolation.limitations.push(
+            "Forge clears the verifier environment and restores only baseline and policy-listed values; this reduces exposure but is not containment."
+                .to_owned(),
+        );
 
-        let execution = run_bounded_process(process, cancellation)?;
+        let (execution, environment) = run_bounded_process(process, cancellation)?;
         Ok(IsolatedProcessOutcome {
             status: execution.status,
             timed_out: execution.timed_out,
@@ -266,6 +282,7 @@ impl IsolationProvider for BaselineIsolationProvider {
             stdout: execution.stdout,
             stderr: execution.stderr,
             isolation,
+            environment,
         })
     }
 }
@@ -409,13 +426,7 @@ fn validate_process(process: &IsolatedProcessSpec) -> Result<(), String> {
     {
         return Err("Isolated process arguments are invalid.".to_owned());
     }
-    if process.environment.len() > MAX_ENVIRONMENT_ENTRIES
-        || process.environment.iter().any(|(name, value)| {
-            name.is_empty() || name.contains('=') || name.contains('\0') || value.contains('\0')
-        })
-    {
-        return Err("Isolated process environment is invalid.".to_owned());
-    }
+    validate_process_environment_policy(&process.environment, &process.inherited_environment)?;
     if process.timeout.is_zero() || process.timeout > MAX_TIMEOUT {
         return Err("Isolated process timeout must be from 1 ms to 600 seconds.".to_owned());
     }
@@ -438,11 +449,14 @@ struct BoundedProcessResult {
 fn run_bounded_process(
     process: &IsolatedProcessSpec,
     cancellation: &dyn Cancellation,
-) -> Result<BoundedProcessResult, String> {
+) -> Result<(BoundedProcessResult, ProcessEnvironmentEvidence), String> {
+    let (inherited_environment, environment_evidence) = minimal_process_environment(process)?;
     let mut command = Command::new(&process.executable);
     command
         .current_dir(&process.working_directory)
         .args(&process.arguments)
+        .env_clear()
+        .envs(inherited_environment)
         .envs(process.environment.iter().cloned())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -502,13 +516,136 @@ fn run_bounded_process(
     let stderr = stderr_capture
         .join()
         .map_err(|_| "Isolated process stderr capture panicked.".to_owned())??;
-    Ok(BoundedProcessResult {
-        status,
-        timed_out,
-        cancelled,
-        stdout,
-        stderr,
-    })
+    Ok((
+        BoundedProcessResult {
+            status,
+            timed_out,
+            cancelled,
+            stdout,
+            stderr,
+        },
+        environment_evidence,
+    ))
+}
+
+pub fn validate_process_environment_policy(
+    fixed: &[(String, String)],
+    inherited: &[String],
+) -> Result<(), String> {
+    if fixed.len() > MAX_ENVIRONMENT_ENTRIES
+        || inherited.len() > MAX_ENVIRONMENT_ENTRIES
+        || fixed.len().saturating_add(inherited.len()) > MAX_ENVIRONMENT_ENTRIES
+        || fixed.iter().any(|(name, value)| {
+            !valid_environment_name(name) || value.contains('\0') || value.len() > 32_768
+        })
+        || inherited.iter().any(|name| !valid_environment_name(name))
+    {
+        return Err("Isolated process environment is invalid.".to_owned());
+    }
+    let fixed_names = fixed
+        .iter()
+        .map(|(name, _)| environment_key(name))
+        .collect::<HashSet<_>>();
+    let inherited_names = inherited
+        .iter()
+        .map(|name| environment_key(name))
+        .collect::<HashSet<_>>();
+    if fixed_names.len() != fixed.len()
+        || inherited_names.len() != inherited.len()
+        || !fixed_names.is_disjoint(&inherited_names)
+    {
+        return Err("Isolated process environment names must be unique.".to_owned());
+    }
+    Ok(())
+}
+fn valid_environment_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 256
+        && !name.contains(['=', '\0'])
+        && !name.chars().any(char::is_control)
+}
+
+fn environment_key(name: &str) -> String {
+    #[cfg(windows)]
+    {
+        name.to_uppercase()
+    }
+    #[cfg(not(windows))]
+    {
+        name.to_owned()
+    }
+}
+
+fn baseline_environment_names() -> &'static [&'static str] {
+    #[cfg(windows)]
+    {
+        &[
+            "PATH",
+            "PATHEXT",
+            "SystemRoot",
+            "WINDIR",
+            "ComSpec",
+            "TEMP",
+            "TMP",
+            "USERPROFILE",
+            "APPDATA",
+            "LOCALAPPDATA",
+        ]
+    }
+    #[cfg(not(windows))]
+    {
+        &["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL"]
+    }
+}
+
+fn minimal_process_environment(
+    process: &IsolatedProcessSpec,
+) -> Result<(Vec<(String, OsString)>, ProcessEnvironmentEvidence), String> {
+    let fixed_names = process
+        .environment
+        .iter()
+        .map(|(name, _)| environment_key(name))
+        .collect::<HashSet<_>>();
+    let mut inherited = Vec::new();
+    let mut inherited_keys = HashSet::new();
+    for name in baseline_environment_names() {
+        let key = environment_key(name);
+        if fixed_names.contains(&key) || !inherited_keys.insert(key) {
+            continue;
+        }
+        if let Some(value) = env::var_os(name) {
+            inherited.push(((*name).to_owned(), value));
+        }
+    }
+    for name in &process.inherited_environment {
+        let key = environment_key(name);
+        if fixed_names.contains(&key) || !inherited_keys.insert(key) {
+            continue;
+        }
+        let value = env::var_os(name).ok_or_else(|| {
+            format!("Policy-allowlisted environment variable {name} is unavailable.")
+        })?;
+        inherited.push((name.clone(), value));
+    }
+    let mut inherited_names = inherited
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect::<Vec<_>>();
+    let mut fixed_names = process
+        .environment
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect::<Vec<_>>();
+    inherited_names.sort();
+    fixed_names.sort();
+    Ok((
+        inherited,
+        ProcessEnvironmentEvidence {
+            cleared: true,
+            inherited_names,
+            fixed_names,
+        },
+    ))
 }
 
 fn capture_stream<R: Read + Send + 'static>(

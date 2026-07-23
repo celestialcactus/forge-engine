@@ -54,6 +54,8 @@ struct TrustedVerificationCheck {
     arguments: Vec<String>,
     #[serde(default)]
     environment: Vec<EnvironmentEntry>,
+    #[serde(default)]
+    inherit_environment: Vec<String>,
     timeout_ms: u64,
     max_output_bytes: usize,
 }
@@ -178,6 +180,7 @@ fn build_adapter(
                 .iter()
                 .map(|entry| (entry.name.clone(), entry.value.clone()))
                 .collect(),
+            inherited_environment: check.inherit_environment.clone(),
             isolation_policy: IsolationPolicy::trusted(),
             timeout: Duration::from_millis(check.timeout_ms),
             max_output_bytes: check.max_output_bytes,

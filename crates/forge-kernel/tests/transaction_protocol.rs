@@ -181,13 +181,17 @@ fn git_output(root: &Path, arguments: &[&str]) -> String {
     String::from_utf8(output.stdout).expect("git stdout")
 }
 
-fn spawn_kernel() -> Child {
-    Command::new(env!("CARGO_BIN_EXE_forge-kernel"))
+fn kernel_command() -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_forge-kernel"));
+    command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("kernel")
+        .stderr(Stdio::piped());
+    command
+}
+
+fn spawn_kernel() -> Child {
+    kernel_command().spawn().expect("kernel")
 }
 
 fn run_frame(frame: &[u8]) -> Output {
@@ -261,6 +265,42 @@ fn non_trusted_isolation_fails_closed_before_candidate_creation() {
 }
 
 #[test]
+fn verifier_environment_is_cleared_and_rebuilt_from_explicit_policy() {
+    let fixture = Fixture::new();
+    let mut start = fixture.start(
+        "verifier_environment_helper",
+        json!([{"name": "FORGE_FIXED_ENV", "value": "fixed-value"}]),
+    );
+    start["configuration"]["verificationChecks"][0]["inheritEnvironment"] =
+        json!(["FORGE_ALLOWED_ENV"]);
+    let mut command = kernel_command();
+    command
+        .env("FORGE_SECRET_SHOULD_NOT_LEAK", "secret-value")
+        .env("FORGE_ALLOWED_ENV", "allowed-value");
+    let mut child = command.spawn().expect("kernel");
+    {
+        let mut stdin = child.stdin.take().expect("stdin");
+        stdin
+            .write_all(&serde_json::to_vec(&start).expect("start"))
+            .expect("start");
+        stdin.write_all(b"\n").expect("newline");
+    }
+    let output = child.wait_with_output().expect("kernel output");
+    assert!(output.status.success());
+    let result = output_json(&output);
+    assert_eq!(result["artifact"]["status"], "verified_candidate");
+    let environment = &result["artifact"]["verification"]["environment"];
+    assert_eq!(environment["cleared"], true);
+    assert!(
+        environment["inheritedNames"]
+            .as_array()
+            .expect("inherited names")
+            .iter()
+            .any(|name| name == "FORGE_ALLOWED_ENV")
+    );
+    assert_eq!(environment["fixedNames"], json!(["FORGE_FIXED_ENV"]));
+}
+#[test]
 fn malformed_start_does_not_echo_replacement_text() {
     let secret = "REPLACEMENT_SECRET_MUST_NOT_BE_ECHOED";
     let frame = format!(
@@ -329,6 +369,17 @@ fn cancellation_during_verification_recovers_the_candidate_boundary() {
     assert_eq!(candidate_entries, 0);
 }
 
+#[test]
+#[ignore]
+fn verifier_environment_helper() {
+    assert!(env::var_os("PATH").is_some());
+    assert_eq!(env::var("FORGE_FIXED_ENV").expect("fixed"), "fixed-value");
+    assert_eq!(
+        env::var("FORGE_ALLOWED_ENV").expect("allowlisted"),
+        "allowed-value"
+    );
+    assert!(env::var_os("FORGE_SECRET_SHOULD_NOT_LEAK").is_none());
+}
 #[test]
 #[ignore]
 fn verifier_pass_helper() {

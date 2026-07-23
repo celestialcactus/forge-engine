@@ -17,6 +17,7 @@ use crate::{
     CandidateLeaseRegistration, CandidateRetentionEvidence, ChangeApplicationManifest,
     ChangeTransactionAdapter, FileCandidateLeaseStore, IsolatedProcessSpec, IsolationPolicy,
     IsolationProvider, VerificationEvidence, VerificationSelection, validate_isolation_policy,
+    validate_process_environment_policy,
 };
 
 const MAX_GIT_OUTPUT: usize = 32 * 1_048_576;
@@ -35,6 +36,7 @@ pub struct VerificationCheck {
     pub executable: PathBuf,
     pub arguments: Vec<String>,
     pub environment: Vec<(String, String)>,
+    pub inherited_environment: Vec<String>,
     pub isolation_policy: IsolationPolicy,
     pub timeout: Duration,
     pub max_output_bytes: usize,
@@ -559,6 +561,7 @@ impl ChangeTransactionAdapter for CleanRevisionWorktreeAdapter {
             executable: check.executable.clone(),
             arguments: check.arguments.clone(),
             environment: check.environment.clone(),
+            inherited_environment: check.inherited_environment.clone(),
             working_directory: prepared.candidate_path.clone(),
             timeout: check.timeout,
             max_output_bytes: check.max_output_bytes,
@@ -599,6 +602,7 @@ impl ChangeTransactionAdapter for CleanRevisionWorktreeAdapter {
             stdout: String::from_utf8_lossy(&result.stdout.bytes).into_owned(),
             stderr: String::from_utf8_lossy(&result.stderr.bytes).into_owned(),
             isolation: result.isolation,
+            environment: result.environment,
         })
     }
 
@@ -694,14 +698,14 @@ fn validate_check(check: &VerificationCheck) -> Result<(), String> {
             check.check_id
         ));
     }
-    if check.environment.iter().any(|(name, value)| {
-        name.is_empty() || name.contains('=') || name.contains('\0') || value.contains('\0')
-    }) {
-        return Err(format!(
-            "Verification check {} has invalid fixed environment.",
-            check.check_id
-        ));
-    }
+    validate_process_environment_policy(&check.environment, &check.inherited_environment).map_err(
+        |error| {
+            format!(
+                "Verification check {} has invalid environment policy: {error}",
+                check.check_id
+            )
+        },
+    )?;
     validate_isolation_policy(&check.isolation_policy).map_err(|error| {
         format!(
             "Verification check {} has invalid isolation policy: {error}",

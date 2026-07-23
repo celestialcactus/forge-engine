@@ -5,7 +5,8 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     ApprovalDecision, ApprovalFacts, ApprovalOutcome, Cancellation, CapabilityCall,
-    IsolationEvidence, IsolationProfile, IsolationRequest, resolve_approval,
+    IsolationEvidence, IsolationProfile, IsolationRequest, ProcessEnvironmentEvidence,
+    resolve_approval,
 };
 
 pub const CHANGE_APPLY_CAPABILITY_ID: &str = "workspace.change.apply";
@@ -107,6 +108,7 @@ pub struct VerificationEvidence {
     pub stdout: String,
     pub stderr: String,
     pub isolation: IsolationEvidence,
+    pub environment: ProcessEnvironmentEvidence,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

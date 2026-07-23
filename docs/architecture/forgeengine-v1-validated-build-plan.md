@@ -165,8 +165,10 @@ spikes and adversarial platform gates.
 - No Forge-enforced operating-system sandbox exists yet.
 - Host-managed isolation evidence is an allowlisted assertion, not independently
   verified containment; the authenticated host handshake is not yet built.
-- The baseline verification child inherits the Forge process environment and
-  operating-system permissions.
+- The Rust kernel still inherits the host environment and operating-system
+  permissions. Slice 2D now clears and reconstructs the verification child
+  environment from a small baseline plus explicit policy values/names; hosted
+  macOS/Linux acceptance is pending. This is exposure reduction, not sandboxing.
 - No host-facing transaction CLI, MCP mutation tool, verified-candidate promotion
   flow, or public workspace-write capability exists yet. The current CLI and seven
   MCP tools remain read-only.

@@ -86,6 +86,7 @@ export interface TrustedVerificationCheckConfiguration {
     readonly name: string;
     readonly value: string;
   }[];
+  readonly inheritEnvironment?: readonly string[];
   readonly timeoutMs: number;
   readonly maxOutputBytes: number;
 }

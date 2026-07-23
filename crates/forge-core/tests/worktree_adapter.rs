@@ -183,6 +183,7 @@ fn check(helper: &str, timeout: Duration) -> VerificationCheck {
             "--nocapture".to_owned(),
         ],
         environment: Vec::new(),
+        inherited_environment: Vec::new(),
         isolation_policy: IsolationPolicy::trusted(),
         timeout,
         max_output_bytes: 1_024,

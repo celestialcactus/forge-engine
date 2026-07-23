@@ -121,15 +121,19 @@ const runtimeOptions = (
   value: Fixture,
   script: string,
   environment: RustCandidateTransactionRuntimeOptions['verificationChecks'][number]['environment'] = [],
+  inheritEnvironment: readonly string[] = [],
+  kernelEnvironment?: Readonly<NodeJS.ProcessEnv>,
 ): RustCandidateTransactionRuntimeOptions => ({
   kernelPath: kernelBinary,
   repositoryRoot: value.repository,
   candidateParent: value.candidates,
+  ...(kernelEnvironment === undefined ? {} : { kernelEnvironment }),
   verificationChecks: [{
     checkId: 'fixture.check',
     executable: process.execPath,
     arguments: ['-e', script],
     environment,
+    inheritEnvironment,
     timeoutMs: 10_000,
     maxOutputBytes: 4_096,
   }],
@@ -156,6 +160,36 @@ test('TypeScript host invokes a verified Rust-owned candidate transaction end to
   }
 });
 
+test('verifier environment excludes inherited secrets unless policy explicitly allows them', async () => {
+  assert.equal(existsSync(kernelBinary), true, 'Build forge-kernel or set FORGE_KERNEL_BINARY.');
+  const value = await fixture();
+  try {
+    const runtime = new RustCandidateTransactionRuntime(runtimeOptions(
+      value,
+      "const e=process.env;process.exit(e.PATH&&e.FORGE_FIXED_ENV==='fixed-value'&&e.FORGE_ALLOWED_ENV==='allowed-value'&&e.FORGE_SECRET_SHOULD_NOT_LEAK===undefined?0:1)",
+      [{ name: 'FORGE_FIXED_ENV', value: 'fixed-value' }],
+      ['FORGE_ALLOWED_ENV'],
+      {
+        FORGE_ALLOWED_ENV: 'allowed-value',
+        FORGE_SECRET_SHOULD_NOT_LEAK: 'secret-value',
+      },
+    ));
+    const artifact = await runtime.execute(value.request);
+    assert.equal(artifact.status, 'verified_candidate');
+    const verification = artifact.verification as {
+      readonly environment?: {
+        readonly cleared?: boolean;
+        readonly inheritedNames?: readonly string[];
+        readonly fixedNames?: readonly string[];
+      };
+    } | undefined;
+    assert.equal(verification?.environment?.cleared, true);
+    assert.equal(verification?.environment?.inheritedNames?.includes('FORGE_ALLOWED_ENV'), true);
+    assert.deepEqual(verification?.environment?.fixedNames, ['FORGE_FIXED_ENV']);
+  } finally {
+    await rm(value.root, { recursive: true, force: true });
+  }
+});
 test('TypeScript abort is carried into Rust verification and recovers the candidate', async () => {
   assert.equal(existsSync(kernelBinary), true, 'Build forge-kernel or set FORGE_KERNEL_BINARY.');
   const value = await fixture();
