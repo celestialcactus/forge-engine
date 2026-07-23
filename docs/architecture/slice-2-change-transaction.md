@@ -47,8 +47,9 @@ call binds that selection, and verification evidence records who enforced what.
 The baseline provider supports honest developer-permission execution and
 allowlisted host-attested boundaries. It rejects `restricted` rather than silently
 falling back. A real Forge-enforced backend remains a separate platform milestone.
-This contract is at the local gate and requires hosted Windows, macOS, and Linux
-conformance before acceptance. See ADR-0008 and Checkpoint 18.
+The contract and baseline provider passed hosted Windows, macOS, and Linux
+conformance. See ADR-0008 and Checkpoint 18. A real Forge-enforced restricted
+backend remains deferred.
 
 ## Slice 2A contract
 

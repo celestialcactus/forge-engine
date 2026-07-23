@@ -1,6 +1,6 @@
 # ADR-0008: Rust-owned execution isolation profiles
 
-- **Status:** accepted design; baseline implementation at local gate
+- **Status:** accepted for the baseline provider contract; restricted backend deferred
 - **Date:** 2026-07-23
 - **Owners:** ForgeEngine project
 - **Checkpoint:** 2026-07-23-18

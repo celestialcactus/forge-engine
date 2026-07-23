@@ -1,6 +1,6 @@
 # SGU-005: Execution isolation contract
 
-- **Status:** implemented locally; hosted cross-platform gate pending
+- **Status:** accepted; Forge-enforced restricted backend deferred
 - **Opened:** 2026-07-23
 - **Branch:** feature/slice-2b-change-transaction
 - **Decision:** ADR-0008

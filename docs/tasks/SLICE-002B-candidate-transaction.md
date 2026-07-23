@@ -1,6 +1,6 @@
 # Slice 2B: Rust-authoritative candidate transaction
 
-- **Status:** Increment 2B-1 and Increment 2B-2 accepted; SGU-005 isolation contract at local gate; promotion deferred
+- **Status:** Increment 2B-1, Increment 2B-2, and SGU-005 baseline isolation contract accepted; promotion and restricted backend deferred
 - **Opened:** 2026-07-22
 - **Branch:** feature/slice-2b-change-transaction
 - **Predecessor:** SGU-004 accepted at 69d2b743fc472ff00658c108f74450286f9044f8
