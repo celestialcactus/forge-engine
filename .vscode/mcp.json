@@ -1,13 +1,15 @@
 {
   "servers": {
-    "agent-engine": {
-      "command": "C:\\Program Files\\nodejs\\node.exe",
+    "forge-engine": {
+      "type": "stdio",
+      "command": "node",
       "args": [
-        "c:/Users/gabri/.vscode/Projects/CodeTraining/Drop-in-Code-Assistant/dist/cli/app.js",
-        "serve",
-        "--mcp"
+        "${workspaceFolder}/dist/src/cli.js",
+        "mcp",
+        "--workspace",
+        "${workspaceFolder}"
       ],
-      "cwd": "c:/Users/gabri/.vscode/Projects/CodeTraining/Drop-in-Code-Assistant"
+      "cwd": "${workspaceFolder}"
     }
   }
 }

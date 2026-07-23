@@ -1,0 +1,2 @@
+# Forge evidence digests must be identical across Windows, macOS, and Linux.
+* text=auto eol=lf
