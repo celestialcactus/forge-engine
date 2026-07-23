@@ -290,10 +290,15 @@ test('Rust resolves host and user facts and fails closed at the bridge boundary'
 
 test('Rust bridge cancellation interrupts approval-facts collection without hanging', async () => {
   const controller = new AbortController();
+  let markCollectorStarted = (): void => {};
+  const collectorStarted = new Promise<void>((resolveStarted) => {
+    markCollectorStarted = resolveStarted;
+  });
   const run = new RustKernelRuntime({
     ...toRustOptions(successfulOptions()),
     approvalFacts: {
       collect() {
+        markCollectorStarted();
         return new Promise<never>(() => {
           // Deliberately non-cooperative: the bridge cancellation race must still terminate the run.
         });
@@ -302,7 +307,8 @@ test('Rust bridge cancellation interrupts approval-facts collection without hang
     kernelPath: kernelBinary,
   }).run({ ...baseRequest('hybrid-facts-cancelled'), signal: controller.signal });
 
-  setTimeout(() => controller.abort(new Error('Approval facts collection cancelled.')), 25);
+  await withTimeout(collectorStarted);
+  controller.abort(new Error('Approval facts collection cancelled.'));
   const artifact = await withTimeout(run);
   assert.equal(artifact.status, 'cancelled');
   const finalEvent = artifact.events.at(-1);

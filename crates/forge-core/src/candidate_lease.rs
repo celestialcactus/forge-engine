@@ -63,6 +63,14 @@ pub struct CandidateLeaseRecord {
     pub cleanup_failure: Option<String>,
 }
 
+struct CandidateLeaseLock(File);
+
+impl Drop for CandidateLeaseLock {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct FileCandidateLeaseStore {
     repository_root: PathBuf,
@@ -317,7 +325,7 @@ impl FileCandidateLeaseStore {
         Ok(self.state_root.join(format!("{digest}.{suffix}.json")))
     }
 
-    fn lock(&self, candidate_id: &str) -> Result<File, String> {
+    fn lock(&self, candidate_id: &str) -> Result<CandidateLeaseLock, String> {
         let digest = validate_candidate_id(candidate_id)?;
         let file = OpenOptions::new()
             .create(true)
@@ -328,7 +336,7 @@ impl FileCandidateLeaseStore {
             .map_err(|error| format!("Cannot open candidate lease lock: {error}"))?;
         file.try_lock()
             .map_err(|error| format!("Candidate lease is already being modified: {error}"))?;
-        Ok(file)
+        Ok(CandidateLeaseLock(file))
     }
 
     fn write_transition(&self, record: &CandidateLeaseRecord, suffix: &str) -> Result<(), String> {
