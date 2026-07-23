@@ -125,7 +125,7 @@ checkpoint records.
   architectural non-goals. See Checkpoint 21.
 - Implemented the bounded, trusted-only `forge.kernel.transaction.v1` protocol
   and embedded TypeScript transaction adapter without moving policy or terminal
-  status out of Rust. Local Windows fixtures prove verified-candidate retention,
-  original-workspace preservation, authority rejection, redacted malformed input,
-  and in-flight cancellation with recovery. Hosted macOS/Linux acceptance remains
-  pending. See Checkpoint 22.
+  status out of Rust. Exact implementation `fa9898f` proves verified-candidate
+  retention, original-workspace preservation, authority rejection, redacted
+  malformed input, and in-flight cancellation with recovery across hosted
+  Windows, macOS, and Ubuntu gates. See Checkpoint 22.

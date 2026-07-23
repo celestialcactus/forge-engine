@@ -171,8 +171,8 @@ spikes and adversarial platform gates.
   flow, or public workspace-write capability exists yet. The current CLI and seven
   MCP tools remain read-only.
 - Slice 2C now persists opaque candidate leases and has a bounded, trusted-only
-  private transaction protocol plus an embedded TypeScript adapter. The local
-  Windows gate passes; hosted macOS/Linux conformance is still pending.
+  private transaction protocol plus an embedded TypeScript adapter. Exact
+  implementation `fa9898f` passed hosted Windows, macOS, and Ubuntu conformance.
 - A candidate can be retained and discarded by Rust, but it cannot yet be promoted
   into the active workspace through a fresh policy and digest/revision gate.
 
@@ -280,13 +280,13 @@ merely because implementation has started.
 
 ## Go/no-go
 
-**Finish the Slice 2C hosted gate, then close the prototype change loop.**
-Candidate transaction and lifecycle machinery now crosses the private
-TypeScript-to-Rust boundary locally without moving authority into TypeScript. The
-highest-value remaining work is cross-platform acceptance, environment
-minimization, and explicit promotion/discard with a thin controlled local
-invocation surface. Those increments directly test whether Forge can become a
-useful developer runtime without weakening the hybrid authority boundary.
+**Close the prototype change loop.** Candidate transaction and lifecycle
+machinery now crosses the private TypeScript-to-Rust boundary on Windows, macOS,
+and Linux without moving authority into TypeScript. The highest-value remaining
+work is environment minimization and explicit promotion/discard with a thin
+controlled local invocation surface. Those increments directly test whether
+Forge can become a useful developer runtime without weakening the hybrid
+authority boundary.
 
 **No-go for parallel sandbox, authenticated host-managed, public MCP mutation,
 context compression, durable-session, skills, and multi-provider programs.** They

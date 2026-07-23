@@ -1,6 +1,6 @@
 # Slice 2C: private host transaction bridge
 
-- **Status:** Increment 2C-0 accepted at `a985119`; 2C-1/2C-2 pass the local Windows gate; hosted cross-platform gate pending
+- **Status:** Accepted at `fa9898f` after hosted Windows/macOS/Ubuntu conformance
 - **Opened:** 2026-07-23
 - **Branch:** feature/slice-2c-host-transaction-bridge
 - **Predecessor:** Slice 2 draft PR #1 at `bfb670a`

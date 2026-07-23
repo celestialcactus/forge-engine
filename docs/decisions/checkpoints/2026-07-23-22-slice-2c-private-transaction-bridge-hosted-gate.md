@@ -1,8 +1,9 @@
-# Checkpoint 22: Slice 2C private transaction bridge local gate
+# Checkpoint 22: Slice 2C private transaction bridge hosted gate
 
 **Date:** 2026-07-23
-**Status:** 2C-1 and 2C-2 pass the local Windows gate; hosted Windows/macOS/Linux gate pending
+**Status:** Slice 2C accepted
 **Branch:** `feature/slice-2c-host-transaction-bridge`
+**Accepted implementation:** `fa9898fcab1da5be87a1e2aceedfa9ef49606df6`
 
 ## Decision checkpoint
 
@@ -60,9 +61,16 @@ and verifies the change in a Rust-created clean Git worktree. A second fixture
 waits until verification is active, aborts from TypeScript, and proves recovery
 and original-workspace preservation.
 
+Hosted gates for the exact accepted implementation passed:
+
+- [Cross-platform conformance](https://github.com/celestialcactus/forge-engine/actions/runs/30037225275):
+  Windows and macOS TypeScript, build, and packaged read-only CLI;
+- [Hybrid kernel conformance](https://github.com/celestialcactus/forge-engine/actions/runs/30037225179):
+  Windows, macOS, and Ubuntu Rust, TypeScript, hybrid, MCP, and release-kernel
+  latency gates.
+
 ## Honest boundary
 
-- Hosted macOS and Linux conformance is still pending at this checkpoint.
 - The private process channel authenticates neither a host nor its claimed
   containment. The adapter deliberately refuses `host_managed`.
 - The verification child still inherits Forge's process environment and operating-
@@ -75,8 +83,7 @@ and original-workspace preservation.
 
 ## Next gate
 
-Push this exact local-gate implementation through the hosted Windows, macOS, and
-Ubuntu hybrid matrix. If it passes, accept Slice 2C and proceed to the remaining
-prototype core loop: environment minimization followed by explicit candidate
-promotion/discard and a thin controlled local invocation surface. Do not start
-memory, compression, skills, or public mutation work before those mechanics close.
+Proceed to the remaining prototype core loop: environment minimization followed
+by explicit candidate promotion/discard and a thin controlled local invocation
+surface. Do not start memory, compression, skills, or public mutation work before
+those mechanics close.
