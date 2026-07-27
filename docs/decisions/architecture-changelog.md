@@ -145,3 +145,19 @@ checkpoint records.
   divergence, CLI-consent, and seven-tool MCP conformance pass the complete local
   gate. Exact implementation `8693684` passed hosted Windows/macOS/Ubuntu
   conformance. See Checkpoint 24.
+## 2026-07-27
+
+- Re-groomed the post-Slice 2D build path around core-runtime reliability. Windows
+  and macOS are Tier-1 product/acceptance platforms; Ubuntu remains a compatibility
+  gate. Opened Slice 2E for ChangeSet v2, content-addressed staging, transaction
+  coordination/recovery, concurrency checks, cancellation, and a complete local
+  workflow. See ADR-0009 and Checkpoint 25.
+- Assigned previously vague security/integration limits to Slice 2F: authenticated
+  host-managed negotiation, policy/audit exchange, a minimum real restricted
+  execution backend on Tier-1 platforms, and high-level MCP/VS Code mutation.
+  Generic shell and unrestricted write tools remain non-goals.
+- Passed the local Slice 2E-0 gate for the Rust-owned ChangeSet v2 and bounded
+  content-addressed store. Five tagged operation variants cover create, replace,
+  delete, move/rename, mode intent, and binary/text content; adversarial fixtures
+  cover path semantics, identity, bounds, corruption, and concurrent no-overwrite
+  staging. Hosted Windows/macOS acceptance remains pending. See Checkpoint 26.

@@ -1,6 +1,6 @@
 # Slice 2: developer change transaction
 
-**Status:** Slice 2A proposal and cross-platform candidate accepted; complete Slice 2 in progress
+**Status:** Slice 2A–2D accepted; Slice 2E change fidelity and coordination in progress
 **Date:** 2026-07-22
 
 ## User-visible outcome
@@ -18,11 +18,11 @@ either accept or recover a small change with every phase represented as evidence
 | --- | --- | --- |
 | Read base | implemented | canonical path, bounded content, SHA-256 digest, snapshot ID |
 | Propose | implemented | deterministic proposal ID, before/after digests, bounded unified diff |
-| Approve | Rust contract implemented; host flow pending | explicit decision tied to transaction, proposal, snapshot, verification, and exact capability call |
+| Approve | implemented in Rust for the private transaction and candidate lifecycle | explicit decision tied to transaction, proposal, snapshot, verification, and exact capability call |
 | Isolate | private Rust clean-revision worktree adapter accepted | clean HEAD, matching snapshot/digests, tracked-file reproducibility, detached boundary |
-| Apply | private Rust candidate-only replacement adapter implemented | exact manifest, applied digests, bounded application diff |
-| Verify | private process adapter accepted; isolation-provider contract at local gate | fixed executable/arguments, bounded output, timeout/cancellation, process-tree termination, requested/effective isolation provenance |
-| Accept or recover | private retain/recover path implemented; promotion deferred | post-verification digests/path set, final diff, explicit retention or cleanup |
+| Apply | existing-file text replacement accepted; ChangeSet v2 operation coverage in progress | exact manifest/blob identity, before/after digests, operation inventory, bounded application diff |
+| Verify | private process adapter and isolation-provider contract accepted; graceful terminal cancellation pending | fixed executable/arguments, bounded output, timeout/cancellation, process-tree termination, requested/effective isolation provenance |
+| Accept or recover | exact-byte text promotion/discard and process-crash reconciliation accepted; full-operation WAL coordination pending | post-verification digests/path set, final diff, journal state, explicit promotion/discard/recovery outcome |
 
 ## Slice 2B transaction authority
 
@@ -73,6 +73,42 @@ until Forge has an OS isolation backend. No CLI transaction command, MCP mutatio
 tool, promotion flow, or public write capability is introduced. See the Slice 2C
 task and Checkpoints 19 and 22.
 
+## Slice 2D accepted candidate completion loop
+
+Rust owns restart-safe candidate inspection, fresh approval, exact-byte promotion,
+rollback/reconciliation, and discard. The thin TypeScript CLI transports facts and
+renders the Rust artifact. The accepted bounded set is existing regular UTF-8 text
+files. It is process-crash recoverable, not a power-loss transaction. See
+Checkpoint 24.
+
+## Slice 2E change fidelity and coordination
+
+Slice 2E closes the functional gaps before higher-level intelligence work resumes:
+
+1. **ChangeSet v2 and CAS staging.** A Rust-owned, deterministic operation algebra
+   represents create, replace, delete, move/rename, executable-mode intent, and
+   bounded binary content. Manifests reference SHA-256 blobs stored outside the
+   governed workspace. Symlinks fail closed until an explicit policy exists.
+2. **Platform semantics.** Windows and macOS are Tier 1. Canonicalization and
+   collision checks must reflect the actual workspace filesystem, not a global
+   lowercase shortcut. Windows-specific gates include locks, long paths, atomic
+   replacement, and descendant cleanup. macOS gates include case-sensitive and
+   case-insensitive behavior where available, atomic rename/durability, process
+   groups, and executable bits. Ubuntu remains a compatibility gate.
+3. **Transaction coordinator.** A minimal write-ahead state machine records intent,
+   staged content, application progress, verification, and terminal disposition.
+   Startup reconciliation, workspace-generation/per-path checks, and idempotency
+   prevent a stale or concurrent edit from being silently overwritten.
+4. **Cancellation.** A cancelled TypeScript caller requests termination over the
+   private protocol. Rust emits a terminal artifact when it can; after abrupt host
+   death, the next startup reconstructs that outcome from durable state.
+5. **Complete local workflow.** The sovereign CLI gains one high-level proposal and
+   transaction flow over the same Rust authority. It does not gain raw shell or
+   arbitrary direct-write powers.
+
+Slice 2F, not an unspecified future rewrite, owns authenticated `host_managed`
+negotiation, enterprise policy/audit exchange, a minimum real `restricted` backend,
+and high-level MCP/VS Code mutation.
 ## Slice 2A contract
 
 A proposal:
@@ -120,9 +156,11 @@ evidence digests do not vary with the checkout platform.
 
 ## Current safety boundary
 
-No public source-write, generic shell, package-installation, promotion, CLI, or MCP
-mutation API exists in this slice. The private Rust adapter can create and mutate a
-detached candidate only after exact policy and clean-revision checks.
+No generic shell, package-installation, arbitrary direct-write, public write, or MCP
+mutation API exists. Slice 2D provides only high-level candidate inspect, accept,
+and discard CLI commands over private Rust authority. Slice 2E may expand the
+high-level transaction CLI; the seven MCP evidence tools remain read-only until the
+separate Slice 2F pilot gate.
 
 A Git worktree is a recoverability boundary, not a security sandbox. Verification
 now routes through one Rust isolation-provider contract. The baseline `trusted`
