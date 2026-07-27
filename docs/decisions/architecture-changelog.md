@@ -166,4 +166,6 @@ checkpoint records.
   `rebuild/develop` as its integration line, both at accepted Slice 2D commit
   `3b2b62f`. Accepted feature checkpoints flow into develop; named stable milestones
   promote develop through a separate PR. The historical default `master` remains
-  unchanged. See Checkpoint 27 and the rebuild branch strategy.
+  unchanged. The hybrid workflow now covers feature, fix, and rebuild pushes so
+  post-merge integration heads retain the Rust/kernel gate. See Checkpoint 27 and
+  the rebuild branch strategy.
