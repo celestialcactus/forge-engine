@@ -1,0 +1,33 @@
+# Checkpoint 27: rebuild branch model
+
+**Date:** 2026-07-27
+**Status:** Adopted
+**Stable branch:** `rebuild/master`
+**Integration branch:** `rebuild/develop`
+**Common base:** accepted Slice 2D checkpoint `3b2b62f`
+
+## Decision checkpoint
+
+ForgeEngine reconstruction now has a stable line and an integration line separate
+from the historical default `master`. Accepted bounded feature increments merge
+into `rebuild/develop`. Named stable milestones promote develop into
+`rebuild/master` through a separate validation PR.
+
+Both branches were created from the same accepted Slice 2D commit. Slice 2E was not
+preloaded into develop: its accepted 2E-0 increment remains a reviewable first PR.
+This avoids treating branch creation as approval and keeps the reconstruction
+history auditable.
+
+The old `master` remains unchanged. Replacing the repository default branch,
+closing the superseded draft PR, or promoting the rebuild into the historical line
+requires a separate explicit decision.
+
+## Merge policy
+
+Feature work normally branches from the latest `rebuild/develop`. Accepted commit
+IDs referenced by checkpoints remain reachable, so integration prefers merge
+commits over squash. Direct feature pushes and force-pushes to either rebuild branch
+are prohibited by process; GitHub rulesets are a follow-up repository-administration
+step rather than an unverified claim in this checkpoint.
+
+See `docs/development/rebuild-branch-strategy.md` for the complete flow.

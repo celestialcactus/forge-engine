@@ -162,3 +162,8 @@ checkpoint records.
   Adversarial path, identity, bounds, corruption, and concurrent no-overwrite tests
   passed hosted Windows/macOS Tier-1 and Ubuntu compatibility gates. See ADR-0009
   and Checkpoint 26.
+- Established `rebuild/master` as the stable reconstruction line and
+  `rebuild/develop` as its integration line, both at accepted Slice 2D commit
+  `3b2b62f`. Accepted feature checkpoints flow into develop; named stable milestones
+  promote develop through a separate PR. The historical default `master` remains
+  unchanged. See Checkpoint 27 and the rebuild branch strategy.
