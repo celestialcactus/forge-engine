@@ -1,40 +1,55 @@
 # Rebuild branch and promotion strategy
 
 **Adopted:** 2026-07-27
+**Canonical integration branch:** `develop`
+**Stable rebuild branch:** `rebuild/master`
 **Repository default branch:** `master` (unchanged during reconstruction)
 
 ## Branch roles
 
-| Branch | Role | Starting point | Allowed changes |
-| --- | --- | --- | --- |
-| `rebuild/master` | Stable rebuild/release line | Accepted Slice 2D checkpoint `3b2b62f` | Promotion PRs from `rebuild/develop`; emergency fixes branch from this line and must be merged back into develop. |
-| `rebuild/develop` | Rebuild integration line | Accepted Slice 2D checkpoint `3b2b62f` | Accepted feature/checkpoint PRs after their required local and hosted gates pass. |
-| `feature/*`, `fix/*`, `spike/*` | Bounded work | Normally the current `rebuild/develop` head | One reviewable increment with its task, ADR/checkpoint where required, implementation, and validation evidence. |
-| `master` | Historical/default line during reconstruction | Existing repository history | No reconstruction work is merged here until the owner explicitly chooses the final cutover. |
+| Branch | Role | Current policy |
+| --- | --- | --- |
+| `develop` | Canonical rebuild integration line | The readily pullable, consolidated state. Accepted feature/checkpoint PRs target this branch after their required local and hosted gates pass. |
+| `rebuild/master` | Stable rebuild/release line | Promotion PRs come from `develop`. Emergency fixes branch from this line and must be merged back into `develop`. |
+| `feature/*`, `fix/*`, `spike/*` | Bounded work | Branch from the current `develop` head and return through a reviewable PR. |
+| `rebuild/develop` | Frozen transition pointer | Retained at `8d295b1` so earlier PR/checkpoint links remain resolvable. It is not an active integration target. |
+| `master` | Historical/default line during reconstruction | No reconstruction work is merged here until the owner explicitly chooses the final cutover. |
 
 ## Normal flow
 
-1. Create a bounded feature branch from `rebuild/develop`.
-2. Open a draft PR into `rebuild/develop` early when collaboration or hosted gates
-   need the remote branch.
+1. Fetch `origin/develop` and create a bounded feature branch from that exact head.
+2. Open a draft PR into `develop` early when collaboration or hosted gates need the
+   remote branch.
 3. Keep the PR draft while the increment is incomplete or an acceptance gate is
    pending.
 4. Mark it ready only when the exact implementation commit has passed its required
-   local and hosted gates and the checkpoint states its honest remaining limits.
-5. Merge the accepted increment into `rebuild/develop`. Prefer a merge commit so the
+   local and hosted gates and its checkpoint states the honest remaining limits.
+5. Merge the accepted increment into `develop`. Prefer a merge commit so the
    feature/checkpoint boundary remains visible; do not squash away accepted commit
    IDs referenced by ADRs and validation records.
-6. Start the next increment from the updated `rebuild/develop`, not from a stale
-   feature branch.
-7. Promote `rebuild/develop` to `rebuild/master` through a separate PR only at a
-   named stable milestone. That PR reruns the complete release-facing matrix and
-   contains no new implementation work.
+6. Start the next increment from the updated `develop`, not from a stale feature or
+   the frozen `rebuild/develop` pointer.
+7. Promote `develop` to `rebuild/master` through a separate PR only at a named stable
+   milestone. That PR reruns the complete release-facing matrix and contains no new
+   implementation work.
+
+## Pulling the consolidated rebuild
+
+```bash
+git fetch origin
+git switch develop
+git pull --ff-only origin develop
+```
+
+A new checkout can use `git switch --track origin/develop`. Local worktrees should
+compare `git rev-parse HEAD` with `git rev-parse origin/develop` before claiming they
+contain the consolidated version.
 
 ## Hotfix flow
 
 A stable-line fix branches from `rebuild/master`, is validated and merged into
 `rebuild/master`, then is immediately merged or cherry-picked through a PR into
-`rebuild/develop`. Divergent fixes on the two long-lived branches are not allowed.
+`develop`. Divergent fixes on the two active long-lived branches are not allowed.
 
 ## Required checks
 
@@ -49,19 +64,22 @@ recorded in the PR/checkpoint:
 - A live VS Code test is required when MCP descriptions, tool contracts, host result
   shaping, cancellation, or the public IDE workflow changes; it is not repeated for
   a Rust-internal contract with an unchanged seven-tool surface.
+- Both hosted workflows run on `develop` pushes. Hybrid conformance also watches
+  feature, fix, spike, and rebuild branch pushes plus every pull request.
 
 ## Merge and history policy
 
-- No direct feature commits to either long-lived rebuild branch.
-- No force-pushes to `rebuild/master` or `rebuild/develop`.
+- No direct feature commits to `develop` or `rebuild/master`.
+- No force-pushes to either active long-lived branch.
 - No automatic promotion from develop to stable.
 - Accepted checkpoint commit IDs remain reachable.
-- The old default `master` and draft reconstruction PR are not silently rewritten;
-  final cutover or archival is a separate owner decision.
+- The frozen `rebuild/develop`, historical default `master`, and old draft
+  reconstruction PR are not silently rewritten; cleanup/cutover is a separate owner
+  decision.
 
 ## Current transition
 
-`rebuild/master` and `rebuild/develop` were both created from `3b2b62f`, the
-accepted Slice 2D documentation checkpoint. The accepted Slice 2E-0 ChangeSet/CAS
-increment is proposed to `rebuild/develop` as the first integration PR. Later Slice
-2E increments should use fresh bounded branches from the updated integration head.
+The complete accepted rebuild through Slice 2E-0 and the rebuild-branch CI fix were
+validated locally and hosted at `8d295b1`, then published as the initial `develop`
+head. `rebuild/develop` remains frozen at that same commit. New work begins from
+`develop`; only stable milestones flow into `rebuild/master`.

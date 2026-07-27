@@ -1,10 +1,13 @@
 # Checkpoint 27: rebuild branch model
 
 **Date:** 2026-07-27
-**Status:** Adopted
+**Status:** Adopted for initial transition; canonical integration name superseded by Checkpoint 28
 **Stable branch:** `rebuild/master`
 **Integration branch:** `rebuild/develop`
 **Common base:** accepted Slice 2D checkpoint `3b2b62f`
+
+> Historical note: this checkpoint records the initial `rebuild/develop` bootstrap.
+> Checkpoint 28 makes literal `develop` canonical and freezes this transition branch.
 
 ## Decision checkpoint
 

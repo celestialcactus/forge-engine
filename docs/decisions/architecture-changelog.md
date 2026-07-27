@@ -169,3 +169,8 @@ checkpoint records.
   unchanged. The hybrid workflow now covers feature, fix, and rebuild pushes so
   post-merge integration heads retain the Rust/kernel gate. See Checkpoint 27 and
   the rebuild branch strategy.
+- Promoted literal `develop` to the canonical, readily pullable reconstruction
+  integration branch at validated commit `8d295b1`. `rebuild/develop` is frozen at
+  the same commit for transition history, while `rebuild/master` remains the stable
+  promotion line and historical `master` remains unchanged. CI now explicitly runs
+  both hosted workflows on `develop` pushes. See Checkpoint 28.
