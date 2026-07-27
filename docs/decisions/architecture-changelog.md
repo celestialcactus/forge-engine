@@ -170,7 +170,9 @@ checkpoint records.
   post-merge integration heads retain the Rust/kernel gate. See Checkpoint 27 and
   the rebuild branch strategy.
 - Promoted literal `develop` to the canonical, readily pullable reconstruction
-  integration branch at validated commit `8d295b1`. `rebuild/develop` is frozen at
-  the same commit for transition history, while `rebuild/master` remains the stable
-  promotion line and historical `master` remains unchanged. CI now explicitly runs
-  both hosted workflows on `develop` pushes. See Checkpoint 28.
+  integration branch from validated commit `8d295b1`. PR #4 merged the transition
+  as `b462f335`; that exact `develop` push passed cross-platform conformance on
+  Windows/macOS (run `30298569364`) and hybrid kernel conformance on
+  Windows/macOS/Ubuntu (run `30298569650`). `rebuild/develop` is frozen at
+  `8d295b1` for transition history, while `rebuild/master` remains the stable
+  promotion line and historical `master` remains unchanged. See Checkpoint 28.
