@@ -145,3 +145,25 @@ checkpoint records.
   divergence, CLI-consent, and seven-tool MCP conformance pass the complete local
   gate. Exact implementation `8693684` passed hosted Windows/macOS/Ubuntu
   conformance. See Checkpoint 24.
+## 2026-07-27
+
+- Re-groomed the post-Slice 2D build path around core-runtime reliability. Windows
+  and macOS are Tier-1 product/acceptance platforms; Ubuntu remains a compatibility
+  gate. Opened Slice 2E for ChangeSet v2, content-addressed staging, transaction
+  coordination/recovery, concurrency checks, cancellation, and a complete local
+  workflow. See ADR-0009 and Checkpoint 25.
+- Assigned previously vague security/integration limits to Slice 2F: authenticated
+  host-managed negotiation, policy/audit exchange, a minimum real restricted
+  execution backend on Tier-1 platforms, and high-level MCP/VS Code mutation.
+  Generic shell and unrestricted write tools remain non-goals.
+- Accepted Slice 2E-0 at exact implementation `fd3d9eb`. The Rust-owned ChangeSet
+  v2 and bounded content-addressed store use five tagged operation variants to cover
+  create, replace, delete, move/rename, mode intent, and binary/text content.
+  Adversarial path, identity, bounds, corruption, and concurrent no-overwrite tests
+  passed hosted Windows/macOS Tier-1 and Ubuntu compatibility gates. See ADR-0009
+  and Checkpoint 26.
+- Established `rebuild/master` as the stable reconstruction line and
+  `rebuild/develop` as its integration line, both at accepted Slice 2D commit
+  `3b2b62f`. Accepted feature checkpoints flow into develop; named stable milestones
+  promote develop through a separate PR. The historical default `master` remains
+  unchanged. See Checkpoint 27 and the rebuild branch strategy.
