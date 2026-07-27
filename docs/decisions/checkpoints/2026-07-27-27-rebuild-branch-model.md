@@ -30,4 +30,9 @@ commits over squash. Direct feature pushes and force-pushes to either rebuild br
 are prohibited by process; GitHub rulesets are a follow-up repository-administration
 step rather than an unverified claim in this checkpoint.
 
+The hybrid workflow explicitly watches `feature/**`, `fix/**`, and `rebuild/**`
+pushes in addition to pull requests. This prevents the Rust/kernel matrix from
+silently disappearing after an accepted PR merges into the integration or stable
+line.
+
 See `docs/development/rebuild-branch-strategy.md` for the complete flow.
