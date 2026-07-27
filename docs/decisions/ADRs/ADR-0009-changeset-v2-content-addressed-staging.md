@@ -1,6 +1,6 @@
 # ADR-0009: ChangeSet v2 and content-addressed staging
 
-**Status:** Proposed; local gate passed, hosted Windows/macOS gate pending
+**Status:** Accepted; exact implementation `fd3d9eb` passed hosted Windows/macOS and Ubuntu gates
 **Date:** 2026-07-27
 
 ## Context

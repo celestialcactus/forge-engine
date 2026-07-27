@@ -156,8 +156,9 @@ checkpoint records.
   host-managed negotiation, policy/audit exchange, a minimum real restricted
   execution backend on Tier-1 platforms, and high-level MCP/VS Code mutation.
   Generic shell and unrestricted write tools remain non-goals.
-- Passed the local Slice 2E-0 gate for the Rust-owned ChangeSet v2 and bounded
-  content-addressed store. Five tagged operation variants cover create, replace,
-  delete, move/rename, mode intent, and binary/text content; adversarial fixtures
-  cover path semantics, identity, bounds, corruption, and concurrent no-overwrite
-  staging. Hosted Windows/macOS acceptance remains pending. See Checkpoint 26.
+- Accepted Slice 2E-0 at exact implementation `fd3d9eb`. The Rust-owned ChangeSet
+  v2 and bounded content-addressed store use five tagged operation variants to cover
+  create, replace, delete, move/rename, mode intent, and binary/text content.
+  Adversarial path, identity, bounds, corruption, and concurrent no-overwrite tests
+  passed hosted Windows/macOS Tier-1 and Ubuntu compatibility gates. See ADR-0009
+  and Checkpoint 26.

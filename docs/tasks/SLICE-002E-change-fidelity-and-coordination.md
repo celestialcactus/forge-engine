@@ -1,6 +1,6 @@
 # Slice 2E: change fidelity and transaction coordination
 
-- **Status:** In progress; Increment 2E-0 local gate passed, hosted Tier-1 gate pending
+- **Status:** In progress; Increment 2E-0 accepted at `fd3d9eb`
 - **Opened:** 2026-07-27
 - **Branch:** `feature/slice-2e-change-fidelity`
 - **Base:** accepted Slice 2D checkpoint `3b2b62f`

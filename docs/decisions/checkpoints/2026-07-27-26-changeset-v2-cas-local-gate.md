@@ -1,8 +1,9 @@
 # Checkpoint 26: ChangeSet v2 and CAS local gate
 
 **Date:** 2026-07-27
-**Status:** Local gate passed; hosted Windows/macOS gate pending
+**Status:** Increment 2E-0 accepted
 **Branch:** `feature/slice-2e-change-fidelity`
+**Accepted implementation:** `fd3d9ebedfe5dd2c19dc2a72f16f83612cc418fa`
 
 ## Implemented boundary
 
@@ -55,9 +56,13 @@ semantics before v2 can drive mutation.
 - Symlinks remain unsupported. No public write, MCP mutation, shell, sandbox, or
   host-authentication capability was added.
 
-## Next gate
+## Hosted evidence
 
-Push this checkpoint and require the existing hosted Windows/macOS matrices plus
-Ubuntu compatibility. If they pass, accept ADR-0009/Increment 2E-0 and start the
-repository-backed path-identity and candidate-operation adapter. If either Tier-1
-platform fails, keep the ADR proposed and correct the contract before mutation work.
+Exact implementation `fd3d9ebedfe5dd2c19dc2a72f16f83612cc418fa` passed:
+
+- [Cross-platform conformance](https://github.com/celestialcactus/forge-engine/actions/runs/30287825688) on Windows and macOS, including typecheck, 37 TypeScript tests, production build, and packaged CLI exercise;
+- [Hybrid kernel conformance](https://github.com/celestialcactus/forge-engine/actions/runs/30287824859) on Windows, macOS, and Ubuntu, including Rust format/lint/tests/build, accepted TypeScript behavior, 27 hybrid/MCP checks, optimized kernel build, and the process-bridge latency ceiling.
+
+ADR-0009 and Increment 2E-0 are accepted. Slice 2E remains open. The next gate is
+the repository-backed path-identity and candidate-operation adapter; ChangeSet v2
+still may not mutate the active workspace.
