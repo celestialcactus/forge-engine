@@ -1,4 +1,5 @@
 mod blob_store;
+mod candidate_adapter;
 
 use std::collections::HashMap;
 
@@ -6,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub use blob_store::FileBlobStore;
+pub use candidate_adapter::*;
 
 pub const CHANGE_SET_V2_SCHEMA_VERSION: u8 = 2;
 pub const MAXIMUM_CHANGE_OPERATIONS: usize = 20;
@@ -224,6 +226,9 @@ pub fn is_sha256(value: &str) -> bool {
 }
 
 pub fn validate_workspace_relative_path(path: &str) -> Result<(), String> {
+    let first = path.split('/').next().unwrap_or_default();
+    let is_reserved_control_path =
+        first.eq_ignore_ascii_case(".git") || first.eq_ignore_ascii_case(".forge");
     if path.is_empty()
         || path.len() > 4_096
         || path.starts_with('/')
@@ -231,6 +236,7 @@ pub fn validate_workspace_relative_path(path: &str) -> Result<(), String> {
         || path.contains(':')
         || path.contains('\0')
         || path.chars().any(char::is_control)
+        || is_reserved_control_path
         || !path
             .split('/')
             .all(|part| !part.is_empty() && part != "." && part != "..")
@@ -423,6 +429,14 @@ pub fn validate_change_set_v2(
         for (index, (path, identity)) in operation_identities.into_iter().enumerate() {
             if is_case_only_move && index == 1 {
                 continue;
+            }
+            if let Some((_, existing)) = claimed_paths.iter().find(|(existing_identity, _)| {
+                identity.starts_with(&format!("{existing_identity}/"))
+                    || existing_identity.starts_with(&format!("{identity}/"))
+            }) {
+                return Err(format!(
+                    "ChangeSet file paths overlap as an ancestor and descendant: {existing} and {path}."
+                ));
             }
             if let Some(existing) = claimed_paths.insert(identity.clone(), path.to_owned()) {
                 return Err(format!(

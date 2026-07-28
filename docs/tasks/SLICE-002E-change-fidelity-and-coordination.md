@@ -1,9 +1,9 @@
 # Slice 2E: change fidelity and transaction coordination
 
-- **Status:** In progress; Increment 2E-0 accepted at `fd3d9eb`
+- **Status:** In progress; Increments 2E-0 (`fd3d9eb`) and 2E-1a (`b930d31`) accepted
 - **Opened:** 2026-07-27
-- **Branch:** `feature/slice-2e-change-fidelity`
-- **Base:** accepted Slice 2D checkpoint `3b2b62f`
+- **Branch:** `feature/slice-2e-candidate-operations`
+- **Base:** protected canonical `develop` at `00e30de`
 - **Tier-1 platforms:** Windows and macOS
 - **Compatibility platform:** Ubuntu
 - **Does not add:** generic shell, unrestricted file writes, symlink mutation, public MCP mutation, authenticated host-managed execution, or an unproven sandbox claim
@@ -61,6 +61,22 @@ Apply every accepted operation only inside the recoverable candidate boundary.
 Application evidence includes the exact operation kind, canonical paths, before and
 after identities, blob identity, and bounded diff/summary. Active-workspace
 promotion revalidates the same identities and preserves an all-or-recoverable result.
+
+### Increment 2E-1a: candidate-side application
+
+The local gate now supplies a repository-backed path identity and applies create,
+replace, delete, move/rename, repository executable-mode intent, and bounded
+binary/text blobs only inside an external detached worktree. Rust revalidates the
+clean base revision, snapshot, per-path content/mode preconditions, and CAS bytes
+before mutation. It returns exact operation/path/digest/mode evidence plus a bounded
+Git diff, proves the original workspace stayed unchanged, and removes the candidate
+on a failed application.
+
+This is deliberately not the active-workspace promotion gate. Exact implementation
+`b930d31` passed hosted Windows/macOS Tier-1 and Ubuntu compatibility conformance.
+Promotion of the full operation algebra, durable candidate ownership across kernel
+death, startup reconciliation, and fault-injected publication remain under the
+following 2E-1/2E-2 work.
 
 ## Increment 2E-2: transaction coordinator
 

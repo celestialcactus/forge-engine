@@ -186,3 +186,11 @@ checkpoint records.
   `rebuild/develop` are locked. Only merge commits are enabled, merged head branches
   are deleted automatically, and CI no longer duplicates topic-push and PR runs.
   See Checkpoint 29.
+- Accepted Slice 2E-1a at exact implementation `b930d31`. Rust now derives
+  repository-backed path identity and applies the full ChangeSet v2 algebra only in
+  an external detached worktree with repeated CAS/base checks, exact per-operation
+  evidence, bounded diff evidence, and failure cleanup. Windows/macOS Tier-1 and
+  Ubuntu compatibility conformance passed. Active promotion and durable v2
+  coordination remain unavailable. The audit also elevated deterministic Windows
+  process-tree ownership to a P1 Slice 2E gate after one intermittent `taskkill`
+  descendant-cleanup failure. See Checkpoint 30.

@@ -193,6 +193,17 @@ spikes and adversarial platform gates.
   and revision/path/digest revalidation. It is process-crash recoverable, not a
   power-loss filesystem transaction, and external editors do not honor Forge's
   advisory repository lock.
+- ChangeSet v2 now has a hosted-accepted candidate-side adapter for every accepted
+  operation, but it cannot promote those operations into the active workspace and
+  does not yet have a durable v2 lease/WAL or startup reconciliation. Repository
+  identity currently uses tracked Git spelling plus `core.ignorecase`; new
+  non-ASCII paths fail closed on case-insensitive repositories until native Unicode
+  identity semantics are proven on Windows and macOS.
+- Windows descendant cleanup currently relies on `taskkill /T /F`. One complete
+  local Rust run observed a surviving descendant even though isolated repeats and
+  the subsequent full run passed. Forge must use a Windows Job Object or an
+  equivalently proven ownership primitive before claiming deterministic process-tree
+  cleanup; this is Slice 2E runtime correctness, not deferred sandbox hardening.
 
 ### Prototype-first priority policy
 
@@ -214,6 +225,7 @@ must still have a named architectural home and an objective entry gate:
 | Durable transaction coordinator | P1, Slice 2E | Build now. Add a write-ahead state machine, startup reconciliation, workspace generation/per-path identity checks, and graceful cancellation. Preserve platform-specific atomic publication behind one Rust contract. | Fault injection covers every transition; no acknowledged success can disappear after process restart; no stale or concurrent edit is silently overwritten; cancellation yields or can reconstruct one terminal artifact. |
 | Complete sovereign transaction CLI | P1, Slice 2E | Extend the thin candidate CLI into one high-level propose → verify → inspect → accept/discard flow. Do not expose raw shell or arbitrary direct-write commands. | A fresh developer can complete the bounded workflow without private test helpers on Windows and macOS; Ubuntu remains compatible. |
 | Windows/macOS platform acceptance | P1, every machinery increment | Windows and macOS are Tier 1. Windows gates cover path/case/long-path behavior, replacement semantics, descendant cleanup, and locked files. macOS gates cover default and case-sensitive filesystem semantics where CI permits, atomic rename/durability behavior, process groups, and executable bits. | Local fixtures plus hosted Windows/macOS matrices pass before acceptance. Ubuntu runs as a Tier-2 compatibility matrix. |
+| Deterministic verifier process ownership | P1, Slice 2E | Replace best-effort Windows `taskkill` cleanup with a Rust-owned Job Object or equivalently proven process-tree primitive; retain macOS process-group ownership behind the same isolation contract. This guarantees cancellation/timeout cleanup but does not by itself claim security containment. | Repeated adversarial timeout/cancellation tests prove no descendant survives on Windows and macOS, including nested children and abrupt bridge loss. Any cleanup uncertainty produces an explicit terminal failure. |
 | High-level MCP/VS Code mutation workflow | P2, Slice 2F | Add only over the accepted transaction contract; never expose file-write or shell primitives. | Official MCP and controlled VS Code tests prove approvals, cancellation, compact evidence, no retry storm, no hidden promotion, and unchanged read-only behavior on failure. |
 | Authenticated host handshake and enterprise policy adapter | P2, Slice 2F | Replace the current `host_managed` assertion with authenticated, freshness-bound negotiation. Add policy distribution, durable audit export, and credential brokerage seams without importing host-private state into Rust. | Spoofed, stale, replayed, incomplete, and policy-incompatible attestations fail closed; exported audit facts reconstruct the decision. |
 | Minimum Forge-restricted execution backend | P2, Slice 2F | Implement and advertise only boundaries proven on Tier-1 platforms. Keep unsupported controls fail-closed. This is necessary for a credible pilot, but it must not block the controlled trusted-mode prototype. | Separate adversarial Windows and macOS process/filesystem/network tests support each advertised control; Ubuntu support may follow behind the same provider interface. |
