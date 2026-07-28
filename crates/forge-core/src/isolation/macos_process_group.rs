@@ -95,6 +95,12 @@ fn list_process_group_members(process_group_id: c_int) -> Result<Vec<c_int>, Str
             .checked_mul(size_of::<c_int>())
             .and_then(|bytes| c_int::try_from(bytes).ok())
             .ok_or_else(|| "Darwin process-group query exceeded its byte bound.".to_owned())?;
+        // Darwin's convenience wrapper returns a PID count, not a byte count.
+        // Clear errno first because a zero count can also wrap a kernel error.
+        // SAFETY: `__error` returns this thread's writable errno location.
+        unsafe {
+            *libc::__error() = 0;
+        }
         // SAFETY: the vector owns `buffer_bytes` writable bytes for PID results.
         let returned = unsafe {
             proc_listpgrppids(
@@ -103,18 +109,12 @@ fn list_process_group_members(process_group_id: c_int) -> Result<Vec<c_int>, Str
                 buffer_bytes,
             )
         };
-        if returned < 0 {
-            return Err(format!(
-                "Could not inspect verifier process group: {}",
-                std::io::Error::last_os_error()
-            ));
+        let error = std::io::Error::last_os_error();
+        if returned < 0 || (returned == 0 && error.raw_os_error().is_some_and(|code| code != 0)) {
+            return Err(format!("Could not inspect verifier process group: {error}"));
         }
-        let returned_bytes = usize::try_from(returned)
-            .map_err(|_| "Darwin returned an invalid process-group byte count.".to_owned())?;
-        if returned_bytes % size_of::<c_int>() != 0 {
-            return Err("Darwin returned a misaligned process-group result.".to_owned());
-        }
-        let count = returned_bytes / size_of::<c_int>();
+        let count = usize::try_from(returned)
+            .map_err(|_| "Darwin returned an invalid process-group PID count.".to_owned())?;
         if count < capacity {
             process_ids.truncate(count);
             process_ids.retain(|process_id| *process_id > 0);

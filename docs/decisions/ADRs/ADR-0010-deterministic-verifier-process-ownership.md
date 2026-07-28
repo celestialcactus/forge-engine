@@ -141,6 +141,7 @@ close the separately recorded abrupt-owner-death gap.
 - https://learn.microsoft.com/windows/win32/procthread/job-objects
 - https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kill.2.html
 - https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/libproc/libproc.h
+- https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/libproc/libproc.c
 - https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/proc_info.h
 - docs/decisions/ADRs/ADR-0008-execution-isolation-profiles.md
 - docs/architecture/slice-2-change-transaction.md

@@ -49,6 +49,11 @@ records have already been reaped by `launchd`.
 - strict macOS-target Clippy passed with `-D warnings`.
 - The second hosted run proved the import correction on Ubuntu before the macOS
   behavior correction was added.
+- That macOS run also rejected the first Darwin adapter because it interpreted
+  proc_listpgrppids as returning bytes. Apple's published wrapper divides the
+  kernel byte result by sizeof(int) and returns a PID count. Forge now clears
+  thread-local errno, consumes the count directly, and still grows/fails at the
+  documented bound.
 - A fresh hosted Windows/macOS/Ubuntu behavioral run is still required. This
   checkpoint is not acceptance evidence by itself.
 
@@ -63,4 +68,5 @@ death on Unix. The watchdog/parent-death gate remains open before Slice 2E close
 - docs/decisions/ADRs/ADR-0010-deterministic-verifier-process-ownership.md
 - https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kill.2.html
 - https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/libproc/libproc.h
+- https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/libproc/libproc.c
 - https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/proc_info.h
