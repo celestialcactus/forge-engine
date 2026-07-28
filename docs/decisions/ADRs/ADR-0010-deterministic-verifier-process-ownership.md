@@ -1,6 +1,7 @@
 # ADR-0010: deterministic verifier process ownership
 
-- **Status:** accepted for local implementation; hosted acceptance pending
+- **Status:** accepted
+- **Exact implementation:** `ff4aedf`
 - **Date:** 2026-07-28
 - **Owners:** ForgeEngine project
 - **Checkpoint:** 2026-07-28-31
@@ -143,5 +144,7 @@ close the separately recorded abrupt-owner-death gap.
 - https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/libproc/libproc.h
 - https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/libproc/libproc.c
 - https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/proc_info.h
+- https://github.com/celestialcactus/forge-engine/actions/runs/30389804363
+- https://github.com/celestialcactus/forge-engine/actions/runs/30389805673
 - docs/decisions/ADRs/ADR-0008-execution-isolation-profiles.md
 - docs/architecture/slice-2-change-transaction.md

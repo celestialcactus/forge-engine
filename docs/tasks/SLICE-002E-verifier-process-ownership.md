@@ -1,6 +1,7 @@
 # Slice 2E: deterministic verifier process ownership
 
-- **Status:** Local gate passed; hosted acceptance pending
+- **Status:** Accepted supervised ownership increment; Unix/macOS abrupt-owner gate remains open
+- **Exact implementation:** `ff4aedf`
 - **Opened:** 2026-07-28
 - **Branch:** `feature/slice-2e-process-ownership`
 - **Base:** protected `develop` at `c14edf5`

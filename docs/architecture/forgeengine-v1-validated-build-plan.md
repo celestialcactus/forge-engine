@@ -199,12 +199,13 @@ spikes and adversarial platform gates.
   identity currently uses tracked Git spelling plus `core.ignorecase`; new
   non-ASCII paths fail closed on case-insensitive repositories until native Unicode
   identity semantics are proven on Windows and macOS.
-- The local process-ownership gate replaces Windows `taskkill` with a suspended,
+- The accepted process-ownership gate replaces Windows `taskkill` with a suspended,
   pre-execution-assigned, kill-on-close Job Object and confirms the hierarchy is
   empty after teardown. Repeated nested timeout/cancellation and abrupt Windows
-  owner-death tests pass; hosted acceptance is pending. Unix/macOS process groups
-  now propagate signal/confirmation failures, but abrupt Forge owner death still
-  requires a watchdog/parent-death mechanism before Slice 2E closes.
+  owner-death tests pass on hosted Windows. Hosted macOS now confirms no live
+  process-group member remains through bounded Darwin inspection; Ubuntu preserves
+  the Unix group behavior. Abrupt Forge owner death on Unix/macOS still requires a
+  watchdog/parent-death mechanism before Slice 2E closes.
 
 ### Prototype-first priority policy
 
@@ -275,7 +276,7 @@ is not repeated unless new evidence invalidates its checkpoint.
 | --- | --- | --- | --- |
 | Slice 2 | Windows worktree/process boundary | Accepted; Checkpoints 11, 17, and 18 | Can Forge use a safe, debuggable worktree/process execution model across supported Windows, macOS, and Linux environments? |
 | Slice 2E | Cross-platform change fidelity and CAS staging | In progress; task `SLICE-002E` | Can one bounded operation algebra and content-addressed store preserve exact intent across Windows path/case/locking semantics and macOS case/mode/rename semantics without moving authority into TypeScript? |
-| Slice 2E | Deterministic verifier process ownership | Local gate passed; ADR-0010 and Checkpoint 31 | Can Windows and macOS terminate and confirm a nested verifier hierarchy across timeout, cancellation, normal child exit, cleanup errors, and owner death without calling lifecycle control a sandbox? |
+| Slice 2E | Deterministic verifier process ownership | Accepted at `ff4aedf`; ADR-0010 and Checkpoints 31–32 | Can Windows and macOS terminate and confirm a nested verifier hierarchy across timeout, cancellation, normal child exit, and cleanup errors, while separately proving Windows owner-death behavior, without calling lifecycle control a sandbox? |
 | Slice 2E | Durable transaction coordinator | Pending after the ChangeSet v2 contract | Which minimal journal states and filesystem sync points make process-restart recovery deterministic without claiming a power-loss transaction? |
 | Slice 2F | Restricted execution provider | Pending; Windows/macOS Tier-1 | Which process/filesystem/network controls can Forge independently prove and package on both enterprise desktop platforms? |
 | Slice 2 | TypeScript symbols and diagnostics | Accepted for the deterministic read-only path | Which compiler integration supplies symbols and diagnostics without making the kernel IDE-specific? Provider-generated edit fidelity remains behind the transaction proposal contract rather than a new LSP authority. |
@@ -310,8 +311,8 @@ not source volume or the number of abstractions present.
 
 | Scope | Estimated complete | Remaining critical path |
 | --- | ---: | --- |
-| Core runtime and dependable local change machinery | 68% | Hosted process-ownership acceptance, macOS abrupt-owner handling, durable ChangeSet v2 coordination/reconciliation, full-operation promotion/rollback, and transition fault injection. |
-| Shippable standalone CLI alpha | 42% | Core closure plus canonical runtime convergence, one measured local and one direct cloud inference path, interactive multi-turn loop, effective config/doctor, packaging, and clean-install smoke tests. |
+| Core runtime and dependable local change machinery | 70% | macOS abrupt-owner handling, durable ChangeSet v2 coordination/reconciliation, full-operation promotion/rollback, and transition fault injection. |
+| Shippable standalone CLI alpha | 43% | Core closure plus canonical runtime convergence, one measured local and one direct cloud inference path, interactive multi-turn loop, effective config/doctor, packaging, and clean-install smoke tests. |
 | Broader V1 platform | 25% | Context quality gates, durable projections, reviewed skills/memory, symmetric mutation integrations, restricted execution, connectors, and release hardening. |
 
 Assuming one focused implementation lane, working hosted CI, and no material scope

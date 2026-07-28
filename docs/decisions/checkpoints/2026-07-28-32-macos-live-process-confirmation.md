@@ -1,7 +1,8 @@
 # Checkpoint 32: macOS live-process confirmation correction
 
 **Date:** 2026-07-28
-**Status:** Local and cross-target gates passed; hosted behavioral acceptance pending
+**Status:** Accepted
+**Exact implementation:** `ff4aedf`
 **Branch:** `feature/slice-2e-process-ownership`
 **Base:** protected `develop` at `c14edf5e1c668c4c69a5dc02cb17246493087f86`
 **Decision:** ADR-0010
@@ -50,18 +51,33 @@ records have already been reaped by `launchd`.
 - The second hosted run proved the import correction on Ubuntu before the macOS
   behavior correction was added.
 - That macOS run also rejected the first Darwin adapter because it interpreted
-  proc_listpgrppids as returning bytes. Apple's published wrapper divides the
-  kernel byte result by sizeof(int) and returns a PID count. Forge now clears
-  thread-local errno, consumes the count directly, and still grows/fails at the
+  `proc_listpgrppids` as returning bytes. Apple's published wrapper divides the
+  kernel byte result by `sizeof(int)` and returns a PID count. Forge now clears
+  thread-local `errno`, consumes the count directly, and still grows/fails at the
   documented bound.
 - The next macOS run passed direct-exit teardown and most repeated cases, then
-  exposed a list/detail race: a listed PID lost pidinfo state while a zero-signal
+  exposed a list/detail race: a listed PID lost `pidinfo` state while a zero-signal
   probe still succeeded. Forge now uses libc's SDK-matched Darwin structures and
   constants, clears errno before the probe, treats an existing unknown member as
-  conservatively live, and retries until it disappears, reports SZOMB, or reaches
+  conservatively live, and retries until it disappears, reports `SZOMB`, or reaches
   the explicit teardown deadline.
-- A fresh hosted Windows/macOS/Ubuntu behavioral run is still required. This
-  checkpoint is not acceptance evidence by itself.
+- Hosted cross-platform conformance run `30389804363` passed the packaged Node/CLI
+  gate on Windows and macOS.
+- Hosted hybrid kernel conformance run `30389805673` passed strict Rust, the
+  adversarial ownership tests, TypeScript preservation, hybrid/MCP behavior,
+  optimized builds, and bridge latency on Windows, macOS, and Ubuntu.
+
+The protected hosted matrix is the acceptance evidence for this increment.
+
+## Current delivery forecast
+
+Accepted process ownership closes one P1 machinery gate. The authoritative build
+plan now estimates the dependable core at **70%**, the standalone CLI alpha at
+**43%**, and the broader V1 platform at **25%**. The planning ranges remain **2-3
+weeks** for a curated evidence-backed demo, **3-5 weeks** for the dependable local
+change engine, **6-9 weeks** for a shippable standalone CLI alpha, and **12-16
+weeks** for an enterprise pilot with real restricted execution and policy
+integration. These are ranges, not commitments.
 
 ## Unchanged limits
 
@@ -76,3 +92,5 @@ death on Unix. The watchdog/parent-death gate remains open before Slice 2E close
 - https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/libproc/libproc.h
 - https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/libproc/libproc.c
 - https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/proc_info.h
+- https://github.com/celestialcactus/forge-engine/actions/runs/30389804363
+- https://github.com/celestialcactus/forge-engine/actions/runs/30389805673
