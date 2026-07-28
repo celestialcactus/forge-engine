@@ -3,13 +3,17 @@ name: Hybrid kernel conformance
 on:
   push:
     branches:
-      - 'spike/**'
-      - 'feature/**'
-      - 'fix/**'
-      - 'rebuild/**'
       - 'develop'
+      - 'rebuild/master'
   pull_request:
+    branches:
+      - 'develop'
+      - 'rebuild/master'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

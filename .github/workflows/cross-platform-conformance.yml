@@ -2,8 +2,18 @@ name: Cross-platform conformance
 
 on:
   push:
+    branches:
+      - 'develop'
+      - 'rebuild/master'
   pull_request:
+    branches:
+      - 'develop'
+      - 'rebuild/master'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

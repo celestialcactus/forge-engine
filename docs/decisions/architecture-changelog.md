@@ -176,3 +176,13 @@ checkpoint records.
   Windows/macOS/Ubuntu (run `30298569650`). `rebuild/develop` is frozen at
   `8d295b1` for transition history, while `rebuild/master` remains the stable
   promotion line and historical `master` remains unchanged. See Checkpoint 28.
+
+## 2026-07-28
+
+- Made `develop` the GitHub default and enforced the documented branch model.
+  `develop` and `rebuild/master` now require PRs, strict Windows/macOS/Ubuntu
+  status checks, and resolved conversations even for administrators; force-pushes
+  and deletion are blocked. Historical `master` and transitional
+  `rebuild/develop` are locked. Only merge commits are enabled, merged head branches
+  are deleted automatically, and CI no longer duplicates topic-push and PR runs.
+  See Checkpoint 29.
