@@ -193,7 +193,7 @@ spikes and adversarial platform gates.
   and revision/path/digest revalidation. It is process-crash recoverable, not a
   power-loss filesystem transaction, and external editors do not honor Forge's
   advisory repository lock.
-- ChangeSet v2 now has a locally validated candidate-side adapter for every accepted
+- ChangeSet v2 now has a hosted-accepted candidate-side adapter for every accepted
   operation, but it cannot promote those operations into the active workspace and
   does not yet have a durable v2 lease/WAL or startup reconciliation. Repository
   identity currently uses tracked Git spelling plus `core.ignorecase`; new

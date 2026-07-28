@@ -1,15 +1,16 @@
 # Checkpoint 30: ChangeSet v2 candidate-operation local gate
 
 **Date:** 2026-07-28
-**Status:** Local gate passed; hosted acceptance pending
+**Status:** Increment 2E-1a accepted
 **Branch:** `feature/slice-2e-candidate-operations`
 **Base:** protected canonical `develop` at `00e30dea2e12777b7fc30152c74600a104fb0e79`
+**Accepted implementation:** `b930d31fe6c44aad36684b35dd5241711e59dd7d`
 
 ## Decision
 
-Accept the candidate-side adapter as Increment 2E-1a local evidence. Do not accept
-Increment 2E-1 or Slice 2E as complete until the full operation algebra can be
-promoted and durably reconciled on Tier-1 platforms.
+Accept the candidate-side adapter as Increment 2E-1a. Do not accept Increment 2E-1
+or Slice 2E as complete until the full operation algebra can be promoted and
+durably reconciled on Tier-1 platforms.
 
 The adapter remains Rust authority. TypeScript, MCP, the CLI, and the active
 workspace contract are unchanged.
@@ -83,12 +84,18 @@ correctness; it does not claim filesystem/network sandboxing.
   handshake, Forge-enforced sandbox, or unrestricted file-write capability was
   added.
 
+## Hosted evidence
+
+Exact implementation `b930d31fe6c44aad36684b35dd5241711e59dd7d`
+passed:
+
+- [Cross-platform conformance](https://github.com/celestialcactus/forge-engine/actions/runs/30377265520) on Windows and macOS, including typecheck, 37 TypeScript tests, production build, and packaged CLI exercise;
+- [Hybrid kernel conformance](https://github.com/celestialcactus/forge-engine/actions/runs/30377265628) on Windows, macOS, and Ubuntu, including Rust format/lint/tests/build, the six new candidate-operation tests, accepted TypeScript behavior, 27 hybrid/MCP checks, optimized kernel build, and the process-bridge latency ceiling.
+
 ## Next gate
 
-1. obtain hosted Windows/macOS Tier-1 and Ubuntu compatibility evidence for this
-   exact feature head;
-2. add durable candidate ownership and startup reconciliation for v2;
-3. implement all-or-recoverable active-workspace publication with fresh per-path
+1. add durable candidate ownership and startup reconciliation for v2;
+2. implement all-or-recoverable active-workspace publication with fresh per-path
    identity checks and fault injection;
-4. replace best-effort Windows process cleanup with proven process-tree ownership;
-5. only then connect the full v2 lifecycle to the high-level sovereign CLI.
+3. replace best-effort Windows process cleanup with proven process-tree ownership;
+4. only then connect the full v2 lifecycle to the high-level sovereign CLI.

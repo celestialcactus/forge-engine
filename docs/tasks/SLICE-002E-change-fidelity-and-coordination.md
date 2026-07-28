@@ -1,6 +1,6 @@
 # Slice 2E: change fidelity and transaction coordination
 
-- **Status:** In progress; Increment 2E-0 accepted at `fd3d9eb`; Increment 2E-1a local gate passed, hosted acceptance pending
+- **Status:** In progress; Increments 2E-0 (`fd3d9eb`) and 2E-1a (`b930d31`) accepted
 - **Opened:** 2026-07-27
 - **Branch:** `feature/slice-2e-candidate-operations`
 - **Base:** protected canonical `develop` at `00e30de`
@@ -72,10 +72,11 @@ before mutation. It returns exact operation/path/digest/mode evidence plus a bou
 Git diff, proves the original workspace stayed unchanged, and removes the candidate
 on a failed application.
 
-This is deliberately not the active-workspace promotion gate. Hosted Windows/macOS
-and Ubuntu conformance are still pending. Promotion of the full operation algebra,
-durable candidate ownership across kernel death, startup reconciliation, and
-fault-injected publication remain under the following 2E-1/2E-2 work.
+This is deliberately not the active-workspace promotion gate. Exact implementation
+`b930d31` passed hosted Windows/macOS Tier-1 and Ubuntu compatibility conformance.
+Promotion of the full operation algebra, durable candidate ownership across kernel
+death, startup reconciliation, and fault-injected publication remain under the
+following 2E-1/2E-2 work.
 
 ## Increment 2E-2: transaction coordinator
 
