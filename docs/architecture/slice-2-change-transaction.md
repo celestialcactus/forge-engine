@@ -180,9 +180,13 @@ A Git worktree is a recoverability boundary, not a security sandbox. Verificatio
 now routes through one Rust isolation-provider contract. The baseline `trusted`
 profile still runs with the Forge process permissions; `host_managed` records an
 allowlisted host assertion without claiming Forge enforcement; `restricted` fails
-closed because no Forge OS backend exists yet. Forge detects governed-workspace
-drift and refuses retention, but organizational sandbox, DLP, and egress controls
-remain separate layers.
+closed because no Forge OS backend exists yet. The process-ownership local gate
+adds suspended pre-execution Windows Job Object assignment and checked Unix process-
+group teardown. This guarantees supervised lifecycle cleanup where accepted; it
+does not restrict verifier permissions, filesystem, network, or credentials.
+Windows owner-handle closure covers abrupt Forge death, while macOS abrupt-owner
+parity remains open. Forge detects governed-workspace drift and refuses retention,
+but organizational sandbox, DLP, and egress controls remain separate layers.
 
 ## Slice 2 exit gate
 

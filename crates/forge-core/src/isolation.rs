@@ -15,8 +15,10 @@ use std::{
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
+#[cfg(target_os = "macos")]
+mod macos_process_group;
 #[cfg(windows)]
-use std::os::windows::process::CommandExt;
+mod windows_job;
 
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +30,10 @@ const MAX_ATTESTED_CONTROLS: usize = 16;
 const MIN_OUTPUT_BYTES: usize = 1_024;
 const MAX_OUTPUT_BYTES: usize = 1_048_576;
 const MAX_TIMEOUT: Duration = Duration::from_secs(600);
+#[cfg(unix)]
+const PROCESS_TERMINATION_TIMEOUT: Duration = Duration::from_secs(2);
+#[cfg(unix)]
+const PROCESS_TERMINATION_POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -273,6 +279,9 @@ impl IsolationProvider for BaselineIsolationProvider {
             "Forge clears the verifier environment and restores only baseline and policy-listed values; this reduces exposure but is not containment."
                 .to_owned(),
         );
+        isolation
+            .limitations
+            .push(process_ownership_limitation().to_owned());
 
         let (execution, environment) = run_bounded_process(process, cancellation)?;
         Ok(IsolatedProcessOutcome {
@@ -285,6 +294,21 @@ impl IsolationProvider for BaselineIsolationProvider {
             environment,
         })
     }
+}
+
+#[cfg(windows)]
+fn process_ownership_limitation() -> &'static str {
+    "Forge assigns the suspended verifier to a kill-on-close Windows Job Object before execution and confirms process-tree teardown; this controls lifecycle, not filesystem, network, credential, or privilege access."
+}
+
+#[cfg(unix)]
+fn process_ownership_limitation() -> &'static str {
+    "Forge launches the verifier in a dedicated process group and confirms group teardown during supervised completion; this controls lifecycle, not permissions, and abrupt Forge process death is not yet covered on Unix."
+}
+
+#[cfg(not(any(unix, windows)))]
+fn process_ownership_limitation() -> &'static str {
+    "Forge supervises only the direct verifier process on this platform; descendant ownership is unsupported and no containment is claimed."
 }
 
 fn validate_identifier(label: &str, value: &str) -> Result<(), String> {
@@ -446,6 +470,113 @@ struct BoundedProcessResult {
     stderr: CapturedOutput,
 }
 
+struct OwnedProcessTree {
+    child: Child,
+    #[cfg(not(windows))]
+    process_id: u32,
+    terminated: bool,
+    #[cfg(windows)]
+    job: windows_job::WindowsJob,
+}
+
+impl OwnedProcessTree {
+    fn spawn(command: &mut Command) -> Result<Self, String> {
+        #[cfg(windows)]
+        {
+            let job = windows_job::WindowsJob::create()?;
+            windows_job::WindowsJob::configure_command(command);
+            let mut child = command
+                .spawn()
+                .map_err(|error| format!("Could not start isolated process: {error}"))?;
+            if let Err(error) = job.assign_and_resume(&child) {
+                let cleanup = job.request_termination();
+                let _ = child.kill();
+                let _ = child.wait();
+                return match cleanup {
+                    Ok(()) => Err(error),
+                    Err(cleanup_error) => Err(format!(
+                        "{error} Suspended verifier cleanup also failed: {cleanup_error}"
+                    )),
+                };
+            }
+            Ok(Self {
+                child,
+                terminated: false,
+                job,
+            })
+        }
+
+        #[cfg(unix)]
+        command.process_group(0);
+        #[cfg(not(windows))]
+        {
+            let child = command
+                .spawn()
+                .map_err(|error| format!("Could not start isolated process: {error}"))?;
+            let process_id = child.id();
+            Ok(Self {
+                child,
+                process_id,
+                terminated: false,
+            })
+        }
+    }
+
+    fn terminate_and_reap(
+        &mut self,
+        observed_status: Option<ExitStatus>,
+    ) -> Result<ExitStatus, String> {
+        self.request_termination()?;
+        let status = match observed_status {
+            Some(status) => status,
+            None => self
+                .child
+                .wait()
+                .map_err(|error| format!("Could not reap verifier process: {error}"))?,
+        };
+        self.confirm_termination()?;
+        self.terminated = true;
+        Ok(status)
+    }
+
+    fn request_termination(&mut self) -> Result<(), String> {
+        if self.terminated {
+            return Ok(());
+        }
+        #[cfg(windows)]
+        return self.job.request_termination();
+        #[cfg(unix)]
+        return signal_process_group(self.process_id);
+        #[cfg(not(any(unix, windows)))]
+        return match self.child.kill() {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::InvalidInput => Ok(()),
+            Err(error) => Err(format!("Could not terminate verifier process: {error}")),
+        };
+    }
+
+    fn confirm_termination(&self) -> Result<(), String> {
+        #[cfg(windows)]
+        return self.job.confirm_empty();
+        #[cfg(unix)]
+        return confirm_process_group_empty(self.process_id);
+        #[cfg(not(any(unix, windows)))]
+        return Ok(());
+    }
+}
+
+impl Drop for OwnedProcessTree {
+    fn drop(&mut self) {
+        if self.terminated {
+            return;
+        }
+        let _ = self.request_termination();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let _ = self.confirm_termination();
+    }
+}
+
 fn run_bounded_process(
     process: &IsolatedProcessSpec,
     cancellation: &dyn Cancellation,
@@ -461,20 +592,14 @@ fn run_bounded_process(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    #[cfg(unix)]
-    command.process_group(0);
-    #[cfg(windows)]
-    command.creation_flags(0x0000_0200);
-
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("Could not start isolated process: {error}"))?;
-    let process_id = child.id();
-    let stdout = child
+    let mut process_tree = OwnedProcessTree::spawn(&mut command)?;
+    let stdout = process_tree
+        .child
         .stdout
         .take()
         .ok_or_else(|| "Isolated process stdout pipe is unavailable.".to_owned())?;
-    let stderr = child
+    let stderr = process_tree
+        .child
         .stderr
         .take()
         .ok_or_else(|| "Isolated process stderr pipe is unavailable.".to_owned())?;
@@ -488,24 +613,25 @@ fn run_bounded_process(
     let status = loop {
         if cancellation.reason().is_some() {
             cancelled = true;
-            terminate_process_tree(&mut child, process_id);
-            break child.wait().ok();
+            break Some(process_tree.terminate_and_reap(None)?);
         }
         if started.elapsed() >= process.timeout {
             timed_out = true;
-            terminate_process_tree(&mut child, process_id);
-            break child.wait().ok();
+            break Some(process_tree.terminate_and_reap(None)?);
         }
-        match child.try_wait() {
+        match process_tree.child.try_wait() {
             Ok(Some(status)) => {
-                terminate_remaining_descendants(&mut child, process_id);
-                break Some(status);
+                break Some(process_tree.terminate_and_reap(Some(status))?);
             }
             Ok(None) => thread::sleep(Duration::from_millis(10)),
             Err(error) => {
-                terminate_process_tree(&mut child, process_id);
-                let _ = child.wait();
-                return Err(format!("Could not observe isolated process: {error}"));
+                let cleanup = process_tree.terminate_and_reap(None);
+                return match cleanup {
+                    Ok(_) => Err(format!("Could not observe isolated process: {error}")),
+                    Err(cleanup_error) => Err(format!(
+                        "Could not observe isolated process: {error}. Cleanup also failed: {cleanup_error}"
+                    )),
+                };
             }
         }
     };
@@ -692,51 +818,65 @@ fn reserve_output(budget: &AtomicUsize, maximum_bytes: usize, requested: usize) 
 }
 
 #[cfg(unix)]
-fn terminate_process_tree(child: &mut Child, process_id: u32) {
-    // SAFETY: the child was placed in a new process group whose ID is its PID.
-    unsafe {
-        libc::kill(-(process_id as i32), libc::SIGKILL);
+fn signal_process_group(process_id: u32) -> Result<(), String> {
+    let group_id = i32::try_from(process_id)
+        .map_err(|_| "Verifier process ID cannot be represented as a process group.".to_owned())?;
+    // SAFETY: the verifier was placed in a new process group whose ID is its PID.
+    let result = unsafe { libc::kill(-group_id, libc::SIGKILL) };
+    if result == 0 {
+        return Ok(());
     }
-    let _ = child.kill();
-}
-
-#[cfg(windows)]
-fn terminate_process_tree(child: &mut Child, process_id: u32) {
-    let _ = Command::new("taskkill")
-        .args(["/PID", &process_id.to_string(), "/T", "/F"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-    let _ = child.kill();
-}
-
-#[cfg(not(any(unix, windows)))]
-fn terminate_process_tree(child: &mut Child, _process_id: u32) {
-    let _ = child.kill();
-}
-
-#[cfg(unix)]
-fn terminate_remaining_descendants(child: &mut Child, process_id: u32) {
-    // SAFETY: signaling a process group is safe; ESRCH is expected when it is empty.
-    unsafe {
-        libc::kill(-(process_id as i32), libc::SIGKILL);
+    let error = std::io::Error::last_os_error();
+    if error.raw_os_error() == Some(libc::ESRCH) {
+        Ok(())
+    } else {
+        Err(format!(
+            "Could not terminate verifier process group: {error}"
+        ))
     }
-    let _ = child.kill();
 }
 
-#[cfg(windows)]
-fn terminate_remaining_descendants(child: &mut Child, process_id: u32) {
-    let _ = Command::new("taskkill")
-        .args(["/PID", &process_id.to_string(), "/T", "/F"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-    let _ = child.kill();
+#[cfg(all(unix, not(target_os = "macos")))]
+fn confirm_process_group_empty(process_id: u32) -> Result<(), String> {
+    let group_id = i32::try_from(process_id)
+        .map_err(|_| "Verifier process ID cannot be represented as a process group.".to_owned())?;
+    let started = Instant::now();
+    loop {
+        // SAFETY: signal zero performs an existence/permission check without delivering a signal.
+        let result = unsafe { libc::kill(-group_id, 0) };
+        if result != 0 {
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::ESRCH) {
+                return Ok(());
+            }
+            return Err(format!(
+                "Could not confirm verifier process-group termination: {error}"
+            ));
+        }
+        if started.elapsed() >= PROCESS_TERMINATION_TIMEOUT {
+            return Err("Verifier process group remained active after termination.".to_owned());
+        }
+        thread::sleep(PROCESS_TERMINATION_POLL_INTERVAL);
+    }
 }
 
-#[cfg(not(any(unix, windows)))]
-fn terminate_remaining_descendants(child: &mut Child, _process_id: u32) {
-    let _ = child.kill();
+#[cfg(target_os = "macos")]
+fn confirm_process_group_empty(process_id: u32) -> Result<(), String> {
+    let group_id = i32::try_from(process_id)
+        .map_err(|_| "Verifier process ID cannot be represented as a process group.".to_owned())?;
+    let started = Instant::now();
+    loop {
+        if !macos_process_group::has_live_members(group_id)? {
+            return Ok(());
+        }
+        if started.elapsed() >= PROCESS_TERMINATION_TIMEOUT {
+            return Err(
+                "Verifier process group retained live members after termination.".to_owned(),
+            );
+        }
+        thread::sleep(PROCESS_TERMINATION_POLL_INTERVAL);
+    }
 }
+
+#[cfg(test)]
+mod process_ownership_tests;

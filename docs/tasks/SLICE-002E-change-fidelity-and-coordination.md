@@ -1,9 +1,9 @@
 # Slice 2E: change fidelity and transaction coordination
 
-- **Status:** In progress; Increments 2E-0 (`fd3d9eb`) and 2E-1a (`b930d31`) accepted
+- **Status:** In progress; Increments 2E-0 (`fd3d9eb`) and 2E-1a (`b930d31`) accepted; process-ownership local gate passed
 - **Opened:** 2026-07-27
-- **Branch:** `feature/slice-2e-candidate-operations`
-- **Base:** protected canonical `develop` at `00e30de`
+- **Active branch:** `feature/slice-2e-process-ownership`
+- **Current base:** protected canonical `develop` at `c14edf5`
 - **Tier-1 platforms:** Windows and macOS
 - **Compatibility platform:** Ubuntu
 - **Does not add:** generic shell, unrestricted file writes, symlink mutation, public MCP mutation, authenticated host-managed execution, or an unproven sandbox claim
@@ -77,6 +77,16 @@ This is deliberately not the active-workspace promotion gate. Exact implementati
 Promotion of the full operation algebra, durable candidate ownership across kernel
 death, startup reconciliation, and fault-injected publication remain under the
 following 2E-1/2E-2 work.
+
+### Cross-cutting P1 gate: verifier process ownership
+
+The local gate replaces Windows `taskkill` with suspended pre-execution assignment
+to a Rust-owned kill-on-close Job Object and confirms zero active processes after
+teardown. Unix/macOS process-group errors and completion are now checked rather
+than ignored. Nested timeout, cancellation, and Windows owner-death stress tests
+pass locally. Hosted Tier-1/compatibility evidence is pending; macOS abrupt Forge
+owner death remains a named gap. See ADR-0010, the process-ownership task, and
+Checkpoint 31.
 
 ## Increment 2E-2: transaction coordinator
 
