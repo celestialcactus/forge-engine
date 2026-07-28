@@ -21,8 +21,9 @@ death cannot silently leave descendants running.
 2. Prevent the spawn/assignment race by creating the verifier suspended, assigning
    it, and resuming only after ownership succeeds.
 3. Confirm the Windows job has zero active processes after termination.
-4. Preserve pre-exec Unix/macOS process groups, but propagate signal errors and
-   confirm the group is absent after teardown.
+4. Preserve pre-exec Unix/macOS process groups, propagate signal errors, and
+   confirm no live descendant remains; macOS must distinguish terminated zombies
+   from executable members through bounded Darwin process inspection.
 5. Route early-return cleanup through one owned-process-tree guard.
 6. Record platform-specific lifecycle limitations in verification evidence.
 7. Add nested-descendant repetition and abrupt Windows owner-death fixtures.
@@ -36,6 +37,8 @@ death cannot silently leave descendants running.
 - a successful direct verifier exit terminates a still-running nested descendant;
 - killing the Windows owner without running cleanup still kills the nested tree;
 - the original worktree transaction timeout/cancellation regression remains green;
+- macOS confirmation rejects a live or uninspectable group member but accepts only
+  disappeared or kernel-reported zombie descendants;
 - cleanup uncertainty returns an explicit error and causes candidate recovery;
 - complete local Rust, TypeScript, CLI, MCP, and hybrid gates pass;
 - hosted Windows/macOS/Ubuntu gates pass before the increment is accepted.

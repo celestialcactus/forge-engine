@@ -15,6 +15,8 @@ use std::{
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
+#[cfg(target_os = "macos")]
+mod macos_process_group;
 #[cfg(windows)]
 mod windows_job;
 
@@ -834,7 +836,7 @@ fn signal_process_group(process_id: u32) -> Result<(), String> {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn confirm_process_group_empty(process_id: u32) -> Result<(), String> {
     let group_id = i32::try_from(process_id)
         .map_err(|_| "Verifier process ID cannot be represented as a process group.".to_owned())?;
@@ -853,6 +855,24 @@ fn confirm_process_group_empty(process_id: u32) -> Result<(), String> {
         }
         if started.elapsed() >= PROCESS_TERMINATION_TIMEOUT {
             return Err("Verifier process group remained active after termination.".to_owned());
+        }
+        thread::sleep(PROCESS_TERMINATION_POLL_INTERVAL);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn confirm_process_group_empty(process_id: u32) -> Result<(), String> {
+    let group_id = i32::try_from(process_id)
+        .map_err(|_| "Verifier process ID cannot be represented as a process group.".to_owned())?;
+    let started = Instant::now();
+    loop {
+        if !macos_process_group::has_live_members(group_id)? {
+            return Ok(());
+        }
+        if started.elapsed() >= PROCESS_TERMINATION_TIMEOUT {
+            return Err(
+                "Verifier process group retained live members after termination.".to_owned(),
+            );
         }
         thread::sleep(PROCESS_TERMINATION_POLL_INTERVAL);
     }

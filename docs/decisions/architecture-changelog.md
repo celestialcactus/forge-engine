@@ -202,3 +202,9 @@ checkpoint records.
   the complete hybrid gate passed. This is lifecycle reliability, not a sandbox.
   Hosted acceptance and abrupt macOS owner-death parity remain open. See ADR-0010,
   the process-ownership task, and Checkpoint 31.
+- Hosted CI then exposed Darwin's distinction between dead zombie descendants and
+  an absent process group: kill(-pgid, 0) returned EPERM after successful group
+  termination. Forge now uses bounded macOS process-group enumeration and accepts
+  only disappeared or kernel-reported zombie members; live or uninspectable state
+  still fails closed. Windows full-hybrid and macOS cross-target lint/check gates
+  passed; fresh hosted behavioral acceptance remains pending. See Checkpoint 32.

@@ -54,10 +54,20 @@ unowned execution window is accepted.
 
 ### macOS and other Unix platforms
 
-The verifier remains assigned to a new process group before `exec`. Forge now
-checks `kill` failures, reaps the direct child, and polls the process group until it
-is absent. Timeout, cancellation, and normal direct-child exit therefore have an
-explicit supervised teardown result.
+The verifier remains assigned to a new process group before `exec`. Forge checks
+`kill` failures and reaps the direct child. Linux and other supported Unix targets
+then poll until the group is absent.
+
+macOS does not use `kill(-pgid, 0)` as its sole completion proof. Darwin may retain
+terminated descendants as zombies, and its documented process-group permission
+semantics can return `EPERM` when any listed member cannot be signalled. Forge
+therefore performs a bounded `proc_listpgrppids` query and reads
+`PROC_PIDT_SHORTBSDINFO` for each member. Teardown succeeds only when every listed
+member is a zombie or has disappeared; any live, truncated, or uninspectable state
+remains an explicit failure. Zombies count as terminated because they cannot
+execute, even if `launchd` has not yet collected their process-table records.
+Timeout, cancellation, and normal direct-child exit therefore have an explicit
+supervised no-live-descendant result on macOS.
 
 A Unix process group does not automatically die when the Forge supervisor is
 forcibly killed. A small watchdog/parent-death design remains a separate Slice 2E
@@ -129,5 +139,8 @@ close the separately recorded abrupt-owner-death gap.
 
 - https://learn.microsoft.com/windows/win32/api/jobapi2/nf-jobapi2-assignprocesstojobobject
 - https://learn.microsoft.com/windows/win32/procthread/job-objects
+- https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kill.2.html
+- https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/libproc/libproc.h
+- https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/proc_info.h
 - docs/decisions/ADRs/ADR-0008-execution-isolation-profiles.md
 - docs/architecture/slice-2-change-transaction.md
