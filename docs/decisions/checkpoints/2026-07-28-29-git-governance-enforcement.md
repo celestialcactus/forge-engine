@@ -1,7 +1,7 @@
 # Checkpoint 29: Git governance enforcement
 
 **Date:** 2026-07-28
-**Status:** Repository settings applied; workflow PR gate pending
+**Status:** Accepted
 **Canonical integration branch:** `develop`
 **Stable promotion branch:** `rebuild/master`
 
@@ -41,6 +41,19 @@ Both workflows are narrowed to pull requests targeting `develop` or
 `rebuild/master`, plus post-merge pushes to those branches and manual dispatches.
 Topic-branch pushes no longer duplicate the same PR matrix. A workflow/ref
 concurrency key cancels obsolete runs after a newer commit arrives.
+
+## Hosted enforcement proof
+
+PR #6 exercised exact governance implementation `f63941b` against protected
+`develop`:
+
+- cross-platform conformance run `30366640099` passed Windows and macOS;
+- hybrid kernel conformance run `30366640023` passed Windows, macOS, and Ubuntu;
+- exactly five required jobs launched and no topic-branch push duplicate appeared;
+- GitHub reported the draft PR blocked until those required checks completed.
+
+This accepts the repository settings and workflow correction together. The PR's
+remaining documentation-only commit does not alter the accepted workflow definitions.
 
 ## Remaining owner decisions
 
