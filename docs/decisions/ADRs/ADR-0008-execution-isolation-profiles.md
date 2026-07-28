@@ -5,6 +5,7 @@
 - **Owners:** ForgeEngine project
 - **Checkpoint:** 2026-07-23-18
 - **Supersedes:** none
+- **Refined by:** ADR-0010 deterministic verifier process ownership
 - **Superseded by:** none
 
 ## Context

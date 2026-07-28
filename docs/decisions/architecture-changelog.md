@@ -194,3 +194,11 @@ checkpoint records.
   coordination remain unavailable. The audit also elevated deterministic Windows
   process-tree ownership to a P1 Slice 2E gate after one intermittent `taskkill`
   descendant-cleanup failure. See Checkpoint 30.
+- Passed the local deterministic verifier process-ownership gate. Windows now
+  creates the verifier suspended, assigns it to a Rust-owned kill-on-close Job
+  Object before execution, and confirms the hierarchy is empty after teardown.
+  Unix/macOS process-group errors and completion are checked. Five stress passes
+  covered 35 nested timeout/cancellation/abrupt-owner hierarchies with no survivor;
+  the complete hybrid gate passed. This is lifecycle reliability, not a sandbox.
+  Hosted acceptance and abrupt macOS owner-death parity remain open. See ADR-0010,
+  the process-ownership task, and Checkpoint 31.
