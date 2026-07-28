@@ -1,11 +1,14 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Command,
     sync::atomic::{AtomicU64, Ordering},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(windows)]
+use std::process::Stdio;
 
 use super::{
     BaselineIsolationProvider, IsolatedProcessSpec, IsolationPolicy, IsolationProvider,
