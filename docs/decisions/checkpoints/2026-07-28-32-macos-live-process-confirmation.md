@@ -54,6 +54,12 @@ records have already been reaped by `launchd`.
   kernel byte result by sizeof(int) and returns a PID count. Forge now clears
   thread-local errno, consumes the count directly, and still grows/fails at the
   documented bound.
+- The next macOS run passed direct-exit teardown and most repeated cases, then
+  exposed a list/detail race: a listed PID lost pidinfo state while a zero-signal
+  probe still succeeded. Forge now uses libc's SDK-matched Darwin structures and
+  constants, clears errno before the probe, treats an existing unknown member as
+  conservatively live, and retries until it disappears, reports SZOMB, or reaches
+  the explicit teardown deadline.
 - A fresh hosted Windows/macOS/Ubuntu behavioral run is still required. This
   checkpoint is not acceptance evidence by itself.
 
