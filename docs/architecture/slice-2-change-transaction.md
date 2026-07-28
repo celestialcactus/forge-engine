@@ -106,6 +106,20 @@ Slice 2E closes the functional gaps before higher-level intelligence work resume
    transaction flow over the same Rust authority. It does not gain raw shell or
    arbitrary direct-write powers.
 
+Increment 2E-1a has passed its local gate. A Rust candidate adapter now derives path
+identity from the repository's tracked inventory and `core.ignorecase`, validates
+CAS and base preconditions again at the mutation boundary, and applies the complete
+v2 operation algebra only in an external detached worktree. Evidence records exact
+operation order, paths, before/after digests and modes, blob identity, and a bounded
+diff. Candidate-side failure cleans up the worktree; the governed workspace remains
+unchanged.
+
+This does not yet make ChangeSet v2 promotable. Full-operation active publication,
+durable ownership/reconciliation, and hosted Tier-1 semantics remain open. New
+non-ASCII paths fail closed on case-insensitive repositories until native Unicode
+filesystem identity is proven. On Windows, executable-mode intent is represented in
+the candidate Git index because the filesystem has no POSIX executable bit.
+
 Slice 2F, not an unspecified future rewrite, owns authenticated `host_managed`
 negotiation, enterprise policy/audit exchange, a minimum real `restricted` backend,
 and high-level MCP/VS Code mutation.
