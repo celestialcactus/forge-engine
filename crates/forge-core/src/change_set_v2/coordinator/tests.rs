@@ -65,7 +65,7 @@ impl Fixture {
             .stage(b"move after\n", BlobContentKind::Utf8Text)
             .unwrap();
         let snapshot = workspace_snapshot_id(&repo).unwrap();
-        let mut ops = vec![
+        let ops = vec![
             ChangeOperationV2::Create {
                 path: "nested/new.txt".into(),
                 after: create,
@@ -93,12 +93,16 @@ impl Fixture {
             },
         ];
         #[cfg(unix)]
-        ops.push(ChangeOperationV2::SetMode {
-            path: "mode.sh".into(),
-            before_sha256: sha256(b"#!/bin/sh\n"),
-            before_mode: FileMode::Regular,
-            after_mode: FileMode::Executable,
-        });
+        let ops = {
+            let mut ops = ops;
+            ops.push(ChangeOperationV2::SetMode {
+                path: "mode.sh".into(),
+                before_sha256: sha256(b"#!/bin/sh\n"),
+                before_mode: FileMode::Regular,
+                after_mode: FileMode::Executable,
+            });
+            ops
+        };
         let mut change_set = ChangeSetV2 {
             schema_version: CHANGE_SET_V2_SCHEMA_VERSION,
             change_set_id: String::new(),
@@ -345,30 +349,28 @@ fn cancellation_before_mutation_is_one_durable_terminal_artifact() {
 #[cfg(windows)]
 #[test]
 fn windows_mode_change_fails_before_transaction_publication() {
-    let mut f = Fixture::new();
-    let before = sha256(b"replace before\n");
-    f.change_set.operations = vec![ChangeOperationV2::SetMode {
-        path: "replace.txt".into(),
-        before_sha256: before,
-        before_mode: FileMode::Regular,
-        after_mode: FileMode::Executable,
-    }];
-    f.change_set.change_set_id = change_set_id(&f.change_set);
-    let adapter = f.adapter.as_mut().unwrap();
-    let boundary = adapter.prepare(&f.change_set).unwrap();
-    adapter.apply(&boundary, &f.change_set).unwrap();
-    let candidate = adapter.candidate_path().unwrap().to_path_buf();
-    let c = f.coordinator();
-    let error = c
-        .register(&ChangeSetV2Registration {
-            boundary,
-            candidate_path: candidate,
-            change_set: f.change_set.clone(),
-        })
+    let fixture = Fixture::new();
+    let mut change_set = ChangeSetV2 {
+        schema_version: CHANGE_SET_V2_SCHEMA_VERSION,
+        change_set_id: String::new(),
+        snapshot_id: fixture.change_set.snapshot_id.clone(),
+        operations: vec![ChangeOperationV2::SetMode {
+            path: "replace.txt".into(),
+            before_sha256: sha256(b"replace before\n"),
+            before_mode: FileMode::Regular,
+            after_mode: FileMode::Executable,
+        }],
+    };
+    change_set.change_set_id = change_set_id(&change_set);
+    let coordinator = fixture.coordinator();
+    let identity = RepositoryPathIdentity::inspect(&fixture.repo, Path::new("git")).unwrap();
+    let error = coordinator
+        .platform_support(&change_set, &identity)
         .unwrap_err();
     assert!(error.contains("Set-mode promotion is not yet proven on Windows"));
-    assert!(fs::read_dir(&f.state).unwrap().all(|e| {
-        !e.unwrap()
+    assert!(fs::read_dir(&fixture.state).unwrap().all(|entry| {
+        !entry
+            .unwrap()
             .file_name()
             .to_string_lossy()
             .starts_with("transaction-")
