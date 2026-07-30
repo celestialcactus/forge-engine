@@ -1,9 +1,9 @@
 # Slice 2E: change fidelity and transaction coordination
 
-- **Status:** In progress; Increments 2E-0 (`fd3d9eb`) and 2E-1a (`b930d31`) accepted; process-ownership local gate passed
+- **Status:** In progress; Increments 2E-0 (`fd3d9eb`), 2E-1a (`b930d31`), verifier process ownership (`ff4aedf`), and 2E-2 (`8c29037`) accepted; Increment 2E-3 CLI and abrupt macOS owner-death remain
 - **Opened:** 2026-07-27
-- **Active branch:** `feature/slice-2e-process-ownership`
-- **Current base:** protected canonical `develop` at `c14edf5`
+- **Active branch:** `feature/slice-2e-durable-coordinator`
+- **Current base:** protected canonical `develop` at `5a02194`
 - **Tier-1 platforms:** Windows and macOS
 - **Compatibility platform:** Ubuntu
 - **Does not add:** generic shell, unrestricted file writes, symlink mutation, public MCP mutation, authenticated host-managed execution, or an unproven sandbox claim
@@ -101,6 +101,24 @@ Checkpoint 31.
    fresh identity checks and idempotent recovery, not the lock alone.
 5. Add graceful duplex cancellation. Abrupt host death remains reconstructable on
    the next startup.
+
+### Increment 2E-2 accepted result
+
+The Rust coordinator now registers one bounded transaction manifest, exact
+before-images, and an append-oriented transition journal outside the governed
+workspace. Promotion uses deterministic operation order, fresh identity and
+absence checks, advisory repository/transaction locks, per-operation verification,
+and immediate rollback when a synchronous operation or final verification fails.
+A new coordinator instance reconciles recognized interrupted states into one
+terminal artifact; corruption or unrecognized developer divergence becomes
+`repair_required` and is never silently overwritten.
+
+Hosted run `30511168400` passed the Rust/hybrid gate on Windows, macOS, and Ubuntu;
+run `30511168395` passed Windows/macOS TypeScript conformance. Windows executable
+create/mode changes and case-only active renames remain fail-before-mutation rather
+than being misrepresented as portable. This gate proves process-restart recovery,
+not a power-loss transaction. The coordinator is still a private Rust API: public
+CLI/MCP mutation and complete candidate cleanup remain later increments.
 
 ## Increment 2E-3: complete sovereign CLI
 

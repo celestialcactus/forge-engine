@@ -1,5 +1,34 @@
 # Architecture Changelog
 
+## 2026-07-30 — Durable ChangeSet v2 coordinator accepted
+
+- Accepted [ADR-0011](ADRs/ADR-0011-durable-changeset-v2-coordinator.md) at
+  implementation `8c29037`. The Rust-owned manifest, exact before-images, and
+  synchronized transition journal passed promotion/rollback fault injection,
+  process-restart reconciliation, corruption, cancellation, and divergent-edit
+  fixtures.
+- Hosted cross-platform run `30511168395` passed on Windows/macOS; hybrid kernel
+  run `30511168400` passed on Windows/macOS/Ubuntu.
+- The controlled VS Code 1.130 regression used only the seven checked Forge tools,
+  made one workspace-summary call, and completed without retries, built-in tools,
+  artifact externalization, or a stall. See
+  [Checkpoint 34](checkpoints/2026-07-30-34-durable-coordinator-hosted-and-vscode-gate.md).
+- Updated the authoritative build plan to 82% core completion. Abrupt macOS owner
+  death, complete candidate cleanup, and the sovereign transaction CLI remain the
+  Slice 2E critical path; public MCP mutation and restricted execution remain
+  Slice 2F.
+
+## 2026-07-29 — Durable ChangeSet v2 coordinator started
+
+- Opened Slice 2E-2 from protected `develop@5a02194`.
+- Proposed [ADR-0011](ADRs/ADR-0011-durable-changeset-v2-coordinator.md):
+  reuse the Rust-owned ChangeSet v2 contract with a bounded filesystem manifest,
+  exact before-images, append-oriented transitions, fresh per-path conflict checks,
+  and restart reconciliation.
+- Recorded [Checkpoint 33](checkpoints/2026-07-29-33-durable-coordinator-start.md).
+- Kept the guarantee explicit: process-crash recovery is in scope; power-loss
+  durability, macOS abrupt verifier-owner cleanup, and restricted execution remain
+  separate named gates.
 This is a concise navigation log. Detailed reasoning belongs in ADRs, audits, and
 checkpoint records.
 
