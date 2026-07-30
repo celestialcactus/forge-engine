@@ -1,5 +1,19 @@
 # Architecture Changelog
 
+## 2026-07-30 — Slice 2F-2a signed host challenge opened
+
+- Accepted
+  [ADR-0015](ADRs/ADR-0015-signed-host-challenge-ledger.md): Forge will verify a
+  short-lived, capability/policy-bound Ed25519 host statement and durably consume
+  its challenge before returning authority evidence.
+- Opened
+  [Slice 2F-2a](../tasks/SLICE-002F2A-authenticated-host-challenge-ledger.md) with
+  stale, altered, replay, restart, and concurrent-consumer rejection gates.
+- Recorded
+  [Checkpoint 41](checkpoints/2026-07-30-41-authenticated-host-challenge-design.md).
+  This is authentication and replay machinery, not an OS sandbox or an executing
+  host-managed provider.
+
 ## 2026-07-30 — Slice 2F-1 isolation authority contract accepted
 
 - Accepted Slice 2F-1 at `ef0a125`: providers now advertise bounded capabilities;
