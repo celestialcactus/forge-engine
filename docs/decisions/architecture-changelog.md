@@ -1,5 +1,17 @@
 # Architecture Changelog
 
+## 2026-07-30 — Unix owner-death watchdog started
+
+- Opened Slice 2E-3a to close the abrupt Unix/macOS verifier-owner-death gap before
+  exposing the sovereign transaction CLI. [ADR-0012](ADRs/ADR-0012-unix-owner-death-watchdog.md)
+  selects a small first-party Rust watchdog: Forge owns the only liveness-pipe
+  writer, the watchdog inherits the reader and verifier process group, and owner
+  EOF terminates the ordinary inherited hierarchy.
+- Missing or invalid helper packaging fails before verifier execution. This is
+  lifecycle reliability, not a sandbox; deliberate process-group escape and
+  permission containment remain separate Slice 2F concerns. See the
+  [Slice 2E-3a task](../tasks/SLICE-002E3A-unix-owner-death-watchdog.md) and
+  [Checkpoint 35](checkpoints/2026-07-30-35-unix-owner-death-watchdog-start.md).
 ## 2026-07-30 — Durable ChangeSet v2 coordinator accepted
 
 - Accepted [ADR-0011](ADRs/ADR-0011-durable-changeset-v2-coordinator.md) at

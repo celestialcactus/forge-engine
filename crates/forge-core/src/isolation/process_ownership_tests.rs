@@ -95,7 +95,7 @@ fn assert_descendant_cannot_finish(root: &Path) {
 fn repeated_timeout_and_cancellation_terminate_nested_process_trees() {
     for iteration in 0..3 {
         let timeout_root = fixture_root(&format!("timeout-{iteration}"));
-        let timeout = BaselineIsolationProvider
+        let timeout = BaselineIsolationProvider::default()
             .execute(
                 &IsolationPolicy::trusted(),
                 &IsolationRequest::trusted(),
@@ -113,7 +113,7 @@ fn repeated_timeout_and_cancellation_terminate_nested_process_trees() {
             started: Instant::now(),
             delay: Duration::from_millis(500),
         };
-        let cancelled = BaselineIsolationProvider
+        let cancelled = BaselineIsolationProvider::default()
             .execute(
                 &IsolationPolicy::trusted(),
                 &IsolationRequest::trusted(),
@@ -134,7 +134,7 @@ fn direct_child_exit_terminates_remaining_nested_descendants() {
     let mut spec = tree_spec(&root, Duration::from_secs(5));
     spec.arguments[1] =
         "isolation::process_ownership_tests::verifier_detaching_tree_helper".to_owned();
-    let outcome = BaselineIsolationProvider
+    let outcome = BaselineIsolationProvider::default()
         .execute(
             &IsolationPolicy::trusted(),
             &IsolationRequest::trusted(),
@@ -176,7 +176,7 @@ fn job_handle_closure_terminates_nested_tree_after_owner_is_killed() {
 #[ignore]
 fn verifier_owner_helper() {
     let root = PathBuf::from(env::var_os("FORGE_OWNER_FIXTURE_ROOT").expect("fixture root"));
-    let _ = BaselineIsolationProvider.execute(
+    let _ = BaselineIsolationProvider::default().execute(
         &IsolationPolicy::trusted(),
         &IsolationRequest::trusted(),
         &tree_spec(&root, Duration::from_secs(30)),
