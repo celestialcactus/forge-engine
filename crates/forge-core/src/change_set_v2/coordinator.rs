@@ -1091,7 +1091,7 @@ impl ChangeSetV2Coordinator {
             return Err("Coordinator journal is not a bounded regular file.".into());
         }
         let f = File::open(path).map_err(|e| format!("Cannot open coordinator journal: {e}"))?;
-        let mut out = Vec::new();
+        let mut out: Vec<ChangeSetV2Transition> = Vec::new();
         for line in BufReader::new(f).lines() {
             let line = line.map_err(|e| format!("Cannot read coordinator journal: {e}"))?;
             if line.is_empty() {
