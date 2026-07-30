@@ -90,7 +90,7 @@ test('CLI proposes, persists, inspects, and idempotently accepts one ChangeSet v
   const f = await fixture();
   try {
     const proposed = await forge(f, 'change', 'propose', f.proposal, '--policy', f.policy, '--approve');
-    assert.equal(proposed.status, 'verified_candidate');
+    assert.equal(proposed.status, 'verified_candidate', JSON.stringify(proposed));
     const id = transactionId(proposed);
     const proposedTransaction = proposed.transaction as Record<string, unknown>;
     assert.equal(proposedTransaction.state, 'prepared');
@@ -140,9 +140,9 @@ test('failed verification cleans the candidate and never registers an acceptable
   const f = await fixture(false);
   try {
     const proposed = await forge(f, 'change', 'propose', f.proposal, '--policy', f.policy, '--approve');
-    assert.equal(proposed.status, 'verification_failed');
+    assert.equal(proposed.status, 'verification_failed', JSON.stringify(proposed));
     assert.equal(proposed.transaction, undefined);
-    assert.equal(typeof proposed.candidateCleanup, 'string');
+    assert.equal(typeof proposed.candidateCleanup, 'string', JSON.stringify(proposed));
     assert.equal(await readFile(join(f.repository, 'message.txt'), 'utf8'), 'before\n');
     const entries = await readdir(f.engine, { recursive: true });
     assert.equal(entries.some((entry) => entry.includes('forge-v2-')), false);
@@ -167,7 +167,7 @@ test('a missing policy verifier fails honestly and still removes the candidate',
     const proposed = await forge(f, 'change', 'propose', f.proposal, '--policy', f.policy, '--approve');
     assert.equal(proposed.status, 'failed');
     assert.equal(proposed.transaction, undefined);
-    assert.equal(typeof proposed.candidateCleanup, 'string');
+    assert.equal(typeof proposed.candidateCleanup, 'string', JSON.stringify(proposed));
     assert.match(String(proposed.failure), /execute policy verification check/u);
     assert.equal(await readFile(join(f.repository, 'message.txt'), 'utf8'), 'before\n');
     const entries = await readdir(f.engine, { recursive: true });
