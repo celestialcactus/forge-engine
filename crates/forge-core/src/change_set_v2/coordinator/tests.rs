@@ -138,6 +138,7 @@ impl Fixture {
                 boundary,
                 candidate_path: candidate,
                 change_set: self.change_set.clone(),
+                verification: Vec::new(),
             })
             .unwrap();
         assert_eq!(artifact.state, ChangeSetV2CoordinatorState::Prepared);
@@ -202,7 +203,16 @@ fn git_text(root: &Path, args: &[&str]) -> String {
 fn promotes_full_supported_operation_set_and_survives_restart() {
     let mut f = Fixture::new();
     let (c, id) = f.prepare();
+    let prepared = c.inspect(&id).unwrap();
+    assert!(prepared.candidate_retained);
+    assert!(Path::new(&prepared.candidate_path).exists());
+    assert_eq!(
+        prepared.operation_count as usize,
+        f.change_set.operations.len()
+    );
     let a = c.promote(&id, &NoCancellation);
+    assert!(!a.candidate_retained);
+    assert!(!Path::new(&a.candidate_path).exists());
     assert_eq!(
         a.state,
         ChangeSetV2CoordinatorState::Promoted,
@@ -429,11 +439,32 @@ fn cancellation_before_mutation_is_one_durable_terminal_artifact() {
     let a = c.promote(&id, &Cancel);
     assert_eq!(a.state, ChangeSetV2CoordinatorState::RolledBack);
     assert!(a.cancellation_reason.is_some());
+    assert!(!a.candidate_retained);
+    assert!(!Path::new(&a.candidate_path).exists());
     let again = c.inspect(&id).unwrap();
     assert_eq!(again.state, ChangeSetV2CoordinatorState::RolledBack);
     assert_eq!(again.transitions.len(), 2);
 }
 
+#[test]
+fn explicit_discard_is_not_misreported_as_recovery() {
+    let mut fixture = Fixture::new();
+    let (coordinator, id) = fixture.prepare();
+    let prepared = coordinator.inspect(&id).unwrap();
+    assert!(prepared.candidate_retained);
+    let discarded = coordinator.discard(&id, &NoCancellation);
+    assert_eq!(discarded.state, ChangeSetV2CoordinatorState::Discarded);
+    assert!(!discarded.recovery_performed);
+    assert!(!discarded.candidate_retained);
+    assert!(!Path::new(&discarded.candidate_path).exists());
+    assert_eq!(
+        fs::read(fixture.repo.join("replace.txt")).unwrap(),
+        b"replace before\n"
+    );
+    let repeated = coordinator.discard(&id, &NoCancellation);
+    assert_eq!(repeated.state, ChangeSetV2CoordinatorState::Discarded);
+    assert_eq!(repeated.transitions, discarded.transitions);
+}
 #[cfg(windows)]
 #[test]
 fn windows_mode_change_fails_before_transaction_publication() {

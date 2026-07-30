@@ -1,13 +1,21 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto';
-import { resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { readFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import type { RunArtifact } from './slice0/contracts.js';
+import type { ApprovalFacts, CapabilityCall, RunArtifact } from './slice0/contracts.js';
 import { startForgeMcpServer } from './mcp/server.js';
 import {
   RustCandidateLifecycleRuntime,
   type CandidateLifecycleSubject,
-} from './hybrid/rust-candidate-lifecycle-runtime.js';import { artifactPayload, ForgeWorkspaceService, type ForgeWorkspaceServiceOptions } from './v1/service.js';
+} from './hybrid/rust-candidate-lifecycle-runtime.js';
+import type { TrustedVerificationCheckConfiguration } from './hybrid/rust-candidate-transaction-runtime.js';
+import {
+  RustSovereignChangeRuntime,
+  type SovereignChangeProposal,
+} from './hybrid/rust-sovereign-change-runtime.js';
+import { artifactPayload, ForgeWorkspaceService, type ForgeWorkspaceServiceOptions } from './v1/service.js';
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -15,6 +23,8 @@ const { positionals, values } = parseArgs({
     json: { type: 'boolean', default: false },
     workspace: { type: 'string' },
     config: { type: 'string' },
+    policy: { type: 'string' },
+    check: { type: 'string' },
     staged: { type: 'boolean', default: false },
     'case-sensitive': { type: 'boolean', default: false },
     'max-files': { type: 'string' },
@@ -25,6 +35,7 @@ const { positionals, values } = parseArgs({
     'max-diagnostics': { type: 'string' },
     'max-bytes': { type: 'string' },
     'candidate-parent': { type: 'string' },
+    'engine-root': { type: 'string' },
     approve: { type: 'boolean', default: false },
   },
 });
@@ -36,74 +47,142 @@ const serviceOptions: ForgeWorkspaceServiceOptions = configuredKernel === undefi
   ? {}
   : { kernel: { binaryPath: configuredKernel } };
 let service: ForgeWorkspaceService | undefined;
+
 const workspaceService = (): ForgeWorkspaceService => {
   service ??= new ForgeWorkspaceService(workspaceRoot, serviceOptions);
   return service;
 };
 
-const candidateLifecycle = (): RustCandidateLifecycleRuntime => {
+const requireKernel = (): string => {
   if (configuredKernel === undefined || configuredKernel.length === 0) {
-    throw new Error('Candidate lifecycle commands require FORGE_KERNEL_BINARY.');
+    throw new Error('Sovereign change commands require FORGE_KERNEL_BINARY.');
   }
+  return configuredKernel;
+};
+
+const engineRoot = (): string => resolve(
+  values['engine-root']
+    ?? process.env.FORGE_ENGINE_ROOT
+    ?? join(homedir(), '.forge'),
+);
+
+const candidateLifecycle = (): RustCandidateLifecycleRuntime => {
   const configuredParent = values['candidate-parent'] ?? process.env.FORGE_CANDIDATE_PARENT;
   if (configuredParent === undefined || configuredParent.trim().length === 0) {
-    throw new Error('Candidate lifecycle commands require --candidate-parent <path> or FORGE_CANDIDATE_PARENT.');
+    throw new Error('Legacy candidate lifecycle commands require --candidate-parent <path> or FORGE_CANDIDATE_PARENT.');
   }
   return new RustCandidateLifecycleRuntime({
-    kernelPath: configuredKernel,
+    kernelPath: requireKernel(),
     repositoryRoot: workspaceRoot,
     candidateParent: resolve(configuredParent),
   });
 };
 
-const printCandidateArtifact = (artifact: unknown): void => {
-  console.log(JSON.stringify(artifact, null, values.json ? 2 : 2));
-};
-
-const lifecycleApproval = (callId: string, capabilityId: string) => ({
-  schemaVersion: 1 as const,
-  callId,
-  capabilityId,
-  hostPolicy: {
-    posture: 'ask' as const,
-    source: 'forge.cli.explicit-operation',
-    reason: 'The local CLI requires explicit consent for candidate mutation.',
-  },
-  userConsent: {
-    status: 'granted' as const,
-    source: 'forge.cli.--approve',
-    reason: 'The developer supplied --approve for this exact lifecycle call.',
-  },
+const sovereignChangeRuntime = (
+  verificationChecks: readonly TrustedVerificationCheckConfiguration[] = [],
+): RustSovereignChangeRuntime => new RustSovereignChangeRuntime({
+  kernelPath: requireKernel(),
+  repositoryRoot: workspaceRoot,
+  engineRoot: engineRoot(),
+  verificationChecks,
 });
 
-const requireCandidateConsent = (): void => {
-  if (!values.approve) {
-    throw new Error('Candidate accept/discard requires --approve after inspecting the candidate.');
-  }
-};
-
-const candidateCall = (
-  capabilityId: string,
-  operationIdName: 'promotionId' | 'discardId',
-  operationId: string,
-  subject: CandidateLifecycleSubject,
-) => {
-  const callId = `candidate-cli:${randomUUID()}`;
-  return {
-    callId,
-    call: {
-      id: callId,
-      capabilityId,
-      input: { [operationIdName]: operationId, subject },
-    },
-    approvalFacts: lifecycleApproval(callId, capabilityId),
-  };
-};
 const integerOption = (raw: string | undefined, fallback: number, name: string): number => {
   if (raw === undefined) return fallback;
   const value = Number(raw);
   if (!Number.isInteger(value)) throw new Error(`${name} must be an integer.`);
   return value;
+};
+
+const readJson = async (path: string, label: string): Promise<unknown> => {
+  try {
+    return JSON.parse(await readFile(resolve(path), 'utf8')) as unknown;
+  } catch (error) {
+    throw new Error(`Cannot read ${label} JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+
+const loadProposal = async (path: string): Promise<SovereignChangeProposal> => {
+  const candidate = asRecord(await readJson(path, 'proposal'));
+  if (candidate?.schemaVersion !== 1 || !Array.isArray(candidate.operations)) {
+    throw new Error('Proposal JSON requires schemaVersion 1 and an operations array.');
+  }
+  return candidate as unknown as SovereignChangeProposal;
+};
+
+const loadVerificationPolicy = async (
+  path: string,
+): Promise<readonly TrustedVerificationCheckConfiguration[]> => {
+  const candidate = asRecord(await readJson(path, 'verification policy'));
+  if (candidate?.schemaVersion !== 1 || !Array.isArray(candidate.checks) || candidate.checks.length === 0) {
+    throw new Error('Verification policy JSON requires schemaVersion 1 and a non-empty checks array.');
+  }
+  return candidate.checks as unknown as readonly TrustedVerificationCheckConfiguration[];
+};
+
+const selectedChecks = (
+  checks: readonly TrustedVerificationCheckConfiguration[],
+): readonly string[] => {
+  const explicit = values.check?.split(',').map((value) => value.trim()).filter(Boolean);
+  return explicit === undefined || explicit.length === 0
+    ? checks.map((check) => check.checkId)
+    : explicit;
+};
+
+const mutationApproval = (
+  capabilityId: string,
+  input: unknown,
+): { readonly call: CapabilityCall; readonly approvalFacts: ApprovalFacts } => {
+  const callId = `forge-cli:${randomUUID()}`;
+  return {
+    call: { id: callId, capabilityId, input },
+    approvalFacts: {
+      schemaVersion: 1,
+      callId,
+      capabilityId,
+      hostPolicy: {
+        posture: 'ask',
+        source: 'forge.cli.explicit-operation',
+        reason: 'The local CLI requires explicit consent for sovereign change execution.',
+      },
+      userConsent: {
+        status: 'granted',
+        source: 'forge.cli.--approve',
+        reason: 'The developer supplied --approve for this exact change operation.',
+      },
+    },
+  };
+};
+
+const requireConsent = (operation: string): void => {
+  if (!values.approve) {
+    throw new Error(`${operation} requires --approve after reviewing the proposal or transaction.`);
+  }
+};
+
+const printJsonArtifact = (artifact: unknown): void => {
+  console.log(JSON.stringify(artifact, null, 2));
+};
+
+const printChangeArtifact = (artifact: unknown): void => {
+  if (values.json) {
+    printJsonArtifact(artifact);
+    return;
+  }
+  const value = asRecord(artifact);
+  const transaction = asRecord(value?.transaction) ?? value;
+  console.log(`Forge change: ${String(value?.status ?? transaction?.state ?? 'unknown')}`);
+  if (typeof transaction?.transactionId === 'string') console.log(`Transaction: ${transaction.transactionId}`);
+  if (typeof transaction?.changeSetId === 'string') console.log(`ChangeSet: ${transaction.changeSetId}`);
+  if (typeof transaction?.candidateRetained === 'boolean') console.log(`Candidate retained: ${transaction.candidateRetained}`);
+  if (Array.isArray(transaction?.verification)) console.log(`Verification checks: ${transaction.verification.length}`);
+  if (typeof value?.failure === 'string') console.log(`Failure: ${value.failure}`);
+  if (typeof transaction?.failure === 'string') console.log(`Failure: ${transaction.failure}`);
 };
 
 const printArtifact = (artifact: RunArtifact): void => {
@@ -119,6 +198,39 @@ const printArtifact = (artifact: RunArtifact): void => {
   console.log(JSON.stringify(payload.evidence, null, 2));
 };
 
+const legacyCandidateApproval = (callId: string, capabilityId: string): ApprovalFacts => ({
+  schemaVersion: 1,
+  callId,
+  capabilityId,
+  hostPolicy: {
+    posture: 'ask',
+    source: 'forge.cli.explicit-operation',
+    reason: 'The local CLI requires explicit consent for candidate mutation.',
+  },
+  userConsent: {
+    status: 'granted',
+    source: 'forge.cli.--approve',
+    reason: 'The developer supplied --approve for this exact lifecycle call.',
+  },
+});
+
+const candidateCall = (
+  capabilityId: string,
+  operationIdName: 'promotionId' | 'discardId',
+  operationId: string,
+  subject: CandidateLifecycleSubject,
+) => {
+  const callId = `candidate-cli:${randomUUID()}`;
+  return {
+    call: {
+      id: callId,
+      capabilityId,
+      input: { [operationIdName]: operationId, subject },
+    },
+    approvalFacts: legacyCandidateApproval(callId, capabilityId),
+  };
+};
+
 try {
   if (command === 'doctor') {
     const report = {
@@ -128,9 +240,14 @@ try {
       runtime: configuredKernel === undefined || configuredKernel.length === 0 ? 'typescript-control' : 'rust-kernel-typescript-adapter',
       mcp: 'stdio',
       workspaceRoot,
+      engineRoot: engineRoot(),
       readOnlyFeatures: ['summary', 'search', 'read', 'symbols', 'typescript-diagnostics', 'git-status', 'git-diff'],
+      changeFlow: configuredKernel === undefined || configuredKernel.length === 0 ? 'unavailable' : 'forge.kernel.changeset.v2',
+      isolation: 'trusted verification; process lifecycle owned; no Forge-enforced OS sandbox',
     };
-    console.log(values.json ? JSON.stringify(report) : `ForgeEngine doctor: OK\nNode: ${report.node}\nRuntime: ${report.runtime}\nMCP: ${report.mcp}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
+    console.log(values.json
+      ? JSON.stringify(report)
+      : `ForgeEngine doctor: OK\nNode: ${report.node}\nRuntime: ${report.runtime}\nMCP: ${report.mcp}\nChange flow: ${report.changeFlow}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
   } else if (command === 'inspect') {
     printArtifact(await workspaceService().inspect(integerOption(values['max-files'], 200, '--max-files')));
   } else if (command === 'search') {
@@ -166,50 +283,71 @@ try {
       staged: values.staged,
       maxBytes: integerOption(values['max-bytes'], 100_000, '--max-bytes'),
     }));
+  } else if (command === 'change') {
+    const action = positionals[1];
+    if (action === 'propose') {
+      requireConsent('forge change propose');
+      const proposalPath = positionals[2];
+      if (proposalPath === undefined || values.policy === undefined) {
+        throw new Error('Usage: forge change propose <proposal.json> --policy <verification-policy.json> --approve [--check <id,id>]');
+      }
+      const proposal = await loadProposal(proposalPath);
+      const checks = await loadVerificationPolicy(values.policy);
+      const checkIds = selectedChecks(checks);
+      const input = { proposalSchemaVersion: proposal.schemaVersion, selectedCheckIds: checkIds };
+      const exact = mutationApproval('workspace.change.propose', input);
+      printChangeArtifact(await sovereignChangeRuntime(checks).propose(
+        proposal,
+        checkIds,
+        exact.call,
+        exact.approvalFacts,
+      ));
+    } else {
+      const transactionId = positionals[2]?.trim();
+      if (transactionId === undefined || transactionId.length === 0) {
+        throw new Error('Usage: forge change <inspect|accept|discard> <transaction-id> [--approve]');
+      }
+      const runtime = sovereignChangeRuntime();
+      if (action === 'inspect') {
+        printChangeArtifact(await runtime.inspect(transactionId));
+      } else if (action === 'accept' || action === 'discard') {
+        requireConsent(`forge change ${action}`);
+        const capabilityId = `workspace.change.${action}`;
+        const exact = mutationApproval(capabilityId, { transactionId });
+        printChangeArtifact(action === 'accept'
+          ? await runtime.accept(transactionId, exact.call, exact.approvalFacts)
+          : await runtime.discard(transactionId, exact.call, exact.approvalFacts));
+      } else {
+        throw new Error('Usage: forge change <propose|inspect|accept|discard> ...');
+      }
+    }
   } else if (command === 'candidate') {
     const action = positionals[1];
     const candidateId = positionals[2]?.trim();
     if (candidateId === undefined || candidateId.length === 0) {
-      throw new Error('Usage: forge candidate <inspect|accept|discard> <candidate-id> --candidate-parent <path> [--approve]');
+      throw new Error('Legacy usage: forge candidate <inspect|accept|discard> <candidate-id> --candidate-parent <path> [--approve]');
     }
     const lifecycle = candidateLifecycle();
     if (action === 'inspect') {
-      printCandidateArtifact(await lifecycle.inspect(candidateId));
-    } else if (action === 'accept') {
-      requireCandidateConsent();
+      printJsonArtifact(await lifecycle.inspect(candidateId));
+    } else if (action === 'accept' || action === 'discard') {
+      requireConsent(`legacy forge candidate ${action}`);
       const subject = (await lifecycle.inspect(candidateId)).subject;
-      const promotionId = `promotion:cli:${randomUUID()}`;
+      const operationId = `${action}:cli:${randomUUID()}`;
+      const capabilityId = action === 'accept' ? 'workspace.candidate.promote' : 'workspace.candidate.discard';
       const exact = candidateCall(
-        'workspace.candidate.promote',
-        'promotionId',
-        promotionId,
+        capabilityId,
+        action === 'accept' ? 'promotionId' : 'discardId',
+        operationId,
         subject,
       );
-      printCandidateArtifact(await lifecycle.promote({
-        promotionId,
-        subject,
-        call: exact.call,
-        approvalFacts: exact.approvalFacts,
-      }));
-    } else if (action === 'discard') {
-      requireCandidateConsent();
-      const subject = (await lifecycle.inspect(candidateId)).subject;
-      const discardId = `discard:cli:${randomUUID()}`;
-      const exact = candidateCall(
-        'workspace.candidate.discard',
-        'discardId',
-        discardId,
-        subject,
-      );
-      printCandidateArtifact(await lifecycle.discard({
-        discardId,
-        subject,
-        call: exact.call,
-        approvalFacts: exact.approvalFacts,
-      }));
+      printJsonArtifact(action === 'accept'
+        ? await lifecycle.promote({ promotionId: operationId, subject, ...exact })
+        : await lifecycle.discard({ discardId: operationId, subject, ...exact }));
     } else {
-      throw new Error('Usage: forge candidate <inspect|accept|discard> <candidate-id> --candidate-parent <path> [--approve]');
-    }  } else if (command === 'run') {
+      throw new Error('Legacy usage: forge candidate <inspect|accept|discard> ...');
+    }
+  } else if (command === 'run') {
     const task = positionals.slice(1).join(' ').trim();
     if (task.length === 0) throw new Error('Usage: forge run <task> [--workspace <path>] [--json]');
     printArtifact(await workspaceService().run(task, integerOption(values['max-files'], 200, '--max-files')));
@@ -217,9 +355,15 @@ try {
     await startForgeMcpServer(workspaceRoot);
   } else {
     console.log([
-      'ForgeEngine V1 — Slice 1 read-only evidence runtime',
+      'ForgeEngine V1 — sovereign evidence runtime',
       '',
-      'Commands:',
+      'Core change flow:',
+      '  forge change propose <proposal.json> --policy <policy.json> --approve [--check <id,id>] [--json]',
+      '  forge change inspect <transaction-id> [--json]',
+      '  forge change accept <transaction-id> --approve [--json]',
+      '  forge change discard <transaction-id> --approve [--json]',
+      '',
+      'Evidence commands:',
       '  forge doctor [--json] [--workspace <path>]',
       '  forge inspect [--json] [--max-files <count>]',
       '  forge search <literal query> [--json] [--max-matches <count>]',
@@ -228,13 +372,11 @@ try {
       '  forge diagnostics [--config <tsconfig>] [--json] [--max-diagnostics <count>]',
       '  forge git-status [--json]',
       '  forge git-diff [--staged] [--json] [--max-bytes <count>]',
-      '  forge run <task> [--json]                    # deterministic read-only inventory plan',
-      '  forge candidate inspect <id> --candidate-parent <path> [--json]',
-      '  forge candidate accept <id> --candidate-parent <path> --approve [--json]',
-      '  forge candidate discard <id> --candidate-parent <path> --approve [--json]',
-      '  forge mcp [--workspace <path>]               # stdio; invoked by an MCP host',
+      '  forge run <task> [--json]',
+      '  forge mcp [--workspace <path>]',
       '',
-      'All workspace commands also accept --workspace <path>.',
+      'Change commands require FORGE_KERNEL_BINARY. State defaults to ~/.forge and can be overridden with --engine-root or FORGE_ENGINE_ROOT.',
+      'Verification is currently trusted local execution; Forge owns process cleanup but does not yet enforce an OS sandbox.',
     ].join('\n'));
   }
 } finally {

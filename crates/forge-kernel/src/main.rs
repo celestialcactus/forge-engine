@@ -1,5 +1,6 @@
 mod candidate_bridge;
 mod protocol;
+mod sovereign_change_bridge;
 mod transaction_bridge;
 
 use std::cell::RefCell;
@@ -402,6 +403,21 @@ fn main() {
         return;
     }
 
+    if discriminator.message_type == "change.start"
+        && discriminator.protocol_version == protocol::SOVEREIGN_CHANGE_PROTOCOL_VERSION
+    {
+        if let Err(failure) = sovereign_change_bridge::execute(&frame, reader, &mut writer) {
+            send_protocol_error(
+                &mut writer,
+                protocol::SOVEREIGN_CHANGE_PROTOCOL_VERSION,
+                failure.request_id.as_deref(),
+                failure.code,
+                &failure.message,
+            );
+            std::process::exit(2);
+        }
+        return;
+    }
     if discriminator.message_type == "transaction.start"
         && discriminator.protocol_version == protocol::TRANSACTION_PROTOCOL_VERSION
     {

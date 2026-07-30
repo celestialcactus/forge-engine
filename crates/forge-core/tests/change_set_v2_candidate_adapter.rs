@@ -430,3 +430,16 @@ fn manifest_rejects_control_paths_and_file_hierarchy_conflicts() {
         .contains("ancestor and descendant")
     );
 }
+
+#[test]
+fn repository_file_observation_returns_a_sha256_identity() {
+    let fixture = Fixture::new("observed-sha256");
+    let identity = RepositoryPathIdentity::inspect(&fixture.repository, Path::new("git"))
+        .expect("repository identity");
+    let observed = identity
+        .observe_tracked_file(&fixture.repository, Path::new("git"), "src/replace.txt")
+        .expect("file identity");
+    assert_eq!(observed.canonical_path, "src/replace.txt");
+    assert_eq!(observed.sha256, sha256(b"before\n"));
+    assert_eq!(observed.sha256.len(), 64);
+}
