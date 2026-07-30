@@ -42,7 +42,7 @@ const PROCESS_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
 #[cfg(unix)]
 const PROCESS_TERMINATION_POLL_INTERVAL: Duration = Duration::from_millis(5);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IsolationProfile {
     Trusted,
@@ -58,6 +58,15 @@ pub enum IsolationControl {
     Network,
     Credentials,
     Resources,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct IsolationProviderCapabilities {
+    pub provider_id: String,
+    pub supported_profiles: Vec<IsolationProfile>,
+    pub authenticates_host_attestations: bool,
+    pub restricted_controls: Vec<IsolationControl>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -217,6 +226,8 @@ pub struct IsolatedProcessOutcome {
 }
 
 pub trait IsolationProvider: Send + Sync {
+    fn capabilities(&self) -> IsolationProviderCapabilities;
+
     fn execute(
         &self,
         policy: &IsolationPolicy,
@@ -250,6 +261,15 @@ impl BaselineIsolationProvider {
 }
 
 impl IsolationProvider for BaselineIsolationProvider {
+    fn capabilities(&self) -> IsolationProviderCapabilities {
+        IsolationProviderCapabilities {
+            provider_id: "forge.baseline".to_owned(),
+            supported_profiles: vec![IsolationProfile::Trusted],
+            authenticates_host_attestations: false,
+            restricted_controls: Vec::new(),
+        }
+    }
+
     fn execute(
         &self,
         policy: &IsolationPolicy,
@@ -257,8 +277,8 @@ impl IsolationProvider for BaselineIsolationProvider {
         process: &IsolatedProcessSpec,
         cancellation: &dyn Cancellation,
     ) -> Result<IsolatedProcessOutcome, String> {
-        validate_isolation_policy(policy)?;
-        validate_policy_request(policy, request)?;
+        let capabilities = self.capabilities();
+        validate_isolation_provider_request(&capabilities, policy, request)?;
         validate_process(process)?;
         let mut isolation = match request.profile {
             IsolationProfile::Trusted => IsolationEvidence {
@@ -276,25 +296,9 @@ impl IsolationProvider for BaselineIsolationProvider {
                         .to_owned(),
                 ],
             },
-            IsolationProfile::HostManaged => {
-                let attestation = request
-                    .host_attestation
-                    .as_ref()
-                    .expect("validated host attestation");
-                IsolationEvidence {
-                    requested_profile: request.profile,
-                    effective_profile: IsolationProfile::HostManaged,
-                    enforcement: IsolationEnforcement::HostAttested,
-                    provider_id: attestation.provider_id.clone(),
-                    boundary_id: Some(attestation.boundary_id.clone()),
-                    forge_enforced: false,
-                    controls: attestation.attested_controls.clone(),
-                    limitations: vec![
-                        "Containment is attested by the host and is not independently enforced or verified by Forge."
-                            .to_owned(),
-                    ],
-                }
-            }
+            IsolationProfile::HostManaged => unreachable!(
+                "baseline provider capabilities reject host-managed execution before launch"
+            ),
             IsolationProfile::Restricted => {
                 return Err(
                     "The baseline isolation provider cannot enforce the restricted profile."
@@ -556,6 +560,124 @@ pub fn validate_isolation_policy(policy: &IsolationPolicy) -> Result<(), String>
     }
     Ok(())
 }
+pub fn validate_isolation_provider_capabilities(
+    capabilities: &IsolationProviderCapabilities,
+) -> Result<(), String> {
+    validate_identifier("Isolation provider ID", &capabilities.provider_id)?;
+    if capabilities.supported_profiles.is_empty()
+        || capabilities.supported_profiles.len() > 3
+        || capabilities
+            .supported_profiles
+            .iter()
+            .collect::<HashSet<_>>()
+            .len()
+            != capabilities.supported_profiles.len()
+    {
+        return Err("Isolation provider profiles are empty, duplicated, or invalid.".to_owned());
+    }
+    let supports_host = capabilities
+        .supported_profiles
+        .contains(&IsolationProfile::HostManaged);
+    if supports_host != capabilities.authenticates_host_attestations {
+        return Err(
+            "Host-managed provider support must authenticate host attestations.".to_owned(),
+        );
+    }
+    let supports_restricted = capabilities
+        .supported_profiles
+        .contains(&IsolationProfile::Restricted);
+    if capabilities.restricted_controls.len() > 5
+        || capabilities
+            .restricted_controls
+            .iter()
+            .collect::<HashSet<_>>()
+            .len()
+            != capabilities.restricted_controls.len()
+        || supports_restricted != !capabilities.restricted_controls.is_empty()
+    {
+        return Err(
+            "Restricted provider support must declare unique enforceable controls.".to_owned(),
+        );
+    }
+    Ok(())
+}
+
+pub fn validate_isolation_provider_request(
+    capabilities: &IsolationProviderCapabilities,
+    policy: &IsolationPolicy,
+    request: &IsolationRequest,
+) -> Result<(), String> {
+    validate_isolation_provider_capabilities(capabilities)?;
+    validate_isolation_policy(policy)?;
+    validate_policy_request(policy, request)?;
+    if !capabilities.supported_profiles.contains(&request.profile) {
+        return Err(format!(
+            "Isolation provider {} does not support profile {:?}.",
+            capabilities.provider_id, request.profile
+        ));
+    }
+    if request.profile == IsolationProfile::Restricted
+        && !policy
+            .required_controls
+            .iter()
+            .all(|control| capabilities.restricted_controls.contains(control))
+    {
+        return Err(format!(
+            "Isolation provider {} does not advertise every policy-required restricted control.",
+            capabilities.provider_id
+        ));
+    }
+    Ok(())
+}
+
+pub fn validate_isolation_evidence(
+    capabilities: &IsolationProviderCapabilities,
+    policy: &IsolationPolicy,
+    request: &IsolationRequest,
+    evidence: &IsolationEvidence,
+) -> Result<(), String> {
+    validate_isolation_provider_request(capabilities, policy, request)?;
+    if !evidence.is_consistent_with(request) {
+        return Err("Isolation evidence is inconsistent with the request.".to_owned());
+    }
+    if evidence.provider_id != capabilities.provider_id {
+        return Err(format!(
+            "Isolation evidence provider {} does not match executing provider {}.",
+            evidence.provider_id, capabilities.provider_id
+        ));
+    }
+    if evidence.limitations.is_empty()
+        || evidence
+            .limitations
+            .iter()
+            .any(|item| item.trim().is_empty() || item.len() > 1_024)
+    {
+        return Err("Isolation evidence requires bounded explicit limitations.".to_owned());
+    }
+    if request.profile == IsolationProfile::Restricted {
+        if !policy
+            .required_controls
+            .iter()
+            .all(|control| evidence.controls.contains(control))
+        {
+            return Err(
+                "Restricted isolation evidence omits a policy-required control.".to_owned(),
+            );
+        }
+        if !evidence
+            .controls
+            .iter()
+            .all(|control| capabilities.restricted_controls.contains(control))
+        {
+            return Err(
+                "Restricted isolation evidence claims a control the provider did not advertise."
+                    .to_owned(),
+            );
+        }
+    }
+    Ok(())
+}
+
 fn validate_policy_request(
     policy: &IsolationPolicy,
     request: &IsolationRequest,
