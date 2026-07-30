@@ -1,9 +1,9 @@
 # Slice 2E: change fidelity and transaction coordination
 
-- **Status:** In progress; Increments 2E-0 (`fd3d9eb`) and 2E-1a (`b930d31`) accepted; process-ownership local gate passed
+- **Status:** In progress; Increments 2E-0 (`fd3d9eb`) and 2E-1a (`b930d31`) accepted; process ownership accepted; Increment 2E-2 coordinator active
 - **Opened:** 2026-07-27
-- **Active branch:** `feature/slice-2e-process-ownership`
-- **Current base:** protected canonical `develop` at `c14edf5`
+- **Active branch:** `feature/slice-2e-durable-coordinator`
+- **Current base:** protected canonical `develop` at `5a02194`
 - **Tier-1 platforms:** Windows and macOS
 - **Compatibility platform:** Ubuntu
 - **Does not add:** generic shell, unrestricted file writes, symlink mutation, public MCP mutation, authenticated host-managed execution, or an unproven sandbox claim

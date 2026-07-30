@@ -1,5 +1,16 @@
 # Architecture Changelog
 
+## 2026-07-29 — Durable ChangeSet v2 coordinator started
+
+- Opened Slice 2E-2 from protected `develop@5a02194`.
+- Proposed [ADR-0011](ADRs/ADR-0011-durable-changeset-v2-coordinator.md):
+  reuse the Rust-owned ChangeSet v2 contract with a bounded filesystem manifest,
+  exact before-images, append-oriented transitions, fresh per-path conflict checks,
+  and restart reconciliation.
+- Recorded [Checkpoint 33](checkpoints/2026-07-29-33-durable-coordinator-start.md).
+- Kept the guarantee explicit: process-crash recovery is in scope; power-loss
+  durability, macOS abrupt verifier-owner cleanup, and restricted execution remain
+  separate named gates.
 This is a concise navigation log. Detailed reasoning belongs in ADRs, audits, and
 checkpoint records.
 

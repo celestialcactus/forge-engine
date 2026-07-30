@@ -1,5 +1,6 @@
 mod blob_store;
 mod candidate_adapter;
+mod coordinator;
 
 use std::collections::HashMap;
 
@@ -8,6 +9,7 @@ use sha2::{Digest, Sha256};
 
 pub use blob_store::FileBlobStore;
 pub use candidate_adapter::*;
+pub use coordinator::*;
 
 pub const CHANGE_SET_V2_SCHEMA_VERSION: u8 = 2;
 pub const MAXIMUM_CHANGE_OPERATIONS: usize = 20;
