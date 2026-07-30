@@ -243,14 +243,20 @@ impl SovereignChangeService {
                     artifact.candidate_cleanup = Some(adapter.discard(&boundary)?);
                     return Ok(());
                 }
-                let evidence = verification.execute(
+                let evidence = match verification.execute(
                     &candidate_path,
                     &crate::VerificationSelection {
                         check_id: check_id.clone(),
                         isolation: IsolationRequest::trusted(),
                     },
                     cancellation,
-                )?;
+                ) {
+                    Ok(evidence) => evidence,
+                    Err(error) => {
+                        artifact.candidate_cleanup = Some(adapter.discard(&boundary)?);
+                        return Err(error);
+                    }
+                };
                 let success = evidence.success;
                 let cancelled = evidence.cancelled;
                 artifact.verification.push(evidence);
@@ -264,6 +270,12 @@ impl SovereignChangeService {
                     artifact.candidate_cleanup = Some(adapter.discard(&boundary)?);
                     return Ok(());
                 }
+            }
+            if let Some(reason) = cancellation.reason() {
+                artifact.status = SovereignChangeProposalStatus::Cancelled;
+                artifact.failure = Some(reason);
+                artifact.candidate_cleanup = Some(adapter.discard(&boundary)?);
+                return Ok(());
             }
             let encoded = serde_json::to_vec(&artifact.verification)
                 .map_err(|error| format!("Cannot encode verification evidence: {error}"))?;

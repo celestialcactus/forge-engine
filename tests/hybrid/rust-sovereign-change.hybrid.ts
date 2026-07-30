@@ -150,3 +150,29 @@ test('failed verification cleans the candidate and never registers an acceptable
     await rm(f.root, { recursive: true, force: true });
   }
 });
+test('a missing policy verifier fails honestly and still removes the candidate', {
+  skip: kernelBinary === undefined ? 'FORGE_KERNEL_BINARY is required.' : false,
+}, async () => {
+  const f = await fixture();
+  try {
+    await writeFile(f.policy, JSON.stringify({
+      schemaVersion: 1,
+      checks: [{
+        checkId: 'missing',
+        executable: join(f.root, 'missing-verifier'),
+        timeoutMs: 10_000,
+        maxOutputBytes: 16_384,
+      }],
+    }));
+    const proposed = await forge(f, 'change', 'propose', f.proposal, '--policy', f.policy, '--approve');
+    assert.equal(proposed.status, 'failed');
+    assert.equal(proposed.transaction, undefined);
+    assert.equal(typeof proposed.candidateCleanup, 'string');
+    assert.match(String(proposed.failure), /execute policy verification check/u);
+    assert.equal(await readFile(join(f.repository, 'message.txt'), 'utf8'), 'before\n');
+    const entries = await readdir(f.engine, { recursive: true });
+    assert.equal(entries.some((entry) => entry.includes('forge-v2-')), false);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
