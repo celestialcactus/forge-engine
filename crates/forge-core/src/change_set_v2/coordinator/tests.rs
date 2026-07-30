@@ -328,6 +328,67 @@ fn restart_preserves_divergent_external_content_and_requires_repair() {
     assert_eq!(fs::read(created).unwrap(), b"external developer content\n");
 }
 
+#[derive(Clone, Copy)]
+enum RollbackCrashPoint {
+    Started,
+    FirstRestored,
+    BeforeTerminal,
+}
+
+struct FailThenCrash(RollbackCrashPoint);
+impl Hook for FailThenCrash {
+    fn reach(&mut self, point: HookPoint) -> Result<(), HookFailure> {
+        match point {
+            HookPoint::OperationRecorded(0) => {
+                Err(HookFailure::Ordinary("start rollback fault path".into()))
+            }
+            HookPoint::RollbackStarted if matches!(self.0, RollbackCrashPoint::Started) => Err(
+                HookFailure::Abrupt("crash after rolling_back transition".into()),
+            ),
+            HookPoint::RollbackRestored(_)
+                if matches!(self.0, RollbackCrashPoint::FirstRestored) =>
+            {
+                Err(HookFailure::Abrupt(
+                    "crash during rollback restoration".into(),
+                ))
+            }
+            HookPoint::BeforeRolledBack if matches!(self.0, RollbackCrashPoint::BeforeTerminal) => {
+                Err(HookFailure::Abrupt(
+                    "crash before rolled_back transition".into(),
+                ))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+#[test]
+fn restart_completes_every_interrupted_rollback_phase() {
+    for point in [
+        RollbackCrashPoint::Started,
+        RollbackCrashPoint::FirstRestored,
+        RollbackCrashPoint::BeforeTerminal,
+    ] {
+        let mut fixture = Fixture::new();
+        let (coordinator, id) = fixture.prepare();
+        let interrupted = coordinator.promote_hook(&id, &NoCancellation, &mut FailThenCrash(point));
+        assert_eq!(interrupted.state, ChangeSetV2CoordinatorState::RollingBack);
+        drop(coordinator);
+        let restarted = fixture.coordinator();
+        let recovered = restarted.inspect(&id).unwrap();
+        assert_eq!(
+            recovered.state,
+            ChangeSetV2CoordinatorState::RolledBack,
+            "{:?}",
+            recovered.failure
+        );
+        assert_eq!(
+            fs::read(fixture.repo.join("replace.txt")).unwrap(),
+            b"replace before\n"
+        );
+        assert!(!fixture.repo.join("nested/new.txt").exists());
+    }
+}
 struct Cancel;
 impl Cancellation for Cancel {
     fn reason(&self) -> Option<String> {
