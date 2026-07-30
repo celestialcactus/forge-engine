@@ -1,5 +1,40 @@
 # Architecture Changelog
 
+## 2026-07-30 — Slice 2F-1 isolation authority contract accepted
+
+- Accepted Slice 2F-1 at `ef0a125`: providers now advertise bounded capabilities;
+  Forge validates request support before execution and returned evidence against
+  provider, policy, and request afterward.
+- The baseline provider is trusted-only. Raw host-managed and unsupported
+  restricted requests fail before verifier launch; failed validation cannot retain
+  or promote a candidate.
+- Hosted cross-platform run
+  [30559452883](https://github.com/celestialcactus/forge-engine/actions/runs/30559452883)
+  passed Windows/macOS, and hybrid run
+  [30559452477](https://github.com/celestialcactus/forge-engine/actions/runs/30559452477)
+  passed Windows/macOS/Ubuntu.
+- A fresh controlled VS Code regression remained exactly one read-only Forge call
+  with seven selected Forge tools and no mutation. This is a tether regression,
+  not a restricted-provider test.
+- Recorded
+  [Checkpoint 40](checkpoints/2026-07-30-40-isolation-authority-contract-hosted-and-vscode-gate.md).
+  Core completion is conservatively 93%; authenticated host negotiation and a
+  proven Windows/macOS restricted backend remain.
+
+## 2026-07-30 — Slice 2F-1 isolation authority contract opened
+
+- Accepted
+  [ADR-0014](ADRs/ADR-0014-isolation-provider-authority.md): every execution
+  provider must advertise bounded capabilities, Forge validates support before
+  launch, and returned evidence must match provider, policy, and request.
+- Opened
+  [Slice 2F-1](../tasks/SLICE-002F1-isolation-authority-contract.md). The baseline
+  provider will support trusted execution only; unauthenticated host-managed
+  assertions will fail before process launch.
+- Recorded
+  [Checkpoint 39](checkpoints/2026-07-30-39-isolation-authority-contract-start.md).
+  This is a truthfulness and authority correction, not a sandbox or authenticated
+  handshake.
 ## 2026-07-30 — Slice 2E sovereign transaction loop accepted
 
 - Accepted Slice 2E-3b at `16c5569`. The public

@@ -297,7 +297,7 @@ fn retained_candidate_is_restart_discoverable_and_discardable_by_opaque_id() {
 }
 
 #[test]
-fn host_managed_execution_records_attestation_without_claiming_forge_enforcement() {
+fn unauthenticated_host_managed_execution_fails_before_process_launch() {
     let fixture = Fixture::new();
     let mut host_check = check("verifier_pass_helper", Duration::from_secs(5));
     host_check.isolation_policy = IsolationPolicy::host_managed(
@@ -321,24 +321,17 @@ fn host_managed_execution_records_attestation_without_claiming_forge_enforcement
 
     let artifact = execute_candidate_transaction(&request, &mut adapter, &NoCancellation);
 
-    assert_eq!(artifact.status, ChangeTransactionStatus::VerifiedCandidate);
-    let isolation = &artifact.verification.as_ref().unwrap().isolation;
-    assert_eq!(isolation.enforcement, IsolationEnforcement::HostAttested);
-    assert_eq!(isolation.provider_id, "fixture.host");
+    assert_eq!(artifact.status, ChangeTransactionStatus::Recovered);
+    assert!(artifact.verification.is_none());
+    assert!(adapter.retained_candidate_path().is_none());
+    assert!(artifact.failure.as_deref().is_some_and(|message| {
+        message.contains("forge.baseline does not support profile HostManaged")
+    }));
     assert_eq!(
-        isolation.boundary_id.as_deref(),
-        Some("boundary:host-fixture")
+        fs::read_to_string(fixture.repository.join("evidence.txt")).unwrap(),
+        "before\n"
     );
-    assert!(!isolation.forge_enforced);
-    assert!(
-        isolation
-            .limitations
-            .iter()
-            .any(|item| item.contains("not independently enforced"))
-    );
-    adapter.discard_retained_candidate().unwrap();
 }
-
 #[test]
 fn host_managed_execution_must_satisfy_every_policy_required_control() {
     let fixture = Fixture::new();
@@ -397,12 +390,9 @@ fn unsupported_restricted_execution_fails_closed_and_recovers_the_candidate() {
         artifact.requested_isolation.profile,
         IsolationProfile::Restricted
     );
-    assert!(
-        artifact
-            .failure
-            .as_deref()
-            .is_some_and(|message| message.contains("cannot enforce the restricted profile"))
-    );
+    assert!(artifact.failure.as_deref().is_some_and(|message| {
+        message.contains("forge.baseline does not support profile Restricted")
+    }));
     assert!(artifact.verification.is_none());
     assert!(adapter.retained_candidate_path().is_none());
 }

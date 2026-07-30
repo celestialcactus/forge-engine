@@ -2,7 +2,7 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
-**Last groomed:** 2026-07-30 after hosted and VS Code acceptance of Slice 2E-2
+**Last groomed:** 2026-07-30 after hosted and VS Code acceptance of Slice 2F-1
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
 
@@ -88,11 +88,14 @@ a Tier-2 compatibility gate because local/server deployments and CI must not
 require a platform fork. Context compilation, durable sessions, learned skills,
 and provider routing remain behind this functional core.
 
-Slice 2F is the current core delivery focus and pilot boundary: authenticated host
-negotiation, policy distribution and audit export, credential brokerage, at least
-one real Forge-restricted execution backend, and a high-level MCP/VS Code mutation
-workflow. Start with the host/restricted-execution contracts and adversarial
-Windows/macOS gates before exposing mutation to an IDE host.
+Slice 2F is the current core delivery focus and pilot boundary. Slice 2F-1 is
+accepted: every execution provider now declares bounded capabilities, the baseline
+supports trusted execution only, and unauthenticated host-managed or unsupported
+restricted requests fail before verifier launch. Slice 2F-2 must add the
+authenticated, freshness/replay-bound host handshake. Slice 2F-3 must prove a
+minimum Windows/macOS restricted backend adversarially. Only then may Slice 2F-4
+expose one high-level MCP/VS Code mutation workflow over the accepted transaction
+authority.
 
 ## Historical first build target: Slice 0 and the narrow Slice 1 spine
 
@@ -165,18 +168,20 @@ heavy enterprise friction. It must still provide:
 - no implication that an in-process rule is a containment boundary;
 - adapter points for organisational egress, DLP, identity, and audit systems.
 
-Robust enforcement remains a platform-specific backend. ADR-0008 now defines the
-Rust provider and evidence boundary before a backend is selected: developer-
-permission execution records no containment, host-managed execution records an
-allowlisted host attestation, and unavailable Forge-restricted execution fails
-closed. Windows, macOS, and Linux restricted mechanisms still require separate
-spikes and adversarial platform gates.
+Robust enforcement remains a platform-specific backend. ADR-0008 and ADR-0014 now
+define the Rust provider, capability, and evidence authority before a backend is
+selected: developer-permission execution records no containment, raw host-managed
+assertions fail closed, and unavailable Forge-restricted execution fails closed.
+Windows and macOS restricted mechanisms still require separate spikes and
+adversarial platform gates; Ubuntu remains a compatibility target behind the same
+provider contract.
 
 ### Honest current limitations
 
 - No Forge-enforced operating-system sandbox exists yet.
-- Host-managed isolation evidence is an allowlisted assertion, not independently
-  verified containment; the authenticated host handshake is not yet built.
+- Host-managed isolation is unavailable through the baseline provider. The
+  authenticated, freshness-bound, replay-resistant host handshake is not yet
+  built.
 - The Rust kernel still inherits the host environment and operating-system
   permissions. Slice 2D clears and reconstructs the verification child environment
   from a small baseline plus explicit policy values/names; exact implementation
@@ -231,7 +236,7 @@ must still have a named architectural home and an objective entry gate:
 | Deterministic supervised verifier process ownership | P1, Slice 2E | Local gate implemented under ADR-0010. Windows creates the verifier suspended, assigns it to a kill-on-close Job Object, then resumes; Unix/macOS uses a pre-exec process group with checked teardown. This is lifecycle control, not security containment. | Repeated nested timeout/cancellation tests pass on hosted Windows and macOS; Windows forced-owner-death proves kill-on-close; any cleanup uncertainty is terminal and explicit. |
 | Abrupt macOS/Unix owner-death handling | P1, Slice 2E | **Accepted at `c872a81`.** A packaged Rust watchdog observes parent-pipe EOF, owns the verifier process group, and uses a separate bounded startup acknowledgement. This is lifecycle control, not containment. | Hosted macOS and Ubuntu owner-`SIGKILL` fixtures leave no survivor marker; Windows retains its Job Object path; missing/invalid helper and verifier startup fail closed. |
 | High-level MCP/VS Code mutation workflow | P2, Slice 2F | Add only over the accepted transaction contract; never expose file-write or shell primitives. | Official MCP and controlled VS Code tests prove approvals, cancellation, compact evidence, no retry storm, no hidden promotion, and unchanged read-only behavior on failure. |
-| Authenticated host handshake and enterprise policy adapter | P2, Slice 2F | Replace the current `host_managed` assertion with authenticated, freshness-bound negotiation. Add policy distribution, durable audit export, and credential brokerage seams without importing host-private state into Rust. | Spoofed, stale, replayed, incomplete, and policy-incompatible attestations fail closed; exported audit facts reconstruct the decision. |
+| Authenticated host handshake and enterprise policy adapter | P2, Slice 2F | **Authority seam accepted at `ef0a125`; handshake pending Slice 2F-2.** Raw `host_managed` assertions now fail closed. Add authenticated, freshness-bound negotiation, policy distribution, durable audit export, and credential brokerage seams without importing host-private state into Rust. | Spoofed, stale, replayed, incomplete, and policy-incompatible attestations fail closed; exported audit facts reconstruct the decision. |
 | Minimum Forge-restricted execution backend | P2, Slice 2F | Implement and advertise only boundaries proven on Tier-1 platforms. Keep unsupported controls fail-closed. This is necessary for a credible pilot, but it must not block the controlled trusted-mode prototype. | Separate adversarial Windows and macOS process/filesystem/network tests support each advertised control; Ubuntu support may follow behind the same provider interface. |
 | Power-loss and filesystem durability | P3, release | Harden the journal/CAS design with crash and power-loss-oriented fault injection, directory durability, corruption detection, and repair tooling. Prefer Git object identity and small Forge journals over a bespoke content database. | Abrupt-termination tests at every durable transition either recover the exact transaction or report an explicit, non-destructive repair state. |
 | Reduced OS identity/privilege | P3, release | Add platform-specific token/credential reduction after containment semantics are stable. Environment minimization remains defense in depth, not a permission boundary. | Platform tests prove effective permissions and descendant cleanup rather than inferring them from configuration. |
@@ -258,17 +263,22 @@ promotion/discard. Continue as follows:
    shell powers.
 6. **Accepted:** pass local/adversarial and hosted Windows/macOS acceptance and
    retain Ubuntu as a compatibility gate, closing Slice 2E.
-7. Open Slice 2F for authenticated hosts, policy/audit exchange, a minimum real
-   restricted backend, and one high-level MCP/VS Code mutation workflow.
-8. Resume context compiler, sessions, skills, and provider expansion after the
-   Slice 2F minimum host/restricted-execution gate proves the remaining core
-   authority boundary.
+7. **Accepted:** bind execution evidence to a validated provider capability
+   descriptor and retire raw host-managed assertions.
+8. Add authenticated host negotiation plus policy/audit exchange.
+9. Prove the minimum Windows/macOS restricted backend with adversarial gates.
+10. Add one high-level MCP/VS Code mutation workflow over the accepted transaction
+    authority.
+11. Resume context compiler, sessions, skills, and provider expansion after the
+    Slice 2F minimum host/restricted-execution gate proves the remaining core
+    authority boundary.
 
 This sequence does not pretend sandboxing is optional forever. It prevents an
 unfinished sandbox program from delaying the controlled prototype while reserving
 and testing the authority seam now. `trusted` remains explicit no-containment,
-`host_managed` remains unavailable to an untrusted public caller until Slice 2F,
-and `restricted` continues to fail closed until a real provider passes its gate.
+`host_managed` remains unavailable until an authenticated provider passes Slice
+2F-2, and `restricted` continues to fail closed until a real provider passes its
+Slice 2F-3 gate.
 ## Research spike and gate status
 
 These are bounded investigations with a decision, not open-ended feature research.
@@ -282,6 +292,7 @@ is not repeated unless new evidence invalidates its checkpoint.
 | Slice 2E | Deterministic verifier process ownership | Accepted at `ff4aedf`; ADR-0010 and Checkpoints 31–32 | Can Windows and macOS terminate and confirm a nested verifier hierarchy across timeout, cancellation, normal child exit, and cleanup errors, while separately proving Windows owner-death behavior, without calling lifecycle control a sandbox? |
 | Slice 2E | Durable transaction coordinator | Accepted at `8c29037`; ADR-0011 and Checkpoints 33–34 | A bounded filesystem manifest, exact before-images, and synchronized transition journal make recognized process-restart states deterministic; ambiguity becomes `repair_required`, without claiming a power-loss transaction. |
 | Slice 2E | Unix/macOS abrupt owner death | Accepted at `c872a81`; ADR-0012 and Checkpoints 35–36 | Can a parent-owned liveness pipe, bounded startup acknowledgement, and first-party watchdog terminate the ordinary verifier hierarchy after Forge `SIGKILL` without claiming sandbox containment? Hosted macOS/Ubuntu say yes; Windows retains Job Objects. |
+| Slice 2F | Isolation provider authority | Accepted at `ef0a125`; ADR-0014 and Checkpoints 39–40 | Every provider advertises bounded authority; the baseline is trusted-only; unsupported host/restricted profiles and inconsistent evidence fail closed. |
 | Slice 2F | Restricted execution provider | Pending; Windows/macOS Tier-1 | Which process/filesystem/network controls can Forge independently prove and package on both enterprise desktop platforms? |
 | Slice 2 | TypeScript symbols and diagnostics | Accepted for the deterministic read-only path | Which compiler integration supplies symbols and diagnostics without making the kernel IDE-specific? Provider-generated edit fidelity remains behind the transaction proposal contract rather than a new LSP authority. |
 | Slice 4 | Local durable store | Pending | Which SQLite binding/migration approach satisfies Windows packaging, replay, and corruption recovery needs? |
@@ -315,7 +326,7 @@ not source volume or the number of abstractions present.
 
 | Scope | Estimated complete | Remaining critical path |
 | --- | ---: | --- |
-| Core runtime and dependable local change machinery | 92% | Slice 2E trusted-mode transaction loop is accepted. Remaining core path is authenticated host negotiation and the minimum proven Windows/macOS restricted-execution boundary in Slice 2F. |
+| Core runtime and dependable local change machinery | 93% | Slice 2E trusted-mode transaction loop and the Slice 2F-1 provider-authority contract are accepted. Remaining core path is authenticated host negotiation and the minimum proven Windows/macOS restricted-execution boundary. |
 | Shippable standalone CLI alpha | 53% | Slice 2E supplies a real sovereign change workflow. Remaining path is runtime convergence, one measured local and one direct cloud inference path, interactive multi-turn loop, effective config/doctor, packaging, and clean-install smoke tests. |
 | Broader V1 platform | 28% | Context quality gates, durable projections, reviewed skills/memory, symmetric host integrations, restricted execution, connectors, and release hardening. |
 
@@ -355,9 +366,10 @@ merely because implementation has started.
 **Go for bounded Slice 2F increments.** Slice 2E is accepted: the same Rust-owned
 ChangeSet v2 authority now applies, verifies, durably records, reconciles, accepts,
 discards, cleans up, and explains a representative change set through the public
-CLI on Windows/macOS/Ubuntu. Begin with authenticated host/policy negotiation and
-the restricted-execution provider contract, then prove the minimum Windows/macOS
-backend adversarially before enabling high-level MCP mutation.
+CLI on Windows/macOS/Ubuntu. Slice 2F-1 is also accepted: provider capability and
+evidence authority are explicit, while raw host assertions fail closed. Proceed to
+Slice 2F-2 authenticated host/policy negotiation, then prove the minimum
+Windows/macOS backend in Slice 2F-3 before enabling high-level MCP mutation.
 
 **No-go for parallel context compression, learned memory, skills, multi-provider,
 or raw MCP mutation programs.** Those features can make Forge look smarter without

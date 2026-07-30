@@ -2,7 +2,8 @@ use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 
 use crate::{
     BaselineIsolationProvider, Cancellation, IsolatedProcessSpec, IsolationProvider,
-    VerificationCheck, VerificationEvidence, VerificationSelection, validate_isolation_policy,
+    VerificationCheck, VerificationEvidence, VerificationSelection, validate_isolation_evidence,
+    validate_isolation_policy, validate_isolation_provider_request,
     validate_process_environment_policy,
 };
 
@@ -69,6 +70,18 @@ impl VerificationRunner {
             timeout: check.timeout,
             max_output_bytes: check.max_output_bytes,
         };
+        let provider_capabilities = self.isolation_provider.capabilities();
+        validate_isolation_provider_request(
+            &provider_capabilities,
+            &check.isolation_policy,
+            &selection.isolation,
+        )
+        .map_err(|error| {
+            format!(
+                "Could not execute policy verification check {}: {error}",
+                check.check_id
+            )
+        })?;
         let result = self
             .isolation_provider
             .execute(
@@ -83,6 +96,18 @@ impl VerificationRunner {
                     check.check_id
                 )
             })?;
+        validate_isolation_evidence(
+            &provider_capabilities,
+            &check.isolation_policy,
+            &selection.isolation,
+            &result.isolation,
+        )
+        .map_err(|error| {
+            format!(
+                "Policy verification check {} returned invalid isolation evidence: {error}",
+                check.check_id
+            )
+        })?;
         let success = result.status.is_some_and(|status| status.success())
             && !result.timed_out
             && !result.cancelled;
