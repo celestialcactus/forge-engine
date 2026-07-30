@@ -108,7 +108,10 @@ pub struct CleanRevisionWorktreeAdapter {
 
 impl CleanRevisionWorktreeAdapter {
     pub fn try_new(config: WorktreeAdapterConfig) -> Result<Self, String> {
-        Self::try_new_with_isolation_provider(config, Arc::new(BaselineIsolationProvider))
+        Self::try_new_with_isolation_provider(
+            config,
+            Arc::new(BaselineIsolationProvider::default()),
+        )
     }
 
     pub fn try_new_with_isolation_provider(

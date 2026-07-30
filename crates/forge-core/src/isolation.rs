@@ -14,7 +14,12 @@ use std::{
 };
 
 #[cfg(unix)]
-use std::os::unix::process::CommandExt;
+use std::os::{
+    fd::{AsRawFd, FromRawFd, OwnedFd, RawFd},
+    unix::{fs::PermissionsExt, process::CommandExt},
+};
+#[cfg(unix)]
+use std::path::Path;
 #[cfg(target_os = "macos")]
 mod macos_process_group;
 #[cfg(windows)]
@@ -32,6 +37,8 @@ const MAX_OUTPUT_BYTES: usize = 1_048_576;
 const MAX_TIMEOUT: Duration = Duration::from_secs(600);
 #[cfg(unix)]
 const PROCESS_TERMINATION_TIMEOUT: Duration = Duration::from_secs(2);
+#[cfg(unix)]
+const PROCESS_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
 #[cfg(unix)]
 const PROCESS_TERMINATION_POLL_INTERVAL: Duration = Duration::from_millis(5);
 
@@ -219,8 +226,28 @@ pub trait IsolationProvider: Send + Sync {
     ) -> Result<IsolatedProcessOutcome, String>;
 }
 
-#[derive(Default)]
-pub struct BaselineIsolationProvider;
+#[derive(Clone, Debug, Default)]
+pub struct BaselineIsolationProvider {
+    #[cfg(unix)]
+    unix_watchdog_executable: Option<PathBuf>,
+}
+
+impl BaselineIsolationProvider {
+    #[cfg(unix)]
+    pub fn with_unix_watchdog_executable(executable: PathBuf) -> Self {
+        Self {
+            unix_watchdog_executable: Some(executable),
+        }
+    }
+
+    #[cfg(unix)]
+    fn resolve_unix_watchdog(&self) -> Result<PathBuf, String> {
+        match self.unix_watchdog_executable.as_deref() {
+            Some(executable) => validate_unix_watchdog(executable),
+            None => locate_packaged_unix_watchdog(),
+        }
+    }
+}
 
 impl IsolationProvider for BaselineIsolationProvider {
     fn execute(
@@ -283,7 +310,12 @@ impl IsolationProvider for BaselineIsolationProvider {
             .limitations
             .push(process_ownership_limitation().to_owned());
 
-        let (execution, environment) = run_bounded_process(process, cancellation)?;
+        let (execution, environment) = run_bounded_process(
+            process,
+            cancellation,
+            #[cfg(unix)]
+            &self.resolve_unix_watchdog()?,
+        )?;
         Ok(IsolatedProcessOutcome {
             status: execution.status,
             timed_out: execution.timed_out,
@@ -303,12 +335,165 @@ fn process_ownership_limitation() -> &'static str {
 
 #[cfg(unix)]
 fn process_ownership_limitation() -> &'static str {
-    "Forge launches the verifier in a dedicated process group and confirms group teardown during supervised completion; this controls lifecycle, not permissions, and abrupt Forge process death is not yet covered on Unix."
+    "Forge launches a packaged watchdog and verifier in one dedicated process group, confirms supervised teardown, and uses parent-pipe EOF for ordinary owner-death cleanup; this controls lifecycle, not permissions, and a trusted verifier may deliberately escape the group."
 }
 
 #[cfg(not(any(unix, windows)))]
 fn process_ownership_limitation() -> &'static str {
     "Forge supervises only the direct verifier process on this platform; descendant ownership is unsupported and no containment is claimed."
+}
+
+#[cfg(unix)]
+fn validate_unix_watchdog(executable: &Path) -> Result<PathBuf, String> {
+    let canonical = executable.canonicalize().map_err(|error| {
+        format!(
+            "Unix verifier watchdog {} is unavailable: {error}",
+            executable.display()
+        )
+    })?;
+    let metadata = canonical.metadata().map_err(|error| {
+        format!(
+            "Could not inspect Unix verifier watchdog {}: {error}",
+            canonical.display()
+        )
+    })?;
+    if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
+        return Err(format!(
+            "Unix verifier watchdog {} is not an executable file.",
+            canonical.display()
+        ));
+    }
+    if canonical.file_name().and_then(|name| name.to_str()) != Some("forge-process-watchdog") {
+        return Err(
+            "Unix verifier watchdog must be the packaged forge-process-watchdog executable."
+                .to_owned(),
+        );
+    }
+    Ok(canonical)
+}
+
+#[cfg(unix)]
+fn locate_packaged_unix_watchdog() -> Result<PathBuf, String> {
+    let current = env::current_exe()
+        .map_err(|error| format!("Could not locate the running Forge executable: {error}"))?;
+    let directory = current
+        .parent()
+        .ok_or_else(|| "Running Forge executable has no parent directory.".to_owned())?;
+    let mut candidates = vec![directory.join("forge-process-watchdog")];
+    if directory.file_name().and_then(|name| name.to_str()) == Some("deps")
+        && let Some(build_directory) = directory.parent()
+    {
+        candidates.push(build_directory.join("forge-process-watchdog"));
+    }
+    for candidate in candidates {
+        if candidate.exists() {
+            return validate_unix_watchdog(&candidate);
+        }
+    }
+    Err("Packaged Unix verifier watchdog is unavailable beside Forge; verifier execution was not started."
+        .to_owned())
+}
+
+#[cfg(unix)]
+fn create_unix_owner_pipe() -> Result<(OwnedFd, OwnedFd), String> {
+    let mut descriptors = [-1_i32; 2];
+    // SAFETY: descriptors points to storage for the two descriptors returned by pipe.
+    if unsafe { libc::pipe(descriptors.as_mut_ptr()) } != 0 {
+        return Err(format!(
+            "Could not create Unix owner liveness pipe: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    // SAFETY: pipe returned two new owned descriptors.
+    let reader = unsafe { OwnedFd::from_raw_fd(descriptors[0]) };
+    // SAFETY: pipe returned two new owned descriptors.
+    let writer = unsafe { OwnedFd::from_raw_fd(descriptors[1]) };
+    set_descriptor_flag(
+        reader.as_raw_fd(),
+        libc::F_GETFL,
+        libc::F_SETFL,
+        libc::O_NONBLOCK,
+        0,
+    )?;
+    set_descriptor_flag(
+        reader.as_raw_fd(),
+        libc::F_GETFD,
+        libc::F_SETFD,
+        0,
+        libc::FD_CLOEXEC,
+    )?;
+    set_descriptor_flag(
+        writer.as_raw_fd(),
+        libc::F_GETFD,
+        libc::F_SETFD,
+        libc::FD_CLOEXEC,
+        0,
+    )?;
+    Ok((reader, writer))
+}
+
+#[cfg(unix)]
+fn create_unix_startup_pipe() -> Result<(OwnedFd, OwnedFd), String> {
+    let mut descriptors = [-1_i32; 2];
+    // SAFETY: descriptors points to storage for the two descriptors returned by pipe.
+    if unsafe { libc::pipe(descriptors.as_mut_ptr()) } != 0 {
+        return Err(format!(
+            "Could not create Unix verifier startup pipe: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    // SAFETY: pipe returned two new owned descriptors.
+    let reader = unsafe { OwnedFd::from_raw_fd(descriptors[0]) };
+    // SAFETY: pipe returned two new owned descriptors.
+    let writer = unsafe { OwnedFd::from_raw_fd(descriptors[1]) };
+    set_descriptor_flag(
+        reader.as_raw_fd(),
+        libc::F_GETFL,
+        libc::F_SETFL,
+        libc::O_NONBLOCK,
+        0,
+    )?;
+    set_descriptor_flag(
+        reader.as_raw_fd(),
+        libc::F_GETFD,
+        libc::F_SETFD,
+        libc::FD_CLOEXEC,
+        0,
+    )?;
+    set_descriptor_flag(
+        writer.as_raw_fd(),
+        libc::F_GETFD,
+        libc::F_SETFD,
+        0,
+        libc::FD_CLOEXEC,
+    )?;
+    Ok((reader, writer))
+}
+
+#[cfg(unix)]
+fn set_descriptor_flag(
+    descriptor: RawFd,
+    get_command: libc::c_int,
+    set_command: libc::c_int,
+    add: libc::c_int,
+    remove: libc::c_int,
+) -> Result<(), String> {
+    // SAFETY: descriptor is owned by the caller and get_command is a valid fcntl query.
+    let current = unsafe { libc::fcntl(descriptor, get_command) };
+    if current < 0 {
+        return Err(format!(
+            "Could not inspect Unix owner liveness descriptor: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    // SAFETY: descriptor is owned by the caller and set_command accepts flag bits.
+    if unsafe { libc::fcntl(descriptor, set_command, (current | add) & !remove) } != 0 {
+        return Err(format!(
+            "Could not configure Unix owner liveness descriptor: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(())
 }
 
 fn validate_identifier(label: &str, value: &str) -> Result<(), String> {
@@ -477,10 +662,12 @@ struct OwnedProcessTree {
     terminated: bool,
     #[cfg(windows)]
     job: windows_job::WindowsJob,
+    #[cfg(unix)]
+    _owner_liveness: OwnedFd,
 }
 
 impl OwnedProcessTree {
-    fn spawn(command: &mut Command) -> Result<Self, String> {
+    fn spawn(command: &mut Command, #[cfg(unix)] owner_liveness: OwnedFd) -> Result<Self, String> {
         #[cfg(windows)]
         {
             let job = windows_job::WindowsJob::create()?;
@@ -506,8 +693,6 @@ impl OwnedProcessTree {
             })
         }
 
-        #[cfg(unix)]
-        command.process_group(0);
         #[cfg(not(windows))]
         {
             let child = command
@@ -518,6 +703,8 @@ impl OwnedProcessTree {
                 child,
                 process_id,
                 terminated: false,
+                #[cfg(unix)]
+                _owner_liveness: owner_liveness,
             })
         }
     }
@@ -580,19 +767,51 @@ impl Drop for OwnedProcessTree {
 fn run_bounded_process(
     process: &IsolatedProcessSpec,
     cancellation: &dyn Cancellation,
+    #[cfg(unix)] watchdog_executable: &Path,
 ) -> Result<(BoundedProcessResult, ProcessEnvironmentEvidence), String> {
     let (inherited_environment, environment_evidence) = minimal_process_environment(process)?;
-    let mut command = Command::new(&process.executable);
-    command
-        .current_dir(&process.working_directory)
-        .args(&process.arguments)
-        .env_clear()
-        .envs(inherited_environment)
-        .envs(process.environment.iter().cloned())
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut process_tree = OwnedProcessTree::spawn(&mut command)?;
+    #[cfg(unix)]
+    let mut process_tree = {
+        let (owner_reader, owner_writer) = create_unix_owner_pipe()?;
+        let (startup_reader, startup_writer) = create_unix_startup_pipe()?;
+        let mut command = Command::new(watchdog_executable);
+        command
+            .arg("--owner-fd")
+            .arg(owner_reader.as_raw_fd().to_string())
+            .arg("--startup-fd")
+            .arg(startup_writer.as_raw_fd().to_string())
+            .arg("--")
+            .arg(&process.executable)
+            .args(&process.arguments)
+            .current_dir(&process.working_directory)
+            .env_clear()
+            .envs(inherited_environment)
+            .envs(process.environment.iter().cloned())
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .process_group(0);
+        let launched = OwnedProcessTree::spawn(&mut command, owner_writer);
+        drop(owner_reader);
+        drop(startup_writer);
+        let mut launched = launched?;
+        await_unix_watchdog_startup(&mut launched, startup_reader)?;
+        launched
+    };
+    #[cfg(not(unix))]
+    let mut process_tree = {
+        let mut command = Command::new(&process.executable);
+        command
+            .current_dir(&process.working_directory)
+            .args(&process.arguments)
+            .env_clear()
+            .envs(inherited_environment)
+            .envs(process.environment.iter().cloned())
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        OwnedProcessTree::spawn(&mut command)?
+    };
     let stdout = process_tree
         .child
         .stdout
@@ -814,6 +1033,65 @@ fn reserve_output(budget: &AtomicUsize, maximum_bytes: usize, requested: usize) 
             Ok(_) => return reserved,
             Err(actual) => current = actual,
         }
+    }
+}
+
+#[cfg(unix)]
+fn await_unix_watchdog_startup(
+    process_tree: &mut OwnedProcessTree,
+    startup_reader: OwnedFd,
+) -> Result<(), String> {
+    let started = Instant::now();
+    loop {
+        let mut status = 0_u8;
+        // SAFETY: startup_reader owns the descriptor and status is one writable byte.
+        let result = unsafe {
+            libc::read(
+                startup_reader.as_raw_fd(),
+                (&mut status as *mut u8).cast::<libc::c_void>(),
+                1,
+            )
+        };
+        if result == 1 {
+            return match status {
+                b'S' => Ok(()),
+                b'F' => Err(
+                    "Could not start isolated process through the Unix verifier watchdog."
+                        .to_owned(),
+                ),
+                _ => Err("Unix verifier watchdog returned an invalid startup status.".to_owned()),
+            };
+        }
+        if result == 0 {
+            return Err(
+                "Unix verifier watchdog exited before confirming verifier startup.".to_owned(),
+            );
+        }
+        let error = std::io::Error::last_os_error();
+        match error.raw_os_error() {
+            Some(libc::EAGAIN) => {}
+            Some(libc::EINTR) => continue,
+            _ => {
+                return Err(format!(
+                    "Could not read Unix verifier watchdog startup status: {error}"
+                ));
+            }
+        }
+        if let Some(status) = process_tree
+            .child
+            .try_wait()
+            .map_err(|error| format!("Could not observe Unix verifier watchdog startup: {error}"))?
+        {
+            return Err(format!(
+                "Unix verifier watchdog exited with {status} before confirming verifier startup."
+            ));
+        }
+        if started.elapsed() >= PROCESS_STARTUP_TIMEOUT {
+            return Err(
+                "Unix verifier watchdog did not confirm startup within five seconds.".to_owned(),
+            );
+        }
+        thread::sleep(PROCESS_TERMINATION_POLL_INTERVAL);
     }
 }
 

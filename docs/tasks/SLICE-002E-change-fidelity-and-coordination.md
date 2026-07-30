@@ -1,9 +1,9 @@
 # Slice 2E: change fidelity and transaction coordination
 
-- **Status:** In progress; Increments 2E-0 (`fd3d9eb`), 2E-1a (`b930d31`), verifier process ownership (`ff4aedf`), and 2E-2 (`8c29037`) accepted; Increment 2E-3 CLI and abrupt macOS owner-death remain
+- **Status:** In progress; Increments 2E-0 (`fd3d9eb`), 2E-1a (`b930d31`), verifier process ownership (`ff4aedf`), 2E-2 (`8c29037`), and 2E-3a (`c872a81`) accepted; Increment 2E-3b CLI/candidate cleanup remains
 - **Opened:** 2026-07-27
-- **Active branch:** `feature/slice-2e-durable-coordinator`
-- **Current base:** protected canonical `develop` at `5a02194`
+- **Active branch:** `feature/slice-2e3-owner-death`; next branch will be Slice 2E-3b
+- **Current base:** protected canonical `develop` at `6a25a51`
 - **Tier-1 platforms:** Windows and macOS
 - **Compatibility platform:** Ubuntu
 - **Does not add:** generic shell, unrestricted file writes, symlink mutation, public MCP mutation, authenticated host-managed execution, or an unproven sandbox claim
@@ -120,7 +120,19 @@ than being misrepresented as portable. This gate proves process-restart recovery
 not a power-loss transaction. The coordinator is still a private Rust API: public
 CLI/MCP mutation and complete candidate cleanup remain later increments.
 
-## Increment 2E-3: complete sovereign CLI
+## Increment 2E-3a: abrupt Unix/macOS verifier owner death — accepted
+
+The packaged Rust watchdog uses a parent-owned liveness pipe, bounded verifier
+startup acknowledgement, and one dedicated process group. Hosted run
+`30551820932` passed on Windows, macOS, and Ubuntu; Node run `30551821183` passed
+on both Tier-1 platforms. The macOS/Ubuntu owner-`SIGKILL` fixture left no survivor
+marker, Windows retained Job Objects, and a controlled seven-tool VS Code summary
+completed with one call. See ADR-0012 and Checkpoints 35–36.
+
+This is lifecycle ownership, not sandbox containment. Deliberate process-group
+escape and permission restrictions remain Slice 2F.
+
+## Increment 2E-3b: complete sovereign CLI
 
 Provide one high-level local flow that can propose/stage, verify, inspect, accept,
 or discard a transaction. The CLI transports and renders Rust artifacts. It does
