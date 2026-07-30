@@ -1,5 +1,19 @@
 # Architecture Changelog
 
+## 2026-07-30 — Slice 2F-1 isolation authority contract opened
+
+- Accepted
+  [ADR-0014](ADRs/ADR-0014-isolation-provider-authority.md): every execution
+  provider must advertise bounded capabilities, Forge validates support before
+  launch, and returned evidence must match provider, policy, and request.
+- Opened
+  [Slice 2F-1](../tasks/SLICE-002F1-isolation-authority-contract.md). The baseline
+  provider will support trusted execution only; unauthenticated host-managed
+  assertions will fail before process launch.
+- Recorded
+  [Checkpoint 39](checkpoints/2026-07-30-39-isolation-authority-contract-start.md).
+  This is a truthfulness and authority correction, not a sandbox or authenticated
+  handshake.
 ## 2026-07-30 — Slice 2E sovereign transaction loop accepted
 
 - Accepted Slice 2E-3b at `16c5569`. The public
