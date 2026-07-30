@@ -3,7 +3,7 @@ use super::{
     PathIdentityResolver, RepositoryPathIdentity, change_set_sha256, sha256,
     validate_change_set_v2, verify_change_set_blobs,
 };
-use crate::{Cancellation, workspace_snapshot_id};
+use crate::{Cancellation, VerificationEvidence, workspace_snapshot_id};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -48,6 +48,7 @@ pub struct ChangeSetV2Registration {
     pub boundary: CandidateOperationBoundaryEvidence,
     pub candidate_path: PathBuf,
     pub change_set: ChangeSetV2,
+    pub verification: Vec<VerificationEvidence>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,6 +89,10 @@ pub struct ChangeSetV2CoordinatorArtifact {
     pub change_set_id: String,
     pub base_revision: String,
     pub state: ChangeSetV2CoordinatorState,
+    pub operation_count: u32,
+    pub candidate_path: String,
+    pub candidate_retained: bool,
+    pub verification: Vec<VerificationEvidence>,
     pub transitions: Vec<ChangeSetV2Transition>,
     pub recovery_performed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -107,6 +112,7 @@ struct Manifest {
     boundary: CandidateOperationBoundaryEvidence,
     candidate_path: String,
     change_set: ChangeSetV2,
+    verification: Vec<VerificationEvidence>,
     operation_order: Vec<usize>,
     created_at_unix_ms: u64,
 }
@@ -235,6 +241,46 @@ impl ChangeSetV2Coordinator {
     pub fn promote(&self, id: &str, c: &dyn Cancellation) -> ChangeSetV2CoordinatorArtifact {
         self.promote_hook(id, c, &mut Noop)
     }
+    pub fn discard(&self, id: &str, c: &dyn Cancellation) -> ChangeSetV2CoordinatorArtifact {
+        let run = (|| -> Result<ChangeSetV2CoordinatorArtifact, String> {
+            self.reconcile_all()?;
+            let _repo = self.repo_lock()?;
+            let _tx = self.tx_lock(id)?;
+            let m = self.load_manifest(id)?;
+            let t = self.read_transitions(id)?;
+            let state = t
+                .last()
+                .ok_or("Coordinator journal has no transition.")?
+                .state;
+            if state.terminal() {
+                if matches!(
+                    state,
+                    ChangeSetV2CoordinatorState::Promoted | ChangeSetV2CoordinatorState::RolledBack
+                ) {
+                    self.cleanup_candidate(&m)?;
+                }
+                return self.artifact_from(m, t, false, None, None);
+            }
+            if let Some(reason) = c.reason() {
+                return self.rollback(
+                    &m,
+                    t,
+                    &format!("Discard cancelled before candidate cleanup: {reason}"),
+                    &mut Noop,
+                );
+            }
+            self.rollback(
+                &m,
+                t,
+                "Verified candidate discarded by explicit developer decision.",
+                &mut Noop,
+            )
+        })();
+        match run {
+            Ok(value) => value,
+            Err(error) => self.failure_artifact(id, error),
+        }
+    }
     pub fn reconcile_all(&self) -> Result<Vec<ChangeSetV2CoordinatorArtifact>, String> {
         let _repo = self.repo_lock()?;
         let mut ids = Vec::new();
@@ -281,6 +327,12 @@ impl ChangeSetV2Coordinator {
             .ok_or("Coordinator journal has no transition.")?
             .state;
         if state.terminal() || state == ChangeSetV2CoordinatorState::Prepared {
+            if matches!(
+                state,
+                ChangeSetV2CoordinatorState::Promoted | ChangeSetV2CoordinatorState::RolledBack
+            ) {
+                self.cleanup_candidate(&m)?;
+            }
             return self.artifact_from(m, t, false, None, None);
         }
         self.rollback(
@@ -413,6 +465,7 @@ impl ChangeSetV2Coordinator {
                     hook,
                 );
             }
+            self.cleanup_candidate(&m)?;
             match hook.reach(HookPoint::BeforePromoted) {
                 Ok(()) => {}
                 Err(HookFailure::Abrupt(e)) => {
@@ -446,6 +499,7 @@ impl ChangeSetV2Coordinator {
             .ok_or("Coordinator journal has no transition.")?
             .state;
         if last == ChangeSetV2CoordinatorState::Prepared {
+            self.cleanup_candidate(m)?;
             self.append(
                 &m.transaction_id,
                 &mut t,
@@ -484,6 +538,7 @@ impl ChangeSetV2Coordinator {
             }
         }
         self.require_all_before(m)?;
+        self.cleanup_candidate(m)?;
         if let Err(HookFailure::Abrupt(e)) = hook.reach(HookPoint::BeforeRolledBack) {
             return self.artifact_from(m.clone(), t, true, cancel_reason(reason), Some(e));
         }
@@ -556,6 +611,7 @@ impl ChangeSetV2Coordinator {
             boundary: r.boundary.clone(),
             candidate_path: candidate_text,
             change_set: r.change_set.clone(),
+            verification: r.verification.clone(),
             operation_order: order,
             created_at_unix_ms: now()?,
         };
@@ -573,6 +629,7 @@ impl ChangeSetV2Coordinator {
             || m.boundary.change_set_id != m.change_set.change_set_id
             || m.boundary.base_revision != m.base_revision
             || m.boundary.snapshot_id != m.workspace_generation
+            || m.verification.iter().any(|evidence| !evidence.success)
             || change_set_sha256(&m.change_set)
                 != m.change_set
                     .change_set_id
@@ -1169,12 +1226,20 @@ impl ChangeSetV2Coordinator {
                 .then(|| t.last().and_then(|transition| transition.message.clone()))
                 .flatten()
         });
+        let candidate_path = m.candidate_path.clone();
+        let candidate_retained = Path::new(&candidate_path).exists();
+        let operation_count = u32::try_from(m.change_set.operations.len())
+            .map_err(|_| "Operation count overflowed u32.")?;
         Ok(ChangeSetV2CoordinatorArtifact {
             schema_version: SCHEMA,
             transaction_id: m.transaction_id,
             change_set_id: m.change_set.change_set_id,
             base_revision: m.base_revision,
             state,
+            operation_count,
+            candidate_path,
+            candidate_retained,
+            verification: m.verification,
             transitions: t,
             recovery_performed: recovery
                 || matches!(
@@ -1198,11 +1263,44 @@ impl ChangeSetV2Coordinator {
             change_set_id: String::new(),
             base_revision: String::new(),
             state: ChangeSetV2CoordinatorState::RepairRequired,
+            operation_count: 0,
+            candidate_path: String::new(),
+            candidate_retained: false,
+            verification: Vec::new(),
             transitions: Vec::new(),
             recovery_performed: false,
             cancellation_reason: None,
             failure: Some(e),
         }
+    }
+    fn cleanup_candidate(&self, m: &Manifest) -> Result<(), String> {
+        let candidate = PathBuf::from(&m.candidate_path);
+        if !candidate.is_absolute() || within(&candidate, &self.config.repository_root) {
+            return Err("Coordinator candidate cleanup boundary is invalid.".into());
+        }
+        if candidate.exists() {
+            git_os(
+                &self.config.git_executable,
+                &self.config.repository_root,
+                &[
+                    OsString::from("worktree"),
+                    OsString::from("remove"),
+                    OsString::from("--force"),
+                    git_path(&candidate),
+                ],
+                "Git coordinator candidate cleanup",
+            )?;
+        }
+        git(
+            &self.config.git_executable,
+            &self.config.repository_root,
+            &["worktree", "prune", "--expire", "now"],
+            "Git coordinator worktree prune",
+        )?;
+        if candidate.exists() {
+            return Err("Coordinator candidate still exists after cleanup.".into());
+        }
+        Ok(())
     }
     fn head(&self, root: &Path) -> Result<String, String> {
         String::from_utf8(git(
@@ -1666,6 +1764,19 @@ fn digest_ok(v: &str) -> bool {
 }
 fn portable(p: &str) -> PathBuf {
     p.split('/').collect()
+}
+fn git_path(path: &Path) -> OsString {
+    #[cfg(windows)]
+    {
+        let value = path.to_string_lossy();
+        if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+            return OsString::from(format!(r"\\{rest}"));
+        }
+        if let Some(rest) = value.strip_prefix(r"\\?\") {
+            return OsString::from(rest);
+        }
+    }
+    path.as_os_str().to_owned()
 }
 fn utf8(p: &Path, l: &str) -> Result<String, String> {
     p.to_str()

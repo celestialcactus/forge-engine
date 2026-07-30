@@ -6,6 +6,8 @@ pub mod context;
 pub mod contracts;
 pub mod isolation;
 pub mod runtime;
+pub mod sovereign_change;
+pub mod verification_runner;
 pub mod worktree_adapter;
 
 pub use candidate_lease::*;
@@ -19,4 +21,6 @@ pub use runtime::{
     ApprovalPolicy, Cancellation, CapabilityAdapter, EventSink, NoCancellation, NoopEventSink,
     RuntimeSignal, Slice0Runtime, TaskPlanner, resolve_approval,
 };
+pub use sovereign_change::*;
+pub use verification_runner::*;
 pub use worktree_adapter::*;

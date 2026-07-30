@@ -102,6 +102,14 @@ pub struct CandidateOperationApplyEvidence {
     pub diff: BoundedTextEvidence,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RepositoryFileIdentityEvidence {
+    pub canonical_path: String,
+    pub sha256: String,
+    pub mode: FileMode,
+}
+
 #[derive(Clone, Debug)]
 pub struct RepositoryPathIdentity {
     case_sensitive: bool,
@@ -151,6 +159,25 @@ impl RepositoryPathIdentity {
             .get(&identity)
             .cloned()
             .unwrap_or_else(|| path.to_owned()))
+    }
+    pub fn observe_tracked_file(
+        &self,
+        repository_root: &Path,
+        git_executable: &Path,
+        path: &str,
+    ) -> Result<RepositoryFileIdentityEvidence, String> {
+        let canonical_path = self
+            .tracked_path(path)?
+            .ok_or_else(|| format!("Path is not tracked by Git: {path}."))?
+            .to_owned();
+        let file = regular_file_without_symlinks(repository_root, &canonical_path)?;
+        let bytes = fs::read(&file)
+            .map_err(|error| format!("Cannot read tracked file {canonical_path}: {error}"))?;
+        Ok(RepositoryFileIdentityEvidence {
+            sha256: hex_digest(&bytes),
+            mode: tracked_mode(git_executable, repository_root, &canonical_path)?,
+            canonical_path,
+        })
     }
 
     fn tracked_path(&self, path: &str) -> Result<Option<&str>, String> {

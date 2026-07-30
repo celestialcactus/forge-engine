@@ -138,6 +138,7 @@ impl Fixture {
                 boundary,
                 candidate_path: candidate,
                 change_set: self.change_set.clone(),
+                verification: Vec::new(),
             })
             .unwrap();
         assert_eq!(artifact.state, ChangeSetV2CoordinatorState::Prepared);

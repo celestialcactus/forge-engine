@@ -1,5 +1,18 @@
 # Architecture Changelog
 
+## 2026-07-30 — Slice 2E-3b sovereign CLI convergence opened
+
+- Accepted [ADR-0013](ADRs/ADR-0013-sovereign-changeset-v2-cli-boundary.md):
+  the current CLI will converge on one Rust-owned ChangeSet v2 protocol rather
+  than orchestrate the older text transaction and candidate lifecycles in
+  TypeScript.
+- Opened
+  [Slice 2E-3b](../tasks/SLICE-002E3B-sovereign-transaction-cli.md) with explicit
+  proposal/policy separation, durable verification evidence, terminal candidate
+  cleanup, and Windows/macOS Tier-1 gates.
+- Recorded
+  [Checkpoint 37](checkpoints/2026-07-30-37-sovereign-cli-convergence-start.md)
+  after the Slice 2E-3a post-merge Node and hybrid matrices passed.
 ## 2026-07-30 — Unix owner-death watchdog accepted
 
 - Accepted [ADR-0012](ADRs/ADR-0012-unix-owner-death-watchdog.md) at implementation
