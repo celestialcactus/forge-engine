@@ -378,10 +378,10 @@ fn locate_packaged_unix_watchdog() -> Result<PathBuf, String> {
         .parent()
         .ok_or_else(|| "Running Forge executable has no parent directory.".to_owned())?;
     let mut candidates = vec![directory.join("forge-process-watchdog")];
-    if directory.file_name().and_then(|name| name.to_str()) == Some("deps") {
-        if let Some(build_directory) = directory.parent() {
-            candidates.push(build_directory.join("forge-process-watchdog"));
-        }
+    if directory.file_name().and_then(|name| name.to_str()) == Some("deps")
+        && let Some(build_directory) = directory.parent()
+    {
+        candidates.push(build_directory.join("forge-process-watchdog"));
     }
     for candidate in candidates {
         if candidate.exists() {
