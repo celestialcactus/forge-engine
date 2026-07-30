@@ -325,6 +325,12 @@ fn restart_preserves_divergent_external_content_and_requires_repair() {
     let restarted = f.coordinator();
     let a = restarted.inspect(&id).unwrap();
     assert_eq!(a.state, ChangeSetV2CoordinatorState::RepairRequired);
+    assert!(a.recovery_performed);
+    assert!(
+        a.failure
+            .as_deref()
+            .is_some_and(|message| message.contains("divergent"))
+    );
     assert_eq!(fs::read(created).unwrap(), b"external developer content\n");
 }
 
@@ -388,6 +394,27 @@ fn restart_completes_every_interrupted_rollback_phase() {
         );
         assert!(!fixture.repo.join("nested/new.txt").exists());
     }
+}
+#[test]
+fn invalid_durable_transition_graph_fails_closed() {
+    use std::io::Write as _;
+
+    let mut fixture = Fixture::new();
+    let (coordinator, id) = fixture.prepare();
+    let path = coordinator.tx_dir(&id).unwrap().join("transitions.jsonl");
+    let invalid = ChangeSetV2Transition {
+        sequence: 2,
+        state: ChangeSetV2CoordinatorState::Promoted,
+        operation_sequence: None,
+        at_unix_ms: now().unwrap(),
+        message: Some("invalid direct terminal transition".into()),
+    };
+    let mut file = fs::OpenOptions::new().append(true).open(path).unwrap();
+    serde_json::to_writer(&mut file, &invalid).unwrap();
+    file.write_all(b"\n").unwrap();
+    file.sync_all().unwrap();
+    let error = coordinator.inspect(&id).unwrap_err();
+    assert!(error.contains("transition graph is invalid"));
 }
 struct Cancel;
 impl Cancellation for Cancel {

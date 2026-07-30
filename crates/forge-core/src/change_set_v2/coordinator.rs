@@ -230,9 +230,7 @@ impl ChangeSetV2Coordinator {
         self.artifact(&m, false, None, None)
     }
     pub fn inspect(&self, id: &str) -> Result<ChangeSetV2CoordinatorArtifact, String> {
-        self.reconcile(id)?;
-        let m = self.load_manifest(id)?;
-        self.artifact(&m, false, None, None)
+        self.reconcile(id)
     }
     pub fn promote(&self, id: &str, c: &dyn Cancellation) -> ChangeSetV2CoordinatorArtifact {
         self.promote_hook(id, c, &mut Noop)
@@ -349,9 +347,19 @@ impl ChangeSetV2Coordinator {
                         hook,
                     );
                 }
-                self.require_operation_before(&m.change_set.operations[*index])?;
-                self.require_changed_bounded(&m)?;
-                self.apply_operation(&m.change_set.operations[*index])?;
+                let mutation = (|| -> Result<(), String> {
+                    self.require_operation_before(&m.change_set.operations[*index])?;
+                    self.require_changed_bounded(&m)?;
+                    self.apply_operation(&m.change_set.operations[*index])
+                })();
+                if let Err(error) = mutation {
+                    return self.rollback(
+                        &m,
+                        t,
+                        &format!("Operation publication failed: {error}"),
+                        hook,
+                    );
+                }
                 match hook.reach(HookPoint::OperationMutated(position)) {
                     Ok(()) => {}
                     Err(HookFailure::Abrupt(e)) => {
@@ -359,7 +367,14 @@ impl ChangeSetV2Coordinator {
                     }
                     Err(HookFailure::Ordinary(e)) => return self.rollback(&m, t, &e, hook),
                 }
-                self.require_operation_after(&m.change_set.operations[*index])?;
+                if let Err(error) = self.require_operation_after(&m.change_set.operations[*index]) {
+                    return self.rollback(
+                        &m,
+                        t,
+                        &format!("Operation verification failed: {error}"),
+                        hook,
+                    );
+                }
                 self.append(
                     &m.transaction_id,
                     &mut t,
@@ -378,8 +393,18 @@ impl ChangeSetV2Coordinator {
                     Err(HookFailure::Ordinary(e)) => return self.rollback(&m, t, &e, hook),
                 }
             }
-            self.require_all_after(&m)?;
-            self.require_changed_bounded(&m)?;
+            let final_verification = (|| -> Result<(), String> {
+                self.require_all_after(&m)?;
+                self.require_changed_bounded(&m)
+            })();
+            if let Err(error) = final_verification {
+                return self.rollback(
+                    &m,
+                    t,
+                    &format!("Final promotion verification failed: {error}"),
+                    hook,
+                );
+            }
             if let Some(reason) = c.reason() {
                 return self.rollback(
                     &m,
@@ -1079,6 +1104,27 @@ impl ChangeSetV2Coordinator {
             if v.sequence != expected {
                 return Err("Coordinator transition sequence is not contiguous.".into());
             }
+            if v.state == ChangeSetV2CoordinatorState::OperationApplied {
+                let applied = u32::try_from(
+                    out.iter()
+                        .filter(|transition| {
+                            transition.state == ChangeSetV2CoordinatorState::OperationApplied
+                        })
+                        .count()
+                        + 1,
+                )
+                .map_err(|_| "Operation transition sequence overflowed u32.")?;
+                if v.operation_sequence != Some(applied) {
+                    return Err("Coordinator operation transition sequence is invalid.".into());
+                }
+            } else if v.operation_sequence.is_some() {
+                return Err("Only operation_applied may carry an operation sequence.".into());
+            }
+            if let Some(previous) = out.last()
+                && !valid_transition(previous.state, v.state)
+            {
+                return Err("Coordinator transition graph is invalid.".into());
+            }
             out.push(v)
         }
         if out.first().map(|v| v.state) != Some(ChangeSetV2CoordinatorState::Prepared)
@@ -1118,6 +1164,11 @@ impl ChangeSetV2Coordinator {
             .last()
             .ok_or("Coordinator journal has no transition.")?
             .state;
+        let persistent_failure = failure.or_else(|| {
+            (state == ChangeSetV2CoordinatorState::RepairRequired)
+                .then(|| t.last().and_then(|transition| transition.message.clone()))
+                .flatten()
+        });
         Ok(ChangeSetV2CoordinatorArtifact {
             schema_version: SCHEMA,
             transaction_id: m.transaction_id,
@@ -1125,9 +1176,14 @@ impl ChangeSetV2Coordinator {
             base_revision: m.base_revision,
             state,
             transitions: t,
-            recovery_performed: recovery,
+            recovery_performed: recovery
+                || matches!(
+                    state,
+                    ChangeSetV2CoordinatorState::RolledBack
+                        | ChangeSetV2CoordinatorState::RepairRequired
+                ),
             cancellation_reason: cancel,
-            failure,
+            failure: persistent_failure,
         })
     }
     fn failure_artifact(&self, id: &str, e: String) -> ChangeSetV2CoordinatorArtifact {
@@ -1195,6 +1251,28 @@ impl ChangeSetV2Coordinator {
     }
 }
 
+fn valid_transition(
+    previous: ChangeSetV2CoordinatorState,
+    next: ChangeSetV2CoordinatorState,
+) -> bool {
+    matches!(
+        (previous, next),
+        (
+            ChangeSetV2CoordinatorState::Prepared,
+            ChangeSetV2CoordinatorState::Promoting | ChangeSetV2CoordinatorState::RolledBack
+        ) | (
+            ChangeSetV2CoordinatorState::Promoting | ChangeSetV2CoordinatorState::OperationApplied,
+            ChangeSetV2CoordinatorState::OperationApplied
+                | ChangeSetV2CoordinatorState::RollingBack
+        ) | (
+            ChangeSetV2CoordinatorState::OperationApplied,
+            ChangeSetV2CoordinatorState::Promoted
+        ) | (
+            ChangeSetV2CoordinatorState::RollingBack,
+            ChangeSetV2CoordinatorState::RolledBack | ChangeSetV2CoordinatorState::RepairRequired
+        )
+    )
+}
 fn paths(op: &ChangeOperationV2) -> Vec<&str> {
     match op {
         ChangeOperationV2::Create { path, .. }
