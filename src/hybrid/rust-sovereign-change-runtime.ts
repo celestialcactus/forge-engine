@@ -19,7 +19,7 @@ export interface SovereignCoordinatorArtifact {
   readonly transactionId: string;
   readonly changeSetId: string;
   readonly baseRevision: string;
-  readonly state: 'prepared' | 'promoting' | 'operation_applied' | 'rolling_back' | 'rolled_back' | 'promoted' | 'repair_required';
+  readonly state: 'prepared' | 'promoting' | 'operation_applied' | 'rolling_back' | 'rolled_back' | 'discarded' | 'promoted' | 'repair_required';
   readonly operationCount: number;
   readonly candidatePath: string;
   readonly candidateRetained: boolean;

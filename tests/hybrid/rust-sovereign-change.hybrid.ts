@@ -124,11 +124,11 @@ test('CLI discards a verified candidate without mutating the active workspace', 
     const proposed = await forge(f, 'change', 'propose', f.proposal, '--policy', f.policy, '--approve');
     const id = transactionId(proposed);
     const discarded = await forge(f, 'change', 'discard', id, '--approve');
-    assert.equal(discarded.state, 'rolled_back');
+    assert.equal(discarded.state, 'discarded');
     assert.equal(discarded.candidateRetained, false);
     assert.equal(await readFile(join(f.repository, 'message.txt'), 'utf8'), 'before\n');
     const repeated = await forge(f, 'change', 'discard', id, '--approve');
-    assert.equal(repeated.state, 'rolled_back');
+    assert.equal(repeated.state, 'discarded');
   } finally {
     await rm(f.root, { recursive: true, force: true });
   }

@@ -446,6 +446,25 @@ fn cancellation_before_mutation_is_one_durable_terminal_artifact() {
     assert_eq!(again.transitions.len(), 2);
 }
 
+#[test]
+fn explicit_discard_is_not_misreported_as_recovery() {
+    let mut fixture = Fixture::new();
+    let (coordinator, id) = fixture.prepare();
+    let prepared = coordinator.inspect(&id).unwrap();
+    assert!(prepared.candidate_retained);
+    let discarded = coordinator.discard(&id, &NoCancellation);
+    assert_eq!(discarded.state, ChangeSetV2CoordinatorState::Discarded);
+    assert!(!discarded.recovery_performed);
+    assert!(!discarded.candidate_retained);
+    assert!(!Path::new(&discarded.candidate_path).exists());
+    assert_eq!(
+        fs::read(fixture.repo.join("replace.txt")).unwrap(),
+        b"replace before\n"
+    );
+    let repeated = coordinator.discard(&id, &NoCancellation);
+    assert_eq!(repeated.state, ChangeSetV2CoordinatorState::Discarded);
+    assert_eq!(repeated.transitions, discarded.transitions);
+}
 #[cfg(windows)]
 #[test]
 fn windows_mode_change_fails_before_transaction_publication() {

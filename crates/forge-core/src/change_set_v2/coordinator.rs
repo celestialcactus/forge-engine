@@ -59,6 +59,7 @@ pub enum ChangeSetV2CoordinatorState {
     OperationApplied,
     RollingBack,
     RolledBack,
+    Discarded,
     Promoted,
     RepairRequired,
 }
@@ -66,7 +67,7 @@ impl ChangeSetV2CoordinatorState {
     fn terminal(self) -> bool {
         matches!(
             self,
-            Self::RolledBack | Self::Promoted | Self::RepairRequired
+            Self::RolledBack | Self::Discarded | Self::Promoted | Self::RepairRequired
         )
     }
 }
@@ -247,7 +248,7 @@ impl ChangeSetV2Coordinator {
             let _repo = self.repo_lock()?;
             let _tx = self.tx_lock(id)?;
             let m = self.load_manifest(id)?;
-            let t = self.read_transitions(id)?;
+            let mut t = self.read_transitions(id)?;
             let state = t
                 .last()
                 .ok_or("Coordinator journal has no transition.")?
@@ -255,26 +256,29 @@ impl ChangeSetV2Coordinator {
             if state.terminal() {
                 if matches!(
                     state,
-                    ChangeSetV2CoordinatorState::Promoted | ChangeSetV2CoordinatorState::RolledBack
+                    ChangeSetV2CoordinatorState::Promoted
+                        | ChangeSetV2CoordinatorState::RolledBack
+                        | ChangeSetV2CoordinatorState::Discarded
                 ) {
                     self.cleanup_candidate(&m)?;
                 }
                 return self.artifact_from(m, t, false, None, None);
             }
-            if let Some(reason) = c.reason() {
-                return self.rollback(
-                    &m,
-                    t,
-                    &format!("Discard cancelled before candidate cleanup: {reason}"),
-                    &mut Noop,
-                );
+            if state != ChangeSetV2CoordinatorState::Prepared {
+                return Err("Only a prepared ChangeSet v2 transaction can be discarded.".into());
             }
-            self.rollback(
-                &m,
-                t,
-                "Verified candidate discarded by explicit developer decision.",
-                &mut Noop,
-            )
+            if let Some(reason) = c.reason() {
+                return self.artifact_from(m, t, false, Some(bound(&reason)), None);
+            }
+            self.cleanup_candidate(&m)?;
+            self.append(
+                id,
+                &mut t,
+                ChangeSetV2CoordinatorState::Discarded,
+                None,
+                Some("Verified candidate discarded by explicit developer decision.".into()),
+            )?;
+            self.artifact_from(m, t, false, None, None)
         })();
         match run {
             Ok(value) => value,
@@ -329,7 +333,9 @@ impl ChangeSetV2Coordinator {
         if state.terminal() || state == ChangeSetV2CoordinatorState::Prepared {
             if matches!(
                 state,
-                ChangeSetV2CoordinatorState::Promoted | ChangeSetV2CoordinatorState::RolledBack
+                ChangeSetV2CoordinatorState::Promoted
+                    | ChangeSetV2CoordinatorState::RolledBack
+                    | ChangeSetV2CoordinatorState::Discarded
             ) {
                 self.cleanup_candidate(&m)?;
             }
@@ -1357,7 +1363,9 @@ fn valid_transition(
         (previous, next),
         (
             ChangeSetV2CoordinatorState::Prepared,
-            ChangeSetV2CoordinatorState::Promoting | ChangeSetV2CoordinatorState::RolledBack
+            ChangeSetV2CoordinatorState::Promoting
+                | ChangeSetV2CoordinatorState::RolledBack
+                | ChangeSetV2CoordinatorState::Discarded
         ) | (
             ChangeSetV2CoordinatorState::Promoting | ChangeSetV2CoordinatorState::OperationApplied,
             ChangeSetV2CoordinatorState::OperationApplied
