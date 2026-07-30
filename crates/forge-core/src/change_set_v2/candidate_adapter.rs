@@ -174,7 +174,7 @@ impl RepositoryPathIdentity {
         let bytes = fs::read(&file)
             .map_err(|error| format!("Cannot read tracked file {canonical_path}: {error}"))?;
         Ok(RepositoryFileIdentityEvidence {
-            sha256: hex_digest(&bytes),
+            sha256: hex_digest(&Sha256::digest(&bytes)),
             mode: tracked_mode(git_executable, repository_root, &canonical_path)?,
             canonical_path,
         })
