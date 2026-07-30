@@ -1,9 +1,9 @@
 # ADR-0011: Durable ChangeSet v2 transaction coordinator
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-07-29
 - **Owners:** ForgeEngine maintainers
-- **Checkpoint:** 2026-07-29-33
+- **Checkpoints:** 2026-07-29-33, 2026-07-30-34
 - **Supersedes:** none
 - **Superseded by:** none
 
@@ -127,6 +127,19 @@ the release-hardening gate.
   before-images never get silently overwritten.
 - Pass local Rust/hybrid/TypeScript checks plus hosted Windows, macOS, and Ubuntu.
 - Re-run the controlled VS Code read-only tether to prove no integration regression.
+
+## Acceptance evidence
+
+- Exact coordinator implementation: `8c290379ec930f0edb379d2c3246f51bb8603cdc`.
+- Hosted cross-platform conformance run `30511168395` passed on Windows and macOS.
+- Hosted hybrid kernel run `30511168400` passed Rust formatting, clippy with
+  warnings denied, Rust tests/build, TypeScript behavior, hybrid/MCP contracts,
+  release build, and latency gates on Windows, macOS, and Ubuntu.
+- Fault fixtures cover interruption and recovery across promotion and rollback
+  transitions, transition-order corruption, same-size divergence, cancellation,
+  and terminal replay.
+- The controlled VS Code result is recorded separately in Checkpoint 34 because it
+  validates host integration, not the private coordinator API.
 
 ## Revisit or replacement conditions
 

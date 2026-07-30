@@ -1,6 +1,6 @@
 # Checkpoint 2026-07-29-33: Durable ChangeSet v2 coordinator start
 
-- **Status:** in-progress
+- **Status:** completed; accepted by Checkpoint 2026-07-30-34
 - **Date:** 2026-07-29
 - **Related ADRs:** ADR-0009, ADR-0011
 - **Scope:** Slice 2E-2 process-crash coordination and full-operation publication
@@ -29,15 +29,19 @@ incomplete v2 transactions.
 
 | Decision | Status | Rationale | ADR |
 |---|---|---|---|
-| Use a bounded per-transaction filesystem manifest, before-images, and append-oriented transition journal | Proposed | It directly protects filesystem publication, reuses ChangeSet v2, and avoids premature database packaging | ADR-0011 |
-| Treat repository locks as advisory | Proposed | External editors do not participate; exact path identities provide correctness | ADR-0011 |
-| Guarantee process-crash recovery before power-loss durability | Proposed | This is the smallest honest functional gate; power-loss testing remains a named release slice | ADR-0011 |
+| Use a bounded per-transaction filesystem manifest, before-images, and append-oriented transition journal | Accepted | It directly protects filesystem publication, reuses ChangeSet v2, and avoids premature database packaging | ADR-0011 |
+| Treat repository locks as advisory | Accepted | External editors do not participate; exact path identities provide correctness | ADR-0011 |
+| Guarantee process-crash recovery before power-loss durability | Accepted | This is the smallest honest functional gate; power-loss testing remains a named release slice | ADR-0011 |
 
 ## Validation performed
 
 | Command or experiment | Result | Evidence |
 |---|---|---|
-| Source and plan audit | Passed | ChangeSet v2 candidate application exists; v2 promotion/coordinator is absent; the text-only journal is reusable precedent |
+| Source and plan audit | Passed | ChangeSet v2 candidate application existed; the text-only journal supplied a bounded precedent |
+| Local TypeScript gate | Passed | `npm run check`: typecheck, 37/37 tests, and build |
+| Hosted cross-platform gate | Passed | Windows/macOS run `30511168395` |
+| Hosted hybrid kernel gate | Passed | Windows/macOS/Ubuntu run `30511168400` |
+| Controlled VS Code regression | Passed | One `forge_workspace_summary` call; full evidence in Checkpoint 34 |
 
 ## Failures and surprises
 
@@ -48,8 +52,8 @@ incomplete v2 transactions.
 
 ## Known limitations
 
-- No full-operation active promotion exists at checkpoint start.
-- No v2 startup reconciliation or transition fault injection exists.
+- Full-operation active promotion and process-restart reconciliation are now accepted.
+- Power-loss durability and repair tooling remain release-hardening work.
 - macOS abrupt verifier-owner death remains a separate Slice 2E gap.
 - Forge-enforced restricted execution remains Slice 2F.
 
@@ -63,11 +67,11 @@ incomplete v2 transactions.
 
 ## Repository state
 
-- Branch/commit: `feature/slice-2e-durable-coordinator` from `develop@5a02194`
-- Files changed: ADR-0011 and this checkpoint
-- Production behavior available: unchanged at checkpoint start
+- Branch/commit: `feature/slice-2e-durable-coordinator` at implementation `8c29037` from `develop@5a02194`
+- Files changed: Rust coordinator/tests, ADR-0011, task/build-plan records, and Checkpoints 33–34
+- Production behavior available: private Rust ChangeSet v2 coordination; no public mutation surface
 
 ## Next checkpoint
 
-Accept or reject the coordinator after transition fault injection, local and hosted
-platform gates, and a controlled VS Code regression run.
+Checkpoint 2026-07-30-34 records acceptance, hosted platform evidence, the
+controlled VS Code regression, and the remaining Slice 2E-3 boundaries.

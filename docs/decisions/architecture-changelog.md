@@ -1,5 +1,23 @@
 # Architecture Changelog
 
+## 2026-07-30 — Durable ChangeSet v2 coordinator accepted
+
+- Accepted [ADR-0011](ADRs/ADR-0011-durable-changeset-v2-coordinator.md) at
+  implementation `8c29037`. The Rust-owned manifest, exact before-images, and
+  synchronized transition journal passed promotion/rollback fault injection,
+  process-restart reconciliation, corruption, cancellation, and divergent-edit
+  fixtures.
+- Hosted cross-platform run `30511168395` passed on Windows/macOS; hybrid kernel
+  run `30511168400` passed on Windows/macOS/Ubuntu.
+- The controlled VS Code 1.130 regression used only the seven checked Forge tools,
+  made one workspace-summary call, and completed without retries, built-in tools,
+  artifact externalization, or a stall. See
+  [Checkpoint 34](checkpoints/2026-07-30-34-durable-coordinator-hosted-and-vscode-gate.md).
+- Updated the authoritative build plan to 82% core completion. Abrupt macOS owner
+  death, complete candidate cleanup, and the sovereign transaction CLI remain the
+  Slice 2E critical path; public MCP mutation and restricted execution remain
+  Slice 2F.
+
 ## 2026-07-29 — Durable ChangeSet v2 coordinator started
 
 - Opened Slice 2E-2 from protected `develop@5a02194`.
