@@ -22,7 +22,12 @@ const MAX_DURABLE_VERIFICATION_BYTES: usize = 128 * 1024;
 const DEFAULT_MAX_DIFF_BYTES: usize = 100_000;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "encoding", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(
+    tag = "encoding",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
 pub enum DraftContent {
     Utf8 {
         value: String,
@@ -46,7 +51,12 @@ impl DraftContent {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
 pub enum DraftChangeOperation {
     Create {
         path: String,

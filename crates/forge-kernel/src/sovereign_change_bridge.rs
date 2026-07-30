@@ -72,7 +72,12 @@ struct EnvironmentEntry {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
 enum SovereignChangeOperation {
     Propose {
         proposal: SovereignChangeProposal,
@@ -425,4 +430,88 @@ pub fn execute(
         code: "change_result_write_failed",
         message,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn start(proposal: Value) -> Value {
+        json!({
+            "type": "change.start",
+            "protocolVersion": SOVEREIGN_CHANGE_PROTOCOL_VERSION,
+            "requestId": "change-bridge:test",
+            "config": {
+                "repositoryRoot": "/tmp/repository",
+                "engineRoot": "/tmp/engine",
+                "verificationChecks": [{
+                    "checkId": "test",
+                    "executable": "/usr/bin/test",
+                    "arguments": [],
+                    "timeoutMs": 1000,
+                    "maxOutputBytes": 1024
+                }]
+            },
+            "operation": {
+                "kind": "propose",
+                "proposal": proposal,
+                "selectedCheckIds": ["test"],
+                "call": {
+                    "id": "call:test",
+                    "capabilityId": CHANGE_PROPOSE_CAPABILITY_ID,
+                    "input": {
+                        "proposalSchemaVersion": 1,
+                        "selectedCheckIds": ["test"]
+                    }
+                },
+                "approvalFacts": {
+                    "schemaVersion": 1,
+                    "callId": "call:test",
+                    "capabilityId": CHANGE_PROPOSE_CAPABILITY_ID,
+                    "hostPolicy": {
+                        "posture": "ask",
+                        "source": "test",
+                        "reason": "test"
+                    },
+                    "userConsent": {
+                        "status": "granted",
+                        "source": "test",
+                        "reason": "test"
+                    }
+                }
+            }
+        })
+    }
+
+    #[test]
+    fn parses_the_camel_case_typescript_start_frame() {
+        let value = start(json!({
+            "schemaVersion": 1,
+            "operations": [{
+                "kind": "replace",
+                "path": "message.txt",
+                "after": { "encoding": "utf8", "value": "after\n" },
+                "afterMode": "regular"
+            }]
+        }));
+        let parsed: SovereignChangeStart = serde_json::from_value(value).expect("start frame");
+        assert!(matches!(
+            parsed.operation,
+            SovereignChangeOperation::Propose { .. }
+        ));
+    }
+
+    #[test]
+    fn proposal_cannot_supply_verification_commands() {
+        let value = start(json!({
+            "schemaVersion": 1,
+            "operations": [{
+                "kind": "delete",
+                "path": "message.txt"
+            }],
+            "verificationChecks": [{ "executable": "untrusted" }]
+        }));
+        assert!(serde_json::from_value::<SovereignChangeStart>(value).is_err());
+    }
 }

@@ -203,7 +203,16 @@ fn git_text(root: &Path, args: &[&str]) -> String {
 fn promotes_full_supported_operation_set_and_survives_restart() {
     let mut f = Fixture::new();
     let (c, id) = f.prepare();
+    let prepared = c.inspect(&id).unwrap();
+    assert!(prepared.candidate_retained);
+    assert!(Path::new(&prepared.candidate_path).exists());
+    assert_eq!(
+        prepared.operation_count as usize,
+        f.change_set.operations.len()
+    );
     let a = c.promote(&id, &NoCancellation);
+    assert!(!a.candidate_retained);
+    assert!(!Path::new(&a.candidate_path).exists());
     assert_eq!(
         a.state,
         ChangeSetV2CoordinatorState::Promoted,
@@ -430,6 +439,8 @@ fn cancellation_before_mutation_is_one_durable_terminal_artifact() {
     let a = c.promote(&id, &Cancel);
     assert_eq!(a.state, ChangeSetV2CoordinatorState::RolledBack);
     assert!(a.cancellation_reason.is_some());
+    assert!(!a.candidate_retained);
+    assert!(!Path::new(&a.candidate_path).exists());
     let again = c.inspect(&id).unwrap();
     assert_eq!(again.state, ChangeSetV2CoordinatorState::RolledBack);
     assert_eq!(again.transitions.len(), 2);
