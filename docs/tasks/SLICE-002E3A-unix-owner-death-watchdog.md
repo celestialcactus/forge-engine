@@ -1,10 +1,12 @@
 # Slice 2E-3a: Unix verifier owner-death watchdog
 
-- **Status:** In progress
+- **Status:** Accepted at `c872a81`; merge pending through PR #10
 - **Opened:** 2026-07-30
 - **Branch:** `feature/slice-2e3-owner-death`
 - **Base:** protected `develop` at `6a25a51`
 - **Decision:** ADR-0012
+- **Acceptance evidence:** Checkpoint 36; hosted runs `30551820932` and
+  `30551821183`
 - **Tier-1 platforms:** Windows and macOS
 - **Compatibility platform:** Ubuntu
 - **Does not add:** a sandbox, public mutation, generic shell, privilege reduction,
@@ -22,9 +24,11 @@ Windows already does through its Job Object.
 2. Resolve and validate it before Unix verifier execution.
 3. Use a parent-owned close-on-exec liveness pipe rather than PID polling.
 4. Run the watchdog and verifier in the same dedicated process group.
-5. Mirror verifier exit status while preserving bounded output and environment.
-6. Kill the group on owner EOF/read failure and retain supervised teardown.
-7. Add abrupt-owner, missing-helper, and existing lifecycle regressions.
+5. Require a separate bounded startup acknowledgement so launch failure cannot be
+   misreported as verifier failure.
+6. Mirror verifier exit status while preserving bounded output and environment.
+7. Kill the group on owner EOF/read failure and retain supervised teardown.
+8. Add abrupt-owner, missing-helper, and existing lifecycle regressions.
 
 ## Acceptance
 
@@ -36,6 +40,17 @@ Windows already does through its Job Object.
   behavior remains unchanged;
 - the helper is present in debug and release workspace builds;
 - all protected Windows/macOS/Ubuntu matrices pass.
+
+## Accepted evidence
+
+- Hybrid run `30551820932` passed on Windows, macOS, and Ubuntu.
+- Node conformance run `30551821183` passed on Windows and macOS.
+- Hosted macOS and Ubuntu owner-`SIGKILL` tests left no survivor marker.
+- Missing, non-executable, and missing-verifier startup paths failed before verifier
+  work and preserved the existing recovery distinction.
+- A controlled VS Code regression exposed exactly seven Forge tools and completed
+  one workspace-summary call in seven seconds with no retry or mutation. See
+  Checkpoint 36 for the run and snapshot IDs.
 
 ## Honest boundary
 

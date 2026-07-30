@@ -1,9 +1,10 @@
 # ADR-0012: Unix verifier owner-death watchdog
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-07-30
 - **Owners:** ForgeEngine maintainers
-- **Checkpoint:** 2026-07-30-35
+- **Checkpoint:** 2026-07-30-35; accepted evidence in Checkpoint 36
+- **Implementation:** `c872a81`
 - **Refines:** ADR-0010
 
 ## Context
@@ -50,6 +51,14 @@ The launch sequence is:
 6. On ordinary verifier completion, the watchdog mirrors the exact exit code or
    terminating signal. The Forge owner still performs and confirms the accepted
    process-group teardown so late descendants cannot survive.
+
+A second, bounded startup pipe preserves the pre-watchdog execution contract. The
+helper sends one success or failure byte after attempting verifier spawn, closes
+that descriptor before verifier execution can inherit it, and Forge requires a
+valid acknowledgement within five seconds. A missing executable therefore remains
+an explicit startup failure rather than looking like a verifier that ran and
+returned failure. A closed startup reader cannot terminate the watchdog through
+`SIGPIPE`; acknowledgement failure instead kills the private group.
 
 Pipe EOF is the authority signal because the operating system closes Forge's file
 descriptors on process death. This avoids PID-reuse ambiguity and works on macOS

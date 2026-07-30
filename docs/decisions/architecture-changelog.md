@@ -1,5 +1,21 @@
 # Architecture Changelog
 
+## 2026-07-30 — Unix owner-death watchdog accepted
+
+- Accepted [ADR-0012](ADRs/ADR-0012-unix-owner-death-watchdog.md) at implementation
+  `c872a81`. The packaged Rust watchdog uses owner-pipe EOF, a bounded startup
+  acknowledgement, and one dedicated process group; missing/invalid helper and
+  verifier startup fail closed without collapsing startup failure into verifier
+  failure.
+- Hybrid run `30551820932` passed on Windows/macOS/Ubuntu and Node run
+  `30551821183` passed on Windows/macOS. Hosted macOS/Ubuntu owner-`SIGKILL`
+  fixtures left no survivor marker; Windows retained its Job Object path.
+- The controlled VS Code regression exposed exactly seven Forge tools and completed
+  one workspace-summary call in seven seconds with no retry or mutation. Core
+  completion is now conservatively 86%; candidate cleanup and the sovereign
+  transaction CLI remain Slice 2E-3b. See
+  [Checkpoint 36](checkpoints/2026-07-30-36-unix-owner-death-hosted-and-vscode-gate.md).
+
 ## 2026-07-30 — Unix owner-death watchdog started
 
 - Opened Slice 2E-3a to close the abrupt Unix/macOS verifier-owner-death gap before

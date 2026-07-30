@@ -77,9 +77,10 @@ propose bounded text replacements, verify them in an isolated worktree, retain t
 candidate, and explicitly promote or discard it through Rust-owned authority.
 
 Slice 2E is the current delivery focus. Content-addressed staging, the complete
-bounded change-operation model, and the durable transaction coordinator/startup
-recovery gate are accepted. The remaining Slice 2E critical path is abrupt macOS
-verifier-owner handling and one complete sovereign transaction CLI workflow.
+bounded change-operation model, durable transaction coordination/startup recovery,
+and cross-platform verifier owner-death handling are accepted. The remaining Slice
+2E critical path is complete candidate lifecycle cleanup and one sovereign
+transaction CLI workflow over the same Rust authority.
 
 Windows and macOS are Tier-1 product and acceptance platforms. Every Slice 2E
 increment must be designed and hosted-tested for both before it is accepted.
@@ -192,19 +193,19 @@ spikes and adversarial platform gates.
   and revision/path/digest revalidation. It is process-crash recoverable, not a
   power-loss filesystem transaction, and external editors do not honor Forge's
   advisory repository lock.
-- ChangeSet v2 now has a hosted-accepted candidate-side adapter for every accepted
-  operation, but it cannot promote those operations into the active workspace and
-  does not yet have a durable v2 lease/WAL or startup reconciliation. Repository
-  identity currently uses tracked Git spelling plus `core.ignorecase`; new
-  non-ASCII paths fail closed on case-insensitive repositories until native Unicode
-  identity semantics are proven on Windows and macOS.
+- ChangeSet v2 has hosted-accepted candidate and active-workspace adapters for every
+  accepted operation plus a durable Rust coordinator for promotion, rollback, and
+  startup reconciliation. This is process-crash recovery, not a power-loss
+  transaction. Repository identity uses tracked Git spelling plus
+  `core.ignorecase`; new non-ASCII paths fail closed on case-insensitive
+  repositories until native Unicode identity semantics are proven on Windows and
+  macOS.
 - The accepted process-ownership gate replaces Windows `taskkill` with a suspended,
-  pre-execution-assigned, kill-on-close Job Object and confirms the hierarchy is
-  empty after teardown. Repeated nested timeout/cancellation and abrupt Windows
-  owner-death tests pass on hosted Windows. Hosted macOS now confirms no live
-  process-group member remains through bounded Darwin inspection; Ubuntu preserves
-  the Unix group behavior. Abrupt Forge owner death on Unix/macOS still requires a
-  watchdog/parent-death mechanism before Slice 2E closes.
+  pre-execution-assigned, kill-on-close Job Object. On Unix, a packaged Rust
+  watchdog uses parent-pipe EOF and a dedicated process group to terminate the
+  ordinary verifier hierarchy after abrupt Forge death. Hosted Windows/macOS/Ubuntu
+  lifecycle and release gates pass. This controls lifecycle, not permissions; a
+  deliberately trusted verifier may still attempt to escape the group.
 
 ### Prototype-first priority policy
 
@@ -227,7 +228,7 @@ must still have a named architectural home and an objective entry gate:
 | Complete sovereign transaction CLI | P1, Slice 2E | Extend the thin candidate CLI into one high-level propose → verify → inspect → accept/discard flow. Do not expose raw shell or arbitrary direct-write commands. | A fresh developer can complete the bounded workflow without private test helpers on Windows and macOS; Ubuntu remains compatible. |
 | Windows/macOS platform acceptance | P1, every machinery increment | Windows and macOS are Tier 1. Windows gates cover path/case/long-path behavior, replacement semantics, descendant cleanup, and locked files. macOS gates cover default and case-sensitive filesystem semantics where CI permits, atomic rename/durability behavior, process groups, and executable bits. | Local fixtures plus hosted Windows/macOS matrices pass before acceptance. Ubuntu runs as a Tier-2 compatibility matrix. |
 | Deterministic supervised verifier process ownership | P1, Slice 2E | Local gate implemented under ADR-0010. Windows creates the verifier suspended, assigns it to a kill-on-close Job Object, then resumes; Unix/macOS uses a pre-exec process group with checked teardown. This is lifecycle control, not security containment. | Repeated nested timeout/cancellation tests pass on hosted Windows and macOS; Windows forced-owner-death proves kill-on-close; any cleanup uncertainty is terminal and explicit. |
-| Abrupt macOS/Unix owner-death handling | P1, Slice 2E | Add a bounded watchdog/parent-death design so a forcibly killed Forge supervisor cannot orphan the verifier hierarchy. Do not infer this guarantee from process groups. | Killing the Forge owner without running cleanup leaves no verifier descendant on macOS; restart evidence remains consistent and no non-idempotent work is repeated. |
+| Abrupt macOS/Unix owner-death handling | P1, Slice 2E | **Accepted at `c872a81`.** A packaged Rust watchdog observes parent-pipe EOF, owns the verifier process group, and uses a separate bounded startup acknowledgement. This is lifecycle control, not containment. | Hosted macOS and Ubuntu owner-`SIGKILL` fixtures leave no survivor marker; Windows retains its Job Object path; missing/invalid helper and verifier startup fail closed. |
 | High-level MCP/VS Code mutation workflow | P2, Slice 2F | Add only over the accepted transaction contract; never expose file-write or shell primitives. | Official MCP and controlled VS Code tests prove approvals, cancellation, compact evidence, no retry storm, no hidden promotion, and unchanged read-only behavior on failure. |
 | Authenticated host handshake and enterprise policy adapter | P2, Slice 2F | Replace the current `host_managed` assertion with authenticated, freshness-bound negotiation. Add policy distribution, durable audit export, and credential brokerage seams without importing host-private state into Rust. | Spoofed, stale, replayed, incomplete, and policy-incompatible attestations fail closed; exported audit facts reconstruct the decision. |
 | Minimum Forge-restricted execution backend | P2, Slice 2F | Implement and advertise only boundaries proven on Tier-1 platforms. Keep unsupported controls fail-closed. This is necessary for a credible pilot, but it must not block the controlled trusted-mode prototype. | Separate adversarial Windows and macOS process/filesystem/network tests support each advertised control; Ubuntu support may follow behind the same provider interface. |
@@ -277,6 +278,7 @@ is not repeated unless new evidence invalidates its checkpoint.
 | Slice 2E | Cross-platform change fidelity and CAS staging | Accepted at `fd3d9eb` and `b930d31`; ADR-0009 and Checkpoints 26/30 | One bounded Rust operation algebra and content-addressed store preserve exact intent across the gated Windows/macOS/Ubuntu cases; explicitly unsupported platform cases fail before mutation. |
 | Slice 2E | Deterministic verifier process ownership | Accepted at `ff4aedf`; ADR-0010 and Checkpoints 31–32 | Can Windows and macOS terminate and confirm a nested verifier hierarchy across timeout, cancellation, normal child exit, and cleanup errors, while separately proving Windows owner-death behavior, without calling lifecycle control a sandbox? |
 | Slice 2E | Durable transaction coordinator | Accepted at `8c29037`; ADR-0011 and Checkpoints 33–34 | A bounded filesystem manifest, exact before-images, and synchronized transition journal make recognized process-restart states deterministic; ambiguity becomes `repair_required`, without claiming a power-loss transaction. |
+| Slice 2E | Unix/macOS abrupt owner death | Accepted at `c872a81`; ADR-0012 and Checkpoints 35–36 | Can a parent-owned liveness pipe, bounded startup acknowledgement, and first-party watchdog terminate the ordinary verifier hierarchy after Forge `SIGKILL` without claiming sandbox containment? Hosted macOS/Ubuntu say yes; Windows retains Job Objects. |
 | Slice 2F | Restricted execution provider | Pending; Windows/macOS Tier-1 | Which process/filesystem/network controls can Forge independently prove and package on both enterprise desktop platforms? |
 | Slice 2 | TypeScript symbols and diagnostics | Accepted for the deterministic read-only path | Which compiler integration supplies symbols and diagnostics without making the kernel IDE-specific? Provider-generated edit fidelity remains behind the transaction proposal contract rather than a new LSP authority. |
 | Slice 4 | Local durable store | Pending | Which SQLite binding/migration approach satisfies Windows packaging, replay, and corruption recovery needs? |
@@ -310,7 +312,7 @@ not source volume or the number of abstractions present.
 
 | Scope | Estimated complete | Remaining critical path |
 | --- | ---: | --- |
-| Core runtime and dependable local change machinery | 82% | Abrupt macOS verifier-owner handling, complete candidate cleanup/ownership, and the public sovereign transaction CLI gate. |
+| Core runtime and dependable local change machinery | 86% | Complete candidate cleanup/ownership and the public sovereign transaction CLI gate. |
 | Shippable standalone CLI alpha | 46% | Core closure plus canonical runtime convergence, one measured local and one direct cloud inference path, interactive multi-turn loop, effective config/doctor, packaging, and clean-install smoke tests. |
 | Broader V1 platform | 25% | Context quality gates, durable projections, reviewed skills/memory, symmetric mutation integrations, restricted execution, connectors, and release hardening. |
 
@@ -339,7 +341,7 @@ merely because implementation has started.
 | Architectural direction | 84 / 100 | The kernel, evidence, artifact, and host-neutral seams are strongly supported by independent implementations. | Hold as the V1 direction. |
 | Slice 0 protocol and fixture suite | 91 / 100 | Fully under Forge control; no vendor, sandbox, or provider dependency. | Accepted. |
 | Slice 1 deterministic read-only spine | 86 / 100 | Small, testable surface with existing provisional scaffolding to replace or keep only where it meets the contract. | Accepted, including the seven-tool MCP tether. |
-| Slice 2 developer change loop | 87 / 100 | Full-operation candidate fidelity and process-restart coordination are accepted on Windows/macOS/Ubuntu. Remaining risk is abrupt macOS owner death, candidate lifecycle cleanup, and the public CLI composition. | Finish the named 2E-3 gates before claiming a dependable general change loop. |
+| Slice 2 developer change loop | 89 / 100 | Full-operation fidelity, process-restart coordination, and abrupt verifier-owner cleanup are accepted on Windows/macOS/Ubuntu. Remaining risk is candidate lifecycle cleanup and public CLI composition. | Finish Slice 2E-3b before claiming a dependable general change loop. |
 | Slices 3–5 context, durable state, and skills | 74 / 100 | Direction remains sound, but quality evaluation and storage migrations still need their own gates. | Keep sequential behind Slice 2E so higher-level intelligence does not mask weak machinery. |
 | Slices 6–7 VS Code/MCP and provider escalation | 68 / 100 | Standards exist, but host/provider support and streaming semantics remain integration risk. | Read-only VS Code/MCP is accepted; defer MCP mutation and provider expansion until the local change loop closes. |
 | Slice 8 hardening/release boundary | 58 / 100 | The provider seam is accepted, but Windows and macOS containment, power-loss durability, and packaging remain substantial platform work. | Implement a minimum Tier-1 restricted backend in Slice 2F; retain full durability/privilege hardening for release. |
@@ -347,11 +349,11 @@ merely because implementation has started.
 
 ## Go/no-go
 
-**Go for the remaining Slice 2E gates.** ChangeSet v2/CAS and the durable
-coordinator are accepted; they materially reduce architectural risk but are still
-private machinery. Close abrupt macOS owner-death handling and expose the same
-Rust authority through the complete sovereign transaction CLI. Accept each gate
-only after Windows and macOS pass; keep Ubuntu green as a compatibility check.
+**Go for Slice 2E-3b.** ChangeSet v2/CAS, the durable coordinator, and abrupt
+cross-platform verifier owner-death handling are accepted; they materially reduce
+architectural risk but remain private machinery. Complete candidate cleanup and
+expose the same Rust authority through one sovereign transaction CLI. Accept the
+gate only after Windows and macOS pass; keep Ubuntu green as a compatibility check.
 
 **No-go for parallel context compression, learned memory, skills, multi-provider,
 or raw MCP mutation programs.** Those features can make Forge look smarter without

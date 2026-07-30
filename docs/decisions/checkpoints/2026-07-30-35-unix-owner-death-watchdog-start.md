@@ -1,9 +1,10 @@
 # Checkpoint 2026-07-30-35: Unix owner-death watchdog start
 
-- **Status:** in progress
+- **Status:** closed; accepted by Checkpoint 36
 - **Date:** 2026-07-30
 - **Related ADRs:** ADR-0010, ADR-0012
 - **Scope:** Slice 2E-3a abrupt Unix/macOS verifier-owner death
+- **Accepted implementation:** `c872a81`
 
 ## Starting evidence
 
