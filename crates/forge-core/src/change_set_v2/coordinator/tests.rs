@@ -251,6 +251,30 @@ impl Hook for AbruptAt {
         }
     }
 }
+struct OrdinaryAt(HookPoint);
+impl Hook for OrdinaryAt {
+    fn reach(&mut self, point: HookPoint) -> Result<(), HookFailure> {
+        if point == self.0 {
+            Err(HookFailure::Ordinary("injected recoverable failure".into()))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[test]
+fn recoverable_operation_failure_rolls_back_before_returning() {
+    let mut fixture = Fixture::new();
+    let (coordinator, id) = fixture.prepare();
+    let artifact = coordinator.promote_hook(
+        &id,
+        &NoCancellation,
+        &mut OrdinaryAt(HookPoint::OperationRecorded(0)),
+    );
+    assert_eq!(artifact.state, ChangeSetV2CoordinatorState::RolledBack);
+    assert!(artifact.recovery_performed);
+    assert!(!fixture.repo.join("nested/new.txt").exists());
+}
 #[test]
 fn restart_rolls_back_a_mutation_not_yet_recorded() {
     let mut f = Fixture::new();
