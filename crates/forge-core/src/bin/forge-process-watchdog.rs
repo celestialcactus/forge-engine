@@ -18,27 +18,42 @@ mod unix {
 
     struct Arguments {
         owner_fd: RawFd,
+        startup_fd: RawFd,
         executable: OsString,
         verifier_arguments: Vec<OsString>,
     }
 
     pub fn run() -> Result<(), String> {
         let arguments = parse_arguments()?;
-        // SAFETY: the Forge parent passes one owned descriptor that exists only in
-        // this helper after exec. OwnedFd closes it on every ordinary return.
+        // SAFETY: the Forge parent passes two owned descriptors that exist only in
+        // this helper after exec. OwnedFd closes them on every ordinary return.
         let owner = unsafe { OwnedFd::from_raw_fd(arguments.owner_fd) };
-        mark_close_on_exec(arguments.owner_fd)?;
+        // SAFETY: the startup descriptor is distinct and owned by this helper.
+        let startup = unsafe { OwnedFd::from_raw_fd(arguments.startup_fd) };
+        mark_close_on_exec(arguments.owner_fd, "owner")?;
+        mark_close_on_exec(arguments.startup_fd, "startup")?;
         if !owner_is_alive(arguments.owner_fd)? {
             return Err("Forge owner closed before verifier launch.".to_owned());
         }
 
-        let mut verifier = Command::new(&arguments.executable)
+        let mut verifier = match Command::new(&arguments.executable)
             .args(&arguments.verifier_arguments)
             .stdin(Stdio::null())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .spawn()
-            .map_err(|error| format!("Could not start watched verifier: {error}"))?;
+        {
+            Ok(verifier) => verifier,
+            Err(error) => {
+                let _ = notify_startup(arguments.startup_fd, b'F');
+                return Err(format!("Could not start watched verifier: {error}"));
+            }
+        };
+        if let Err(error) = notify_startup(arguments.startup_fd, b'S') {
+            eprintln!("Could not confirm watched verifier startup: {error}");
+            terminate_group_or_child(&mut verifier);
+        }
+        drop(startup);
 
         loop {
             match owner_is_alive(arguments.owner_fd) {
@@ -68,15 +83,13 @@ mod unix {
         if arguments.next().as_deref() != Some(std::ffi::OsStr::new("--owner-fd")) {
             return Err("Expected --owner-fd.".to_owned());
         }
-        let owner_fd = arguments
-            .next()
-            .ok_or_else(|| "Missing owner descriptor.".to_owned())?
-            .into_string()
-            .map_err(|_| "Owner descriptor must be ASCII.".to_owned())?
-            .parse::<RawFd>()
-            .map_err(|_| "Owner descriptor is invalid.".to_owned())?;
-        if owner_fd < 0 {
-            return Err("Owner descriptor is invalid.".to_owned());
+        let owner_fd = parse_descriptor(arguments.next(), "owner")?;
+        if arguments.next().as_deref() != Some(std::ffi::OsStr::new("--startup-fd")) {
+            return Err("Expected --startup-fd.".to_owned());
+        }
+        let startup_fd = parse_descriptor(arguments.next(), "startup")?;
+        if startup_fd == owner_fd {
+            return Err("Owner and startup descriptors must be distinct.".to_owned());
         }
         if arguments.next().as_deref() != Some(std::ffi::OsStr::new("--")) {
             return Err("Expected -- before the verifier command.".to_owned());
@@ -86,25 +99,69 @@ mod unix {
             .ok_or_else(|| "Missing verifier executable.".to_owned())?;
         Ok(Arguments {
             owner_fd,
+            startup_fd,
             executable,
             verifier_arguments: arguments.collect(),
         })
     }
 
-    fn mark_close_on_exec(owner_fd: RawFd) -> Result<(), String> {
-        // SAFETY: owner_fd is owned by this helper and F_GETFD is a valid query.
-        let current = unsafe { libc::fcntl(owner_fd, libc::F_GETFD) };
+    fn parse_descriptor(value: Option<OsString>, label: &str) -> Result<RawFd, String> {
+        let descriptor = value
+            .ok_or_else(|| format!("Missing {label} descriptor."))?
+            .into_string()
+            .map_err(|_| format!("{label} descriptor must be ASCII."))?
+            .parse::<RawFd>()
+            .map_err(|_| format!("{label} descriptor is invalid."))?;
+        if descriptor < 0 {
+            return Err(format!("{label} descriptor is invalid."));
+        }
+        Ok(descriptor)
+    }
+
+    fn mark_close_on_exec(descriptor: RawFd, label: &str) -> Result<(), String> {
+        // SAFETY: descriptor is owned by this helper and F_GETFD is a valid query.
+        let current = unsafe { libc::fcntl(descriptor, libc::F_GETFD) };
         if current < 0 {
             return Err(format!(
-                "Could not inspect owner descriptor: {}",
+                "Could not inspect {label} descriptor: {}",
                 io::Error::last_os_error()
             ));
         }
-        // SAFETY: owner_fd is owned by this helper and F_SETFD accepts descriptor flags.
-        if unsafe { libc::fcntl(owner_fd, libc::F_SETFD, current | libc::FD_CLOEXEC) } != 0 {
+        // SAFETY: descriptor is owned by this helper and F_SETFD accepts descriptor flags.
+        if unsafe { libc::fcntl(descriptor, libc::F_SETFD, current | libc::FD_CLOEXEC) } != 0 {
             return Err(format!(
-                "Could not protect owner descriptor from verifier inheritance: {}",
+                "Could not protect {label} descriptor from verifier inheritance: {}",
                 io::Error::last_os_error()
+            ));
+        }
+        Ok(())
+    }
+
+    fn notify_startup(startup_fd: RawFd, status: u8) -> Result<(), String> {
+        // SAFETY: the watchdog is single-threaded. Temporarily ignoring SIGPIPE
+        // converts a closed Forge reader into EPIPE rather than orphaning a verifier.
+        let previous = unsafe { libc::signal(libc::SIGPIPE, libc::SIG_IGN) };
+        if previous == libc::SIG_ERR {
+            return Err(format!(
+                "Could not suppress startup-pipe SIGPIPE: {}",
+                io::Error::last_os_error()
+            ));
+        }
+        // SAFETY: startup_fd is held by OwnedFd and status points to one readable byte.
+        let result =
+            unsafe { libc::write(startup_fd, (&status as *const u8).cast::<libc::c_void>(), 1) };
+        let write_error = (result != 1).then(io::Error::last_os_error);
+        // SAFETY: restore the disposition before continuing or launching other work.
+        let restore_result = unsafe { libc::signal(libc::SIGPIPE, previous) };
+        if restore_result == libc::SIG_ERR {
+            return Err(format!(
+                "Could not restore startup-pipe SIGPIPE handling: {}",
+                io::Error::last_os_error()
+            ));
+        }
+        if let Some(error) = write_error {
+            return Err(format!(
+                "Could not notify Forge of verifier startup: {error}"
             ));
         }
         Ok(())

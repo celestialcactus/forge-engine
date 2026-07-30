@@ -38,6 +38,8 @@ const MAX_TIMEOUT: Duration = Duration::from_secs(600);
 #[cfg(unix)]
 const PROCESS_TERMINATION_TIMEOUT: Duration = Duration::from_secs(2);
 #[cfg(unix)]
+const PROCESS_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(unix)]
 const PROCESS_TERMINATION_POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -431,6 +433,44 @@ fn create_unix_owner_pipe() -> Result<(OwnedFd, OwnedFd), String> {
 }
 
 #[cfg(unix)]
+fn create_unix_startup_pipe() -> Result<(OwnedFd, OwnedFd), String> {
+    let mut descriptors = [-1_i32; 2];
+    // SAFETY: descriptors points to storage for the two descriptors returned by pipe.
+    if unsafe { libc::pipe(descriptors.as_mut_ptr()) } != 0 {
+        return Err(format!(
+            "Could not create Unix verifier startup pipe: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    // SAFETY: pipe returned two new owned descriptors.
+    let reader = unsafe { OwnedFd::from_raw_fd(descriptors[0]) };
+    // SAFETY: pipe returned two new owned descriptors.
+    let writer = unsafe { OwnedFd::from_raw_fd(descriptors[1]) };
+    set_descriptor_flag(
+        reader.as_raw_fd(),
+        libc::F_GETFL,
+        libc::F_SETFL,
+        libc::O_NONBLOCK,
+        0,
+    )?;
+    set_descriptor_flag(
+        reader.as_raw_fd(),
+        libc::F_GETFD,
+        libc::F_SETFD,
+        libc::FD_CLOEXEC,
+        0,
+    )?;
+    set_descriptor_flag(
+        writer.as_raw_fd(),
+        libc::F_GETFD,
+        libc::F_SETFD,
+        0,
+        libc::FD_CLOEXEC,
+    )?;
+    Ok((reader, writer))
+}
+
+#[cfg(unix)]
 fn set_descriptor_flag(
     descriptor: RawFd,
     get_command: libc::c_int,
@@ -733,10 +773,13 @@ fn run_bounded_process(
     #[cfg(unix)]
     let mut process_tree = {
         let (owner_reader, owner_writer) = create_unix_owner_pipe()?;
+        let (startup_reader, startup_writer) = create_unix_startup_pipe()?;
         let mut command = Command::new(watchdog_executable);
         command
             .arg("--owner-fd")
             .arg(owner_reader.as_raw_fd().to_string())
+            .arg("--startup-fd")
+            .arg(startup_writer.as_raw_fd().to_string())
             .arg("--")
             .arg(&process.executable)
             .args(&process.arguments)
@@ -750,7 +793,10 @@ fn run_bounded_process(
             .process_group(0);
         let launched = OwnedProcessTree::spawn(&mut command, owner_writer);
         drop(owner_reader);
-        launched?
+        drop(startup_writer);
+        let mut launched = launched?;
+        await_unix_watchdog_startup(&mut launched, startup_reader)?;
+        launched
     };
     #[cfg(not(unix))]
     let mut process_tree = {
@@ -987,6 +1033,65 @@ fn reserve_output(budget: &AtomicUsize, maximum_bytes: usize, requested: usize) 
             Ok(_) => return reserved,
             Err(actual) => current = actual,
         }
+    }
+}
+
+#[cfg(unix)]
+fn await_unix_watchdog_startup(
+    process_tree: &mut OwnedProcessTree,
+    startup_reader: OwnedFd,
+) -> Result<(), String> {
+    let started = Instant::now();
+    loop {
+        let mut status = 0_u8;
+        // SAFETY: startup_reader owns the descriptor and status is one writable byte.
+        let result = unsafe {
+            libc::read(
+                startup_reader.as_raw_fd(),
+                (&mut status as *mut u8).cast::<libc::c_void>(),
+                1,
+            )
+        };
+        if result == 1 {
+            return match status {
+                b'S' => Ok(()),
+                b'F' => Err(
+                    "Could not start isolated process through the Unix verifier watchdog."
+                        .to_owned(),
+                ),
+                _ => Err("Unix verifier watchdog returned an invalid startup status.".to_owned()),
+            };
+        }
+        if result == 0 {
+            return Err(
+                "Unix verifier watchdog exited before confirming verifier startup.".to_owned(),
+            );
+        }
+        let error = std::io::Error::last_os_error();
+        match error.raw_os_error() {
+            Some(libc::EAGAIN) => {}
+            Some(libc::EINTR) => continue,
+            _ => {
+                return Err(format!(
+                    "Could not read Unix verifier watchdog startup status: {error}"
+                ));
+            }
+        }
+        if let Some(status) = process_tree
+            .child
+            .try_wait()
+            .map_err(|error| format!("Could not observe Unix verifier watchdog startup: {error}"))?
+        {
+            return Err(format!(
+                "Unix verifier watchdog exited with {status} before confirming verifier startup."
+            ));
+        }
+        if started.elapsed() >= PROCESS_STARTUP_TIMEOUT {
+            return Err(
+                "Unix verifier watchdog did not confirm startup within five seconds.".to_owned(),
+            );
+        }
+        thread::sleep(PROCESS_TERMINATION_POLL_INTERVAL);
     }
 }
 
