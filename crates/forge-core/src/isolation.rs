@@ -296,15 +296,9 @@ impl IsolationProvider for BaselineIsolationProvider {
                         .to_owned(),
                 ],
             },
-            IsolationProfile::HostManaged => unreachable!(
-                "baseline provider capabilities reject host-managed execution before launch"
+            IsolationProfile::HostManaged | IsolationProfile::Restricted => unreachable!(
+                "baseline provider capabilities reject non-trusted execution before launch"
             ),
-            IsolationProfile::Restricted => {
-                return Err(
-                    "The baseline isolation provider cannot enforce the restricted profile."
-                        .to_owned(),
-                );
-            }
         };
         isolation.limitations.push(
             "Forge clears the verifier environment and restores only baseline and policy-listed values; this reduces exposure but is not containment."

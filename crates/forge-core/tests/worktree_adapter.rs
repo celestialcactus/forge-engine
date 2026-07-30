@@ -390,12 +390,9 @@ fn unsupported_restricted_execution_fails_closed_and_recovers_the_candidate() {
         artifact.requested_isolation.profile,
         IsolationProfile::Restricted
     );
-    assert!(
-        artifact
-            .failure
-            .as_deref()
-            .is_some_and(|message| message.contains("cannot enforce the restricted profile"))
-    );
+    assert!(artifact.failure.as_deref().is_some_and(|message| {
+        message.contains("forge.baseline does not support profile Restricted")
+    }));
     assert!(artifact.verification.is_none());
     assert!(adapter.retained_candidate_path().is_none());
 }
