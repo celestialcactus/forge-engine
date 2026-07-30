@@ -353,8 +353,16 @@ pub fn execute(
                 json!({ "transactionId": transaction_id }),
             )?;
             if let Some(reason) = initial_cancellation_reason {
+                if !bounded_nonempty(&reason, MAX_CANCELLATION_REASON_BYTES) {
+                    return Err(invalid_start("Initial cancellation reason is invalid."));
+                }
                 cancellation.set_once(reason);
             }
+            let reader_cancellation = Arc::clone(&cancellation);
+            let reader_request_id = request_id.clone();
+            thread::spawn(move || {
+                cancellation_reader(reader, reader_request_id, reader_cancellation)
+            });
             let artifact = service
                 .accept(&transaction_id, cancellation.as_ref())
                 .map_err(|message| SovereignChangeFailure {
@@ -377,8 +385,16 @@ pub fn execute(
                 json!({ "transactionId": transaction_id }),
             )?;
             if let Some(reason) = initial_cancellation_reason {
+                if !bounded_nonempty(&reason, MAX_CANCELLATION_REASON_BYTES) {
+                    return Err(invalid_start("Initial cancellation reason is invalid."));
+                }
                 cancellation.set_once(reason);
             }
+            let reader_cancellation = Arc::clone(&cancellation);
+            let reader_request_id = request_id.clone();
+            thread::spawn(move || {
+                cancellation_reader(reader, reader_request_id, reader_cancellation)
+            });
             let artifact = service
                 .discard(&transaction_id, cancellation.as_ref())
                 .map_err(|message| SovereignChangeFailure {

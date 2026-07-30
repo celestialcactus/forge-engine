@@ -445,7 +445,7 @@ fn validate_selected_checks(check_ids: &[String]) -> Result<(), String> {
 }
 
 fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
-    if value.len() % 2 != 0 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+    if !value.len().is_multiple_of(2) || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(
             "Hex proposal content must contain an even number of hexadecimal digits.".into(),
         );
