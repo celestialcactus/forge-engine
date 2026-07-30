@@ -1,5 +1,39 @@
 # Architecture Changelog
 
+## 2026-07-30 — Slice 2F-2a signed host challenge accepted
+
+- Accepted Slice 2F-2a at `71a3ec6`: Forge issues a short-lived, bound challenge,
+  strictly verifies the host's Ed25519 statement, and durably consumes the proof
+  before returning authority evidence.
+- Restart/concurrent replay, stale/future/altered/wrong-key statements, transcript
+  drift, audit tampering, traversal, corruption, and unexpected ledger entries fail
+  closed. Forge and Ed25519 share one SHA-2 0.11 stack.
+- Hosted cross-platform run
+  [30562764333](https://github.com/celestialcactus/forge-engine/actions/runs/30562764333)
+  passed Windows/macOS, and hybrid run
+  [30562764595](https://github.com/celestialcactus/forge-engine/actions/runs/30562764595)
+  passed Windows/macOS/Ubuntu.
+- The controlled seven-tool VS Code regression remained one read-only call with no
+  mutation. This is tether evidence, not host authentication or containment.
+- Recorded
+  [Checkpoint 42](checkpoints/2026-07-30-42-signed-host-challenge-hosted-and-vscode-gate.md).
+  Host-managed execution remains unavailable until Slice 2F-2b wires Rust-owned
+  transaction facts and verified evidence into the provider.
+
+## 2026-07-30 — Slice 2F-2a signed host challenge opened
+
+- Accepted
+  [ADR-0015](ADRs/ADR-0015-signed-host-challenge-ledger.md): Forge will verify a
+  short-lived, capability/policy-bound Ed25519 host statement and durably consume
+  its challenge before returning authority evidence.
+- Opened
+  [Slice 2F-2a](../tasks/SLICE-002F2A-authenticated-host-challenge-ledger.md) with
+  stale, altered, replay, restart, and concurrent-consumer rejection gates.
+- Recorded
+  [Checkpoint 41](checkpoints/2026-07-30-41-authenticated-host-challenge-design.md).
+  This is authentication and replay machinery, not an OS sandbox or an executing
+  host-managed provider.
+
 ## 2026-07-30 — Slice 2F-1 isolation authority contract accepted
 
 - Accepted Slice 2F-1 at `ef0a125`: providers now advertise bounded capabilities;
