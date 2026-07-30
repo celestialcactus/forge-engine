@@ -132,6 +132,7 @@ enum HookPoint {
     BeforeRolledBack,
 }
 #[derive(Debug)]
+#[cfg_attr(not(test), allow(dead_code))]
 enum HookFailure {
     Ordinary(String),
     Abrupt(String),
@@ -594,12 +595,10 @@ impl ChangeSetV2Coordinator {
             if let ChangeOperationV2::Move {
                 from_path, to_path, ..
             } = op
+                && from_path != to_path
+                && identity.identity_for(from_path)? == identity.identity_for(to_path)?
             {
-                if from_path != to_path
-                    && identity.identity_for(from_path)? == identity.identity_for(to_path)?
-                {
-                    return Err("Case-only move promotion is not yet proven on a case-insensitive active workspace.".into());
-                }
+                return Err("Case-only move promotion is not yet proven on a case-insensitive active workspace.".into());
             }
             #[cfg(windows)] match op{ChangeOperationV2::Create{mode:FileMode::Executable,..}=>return Err("Executable create promotion is not yet proven on Windows active workspaces.".into()),ChangeOperationV2::Replace{before_mode,after_mode,..}if before_mode!=after_mode=>return Err("Executable-mode replacement promotion is not yet proven on Windows active workspaces.".into()),ChangeOperationV2::Move{before_mode,after_mode,..}if *before_mode!=FileMode::Regular||*after_mode!=FileMode::Regular=>return Err("Executable move promotion is not yet proven on Windows active workspaces.".into()),ChangeOperationV2::SetMode{..}=>return Err("Set-mode promotion is not yet proven on Windows active workspaces.".into()),_=>{}}
         }
@@ -1132,10 +1131,10 @@ impl ChangeSetV2Coordinator {
         })
     }
     fn failure_artifact(&self, id: &str, e: String) -> ChangeSetV2CoordinatorArtifact {
-        if let Ok(m) = self.load_manifest(id) {
-            if let Ok(v) = self.artifact(&m, false, None, Some(e.clone())) {
-                return v;
-            }
+        if let Ok(m) = self.load_manifest(id)
+            && let Ok(v) = self.artifact(&m, false, None, Some(e.clone()))
+        {
+            return v;
         }
         ChangeSetV2CoordinatorArtifact {
             schema_version: SCHEMA,

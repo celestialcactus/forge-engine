@@ -54,7 +54,7 @@ impl Fixture {
         }
         git_run(&repo, &["add", "."]);
         git_run(&repo, &["commit", "--quiet", "-m", "base"]);
-        let store = FileBlobStore::try_new(&blobs).unwrap();
+        let store = FileBlobStore::new(&blobs);
         let create = store
             .stage(b"created\n", BlobContentKind::Utf8Text)
             .unwrap();
