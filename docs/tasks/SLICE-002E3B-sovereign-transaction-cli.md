@@ -1,7 +1,8 @@
 # Slice 2E-3b: sovereign ChangeSet v2 CLI
 
-- **Status:** In progress
+- **Status:** Accepted
 - **Opened:** 2026-07-30
+- **Accepted:** 2026-07-30 at `16c5569`
 - **Branch:** `feature/slice-2e3b-sovereign-cli`
 - **Base:** protected `develop` at `e0d2213`
 - **Tier-1 platforms:** Windows and macOS
@@ -85,3 +86,19 @@ If the new service cannot reuse ChangeSet v2 and the durable coordinator without
 weakening their invariants, keep it private and stop. Do not ship a TypeScript
 transaction coordinator or promote through the older text-only lifecycle as a
 shortcut.
+
+## Closure evidence
+
+- Local `npm run check` passed with 37/37 tests, typecheck, and production build.
+- Hosted cross-platform run
+  [30556929564](https://github.com/celestialcactus/forge-engine/actions/runs/30556929564)
+  passed Windows/macOS.
+- Hosted hybrid run
+  [30556929739](https://github.com/celestialcactus/forge-engine/actions/runs/30556929739)
+  passed Rust, TypeScript, sovereign CLI, optimized-build, and latency gates on
+  Windows/macOS/Ubuntu.
+- The controlled VS Code regression used exactly seven Forge tools and one
+  workspace-summary call in four seconds, with no mutation.
+- [Checkpoint 38](../decisions/checkpoints/2026-07-30-38-sovereign-cli-hosted-and-vscode-gate.md)
+  records the accepted behavior, the SHA-256 identity defect found during hosted
+  validation, and the remaining trusted-execution boundary.

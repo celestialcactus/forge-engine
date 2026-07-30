@@ -1,5 +1,22 @@
 # Architecture Changelog
 
+## 2026-07-30 — Slice 2E sovereign transaction loop accepted
+
+- Accepted Slice 2E-3b at `16c5569`. The public
+  `forge change propose|inspect|accept|discard` workflow now transports one
+  Rust-owned ChangeSet v2 service and durable coordinator; TypeScript does not
+  decide mutation, verification policy, recovery, or terminal state.
+- Hosted cross-platform run
+  [30556929564](https://github.com/celestialcactus/forge-engine/actions/runs/30556929564)
+  passed Windows/macOS, and hybrid run
+  [30556929739](https://github.com/celestialcactus/forge-engine/actions/runs/30556929739)
+  passed Windows/macOS/Ubuntu including the sovereign CLI exercise.
+- A controlled VS Code regression retained exactly seven Forge tools and used one
+  workspace-summary call in four seconds with no mutation. Core completion is now
+  conservatively 92%; authenticated host negotiation and minimum proven
+  Windows/macOS restricted execution remain Slice 2F. See
+  [Checkpoint 38](checkpoints/2026-07-30-38-sovereign-cli-hosted-and-vscode-gate.md).
+
 ## 2026-07-30 — Slice 2E-3b sovereign CLI convergence opened
 
 - Accepted [ADR-0013](ADRs/ADR-0013-sovereign-changeset-v2-cli-boundary.md):
