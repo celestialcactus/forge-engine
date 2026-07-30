@@ -1,9 +1,11 @@
 # Slice 2F-2a: authenticated host challenge ledger
 
-- **Status:** In progress
+- **Status:** Accepted
 - **Opened:** 2026-07-30
+- **Accepted:** 2026-07-30
 - **Branch:** `feature/slice-2f2-authenticated-host-handshake`
 - **Base:** protected `develop` at `6edd79a`
+- **Implementation:** `71a3ec6`
 - **Tier-1 platforms:** Windows and macOS
 - **Compatibility platform:** Ubuntu
 
@@ -64,3 +66,36 @@ state fails closed and requires repair rather than silently reissuing authority.
 
 No private signing key, generic shell, unrestricted write, public host-managed
 execution, or OS sandbox is added by this increment.
+
+## Acceptance evidence
+
+- Rust workspace check and Clippy with warnings denied passed under the installed
+  Windows GNU toolchain; Rustfmt passed.
+- Full local Rust test execution is unavailable because this workstation lacks a
+  complete native linker/dlltool chain. Hosted native jobs are the execution gate.
+- Seven focused host-authority regressions cover the fixed signing vector,
+  successful consumption, restart replay, concurrent replay, altered/wrong/stale
+  statements, capability/policy/control identity binding, ledger shape, persisted
+  audit tampering, traversal, and corrupt evidence.
+- Local `npm run check` passed all 37 Node tests, type checking, and the production
+  build.
+- Hosted cross-platform run
+  [30562764333](https://github.com/celestialcactus/forge-engine/actions/runs/30562764333)
+  passed Windows/macOS. Hosted hybrid run
+  [30562764595](https://github.com/celestialcactus/forge-engine/actions/runs/30562764595)
+  passed Windows/macOS/Ubuntu, including Rust format, clippy, tests, release build,
+  Node conformance, sovereign CLI, and latency gates.
+- Forge and Ed25519 now share `sha2` 0.11; `cargo tree -d` reports only the
+  unavoidable proc-macro `syn` major-version split, not duplicate digest stacks.
+- Preliminary Cargo metadata reports the new cryptography/randomness dependency
+  licenses as BSD-3-Clause, MIT, Apache-2.0, or permitted combinations. Full
+  release dependency review remains a release gate.
+- A fresh controlled VS Code regression retained exactly seven Forge tools, used
+  one workspace-summary call, no built-ins, and no mutation. It returned run
+  `run:bb67d4d2-57db-4acb-a482-e7a0906c822f`, snapshot
+  `workspace:7b3c009ae89d6632`, 147 files, `truncated: true`, and the canonical
+  six-event sequence.
+
+This accepts the signed challenge ledger only. Host-managed execution remains
+unavailable until Slice 2F-2b binds Rust-owned transaction facts, performs the host
+exchange, and composes verified evidence into the executing provider.

@@ -3,6 +3,8 @@
 - **Status:** accepted for Slice 2F-2a implementation
 - **Date:** 2026-07-30
 - **Owners:** ForgeEngine project
+- **Implementation:** `71a3ec6`
+- **Checkpoint:** 2026-07-30-42
 - **Refines:** ADR-0014 isolation provider capability authority
 - **Supersedes:** none
 
@@ -76,3 +78,8 @@ TypeScript.
 Proceed only after altered/stale/replayed/cross-capability proofs fail across hosted
 Windows/macOS/Ubuntu tests and the consumed evidence can reconstruct the verified
 provider, key, challenge, capability, policy, controls, and timestamps.
+
+The gate passed at implementation `71a3ec6` in hosted runs 30562764333 and
+30562764595. The controlled seven-tool VS Code read-only regression also remained a
+single mutation-free Forge call. See
+[Checkpoint 42](../checkpoints/2026-07-30-42-signed-host-challenge-hosted-and-vscode-gate.md).

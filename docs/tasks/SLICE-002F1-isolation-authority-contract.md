@@ -55,8 +55,10 @@ signature protocol or an operating-system sandbox. Those become separate Slice
 
 ## Deferred by name
 
-- **Slice 2F-2:** authenticated, freshness-bound, capability-bound host negotiation
-  with stale/spoof/replay rejection and durable audit evidence.
+- **Slice 2F-2a (accepted at `71a3ec6`):** signed, freshness-bound,
+  capability/policy-bound host challenges with durable replay rejection.
+- **Slice 2F-2b:** compose verified challenges into the executing provider and
+  bounded host/kernel negotiation protocol.
 - **Slice 2F-3:** minimum Windows/macOS restricted backend with adversarial
   filesystem/process/network/credential tests for each advertised control.
 - **Slice 2F-4:** high-level MCP mutation workflow over the accepted ChangeSet v2
