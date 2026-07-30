@@ -161,6 +161,7 @@ impl ChangeTransactionAdapter for FakeAdapter {
                 boundary_id: None,
                 forge_enforced: false,
                 controls: Vec::new(),
+                host_authority: None,
                 limitations: vec!["Fixture executes without containment.".to_owned()],
             },
             environment: forge_core::ProcessEnvironmentEvidence {
@@ -460,7 +461,7 @@ fn approval_call_cannot_be_reused_for_a_different_isolation_profile() {
     let mut request = request(HostPolicyPosture::Allow);
     request.verification.isolation = IsolationRequest {
         profile: IsolationProfile::Restricted,
-        host_attestation: None,
+        host_provider_id: None,
     };
     let mut adapter = FakeAdapter::passing();
 

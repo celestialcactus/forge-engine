@@ -5,8 +5,8 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     ApprovalDecision, ApprovalFacts, ApprovalOutcome, Cancellation, CapabilityCall,
-    IsolationEvidence, IsolationProfile, IsolationRequest, ProcessEnvironmentEvidence,
-    resolve_approval,
+    HostExecutionAuthorizationEvidence, IsolationEvidence, IsolationProfile, IsolationRequest,
+    ProcessEnvironmentEvidence, resolve_approval,
 };
 
 pub const CHANGE_APPLY_CAPABILITY_ID: &str = "workspace.change.apply";
@@ -147,6 +147,8 @@ pub enum ChangeTransactionPhase {
     ApprovalResolved,
     #[serde(rename = "boundary.prepared")]
     BoundaryPrepared,
+    #[serde(rename = "verification.authorized")]
+    VerificationAuthorized,
     #[serde(rename = "candidate.applied")]
     CandidateApplied,
     #[serde(rename = "verification.completed")]
@@ -186,6 +188,8 @@ pub struct ChangeTransactionArtifact {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub boundary: Option<BoundaryEvidence>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_authorization: Option<HostExecutionAuthorizationEvidence>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub application: Option<ApplyEvidence>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verification: Option<VerificationEvidence>,
@@ -203,6 +207,20 @@ pub struct ChangeTransactionArtifact {
 pub trait ChangeTransactionAdapter {
     fn prepare(&mut self, manifest: &ChangeApplicationManifest)
     -> Result<BoundaryEvidence, String>;
+    fn authorize_verification(
+        &mut self,
+        request: &ChangeTransactionRequest,
+        cancellation: &dyn Cancellation,
+    ) -> Result<Option<HostExecutionAuthorizationEvidence>, String> {
+        if request.verification.isolation.profile == IsolationProfile::HostManaged {
+            return Err(
+                "The transaction adapter does not support authenticated host-managed execution."
+                    .to_owned(),
+            );
+        }
+        let _ = cancellation;
+        Ok(None)
+    }
     fn apply(
         &mut self,
         boundary: &BoundaryEvidence,
@@ -284,7 +302,9 @@ pub fn proposal_id_for_manifest(manifest: &ChangeApplicationManifest) -> String 
     format!("change:{}", &full[..20])
 }
 
-fn validate(request: &ChangeTransactionRequest) -> Result<(), String> {
+pub fn validate_change_transaction_request(
+    request: &ChangeTransactionRequest,
+) -> Result<(), String> {
     if request.transaction_id.trim().is_empty() || request.call.id.trim().is_empty() {
         return Err("Transaction and call IDs must not be empty.".to_owned());
     }
@@ -308,19 +328,8 @@ fn validate(request: &ChangeTransactionRequest) -> Result<(), String> {
         || call_input.verification_check_id != request.verification.check_id
         || call_input.isolation_profile != request.verification.isolation.profile
         || call_input.isolation_provider_id.as_deref()
-            != request
-                .verification
-                .isolation
-                .host_attestation
-                .as_ref()
-                .map(|attestation| attestation.provider_id.as_str())
-        || call_input.isolation_boundary_id.as_deref()
-            != request
-                .verification
-                .isolation
-                .host_attestation
-                .as_ref()
-                .map(|attestation| attestation.boundary_id.as_str())
+            != request.verification.isolation.host_provider_id.as_deref()
+        || call_input.isolation_boundary_id.is_some()
     {
         return Err(
             "The approved capability call does not match the transaction manifest and verification."
@@ -339,10 +348,18 @@ fn validate(request: &ChangeTransactionRequest) -> Result<(), String> {
         return Err("verification.checkId must not be empty.".to_owned());
     }
     if request.verification.isolation.profile != IsolationProfile::HostManaged
-        && request.verification.isolation.host_attestation.is_some()
+        && request.verification.isolation.host_provider_id.is_some()
     {
         return Err(
-            "Host isolation attestation is valid only for host-managed execution.".to_owned(),
+            "Host isolation provider selection is valid only for host-managed execution."
+                .to_owned(),
+        );
+    }
+    if request.verification.isolation.profile == IsolationProfile::HostManaged
+        && request.verification.isolation.host_provider_id.is_none()
+    {
+        return Err(
+            "Host-managed verification requires an explicit host provider selection.".to_owned(),
         );
     }
     if request.approval_facts.call_id != request.call.id
@@ -519,6 +536,7 @@ pub fn execute_candidate_transaction<A: ChangeTransactionAdapter>(
         status: ChangeTransactionStatus::Failed,
         approval: None,
         boundary: None,
+        host_authorization: None,
         application: None,
         verification: None,
         retention: None,
@@ -528,7 +546,7 @@ pub fn execute_candidate_transaction<A: ChangeTransactionAdapter>(
         steps: Vec::new(),
     };
 
-    if let Err(error) = validate(request) {
+    if let Err(error) = validate_change_transaction_request(request) {
         return failed(&mut artifact, error);
     }
     step(
@@ -589,6 +607,52 @@ pub fn execute_candidate_transaction<A: ChangeTransactionAdapter>(
         true,
         format!("Prepared boundary {}.", boundary.boundary_id),
     );
+    if let Some(reason) = cancellation.reason() {
+        return recover(&mut artifact, adapter, &boundary, reason, true);
+    }
+
+    let host_authorization = match adapter.authorize_verification(request, cancellation) {
+        Ok(value) => value,
+        Err(error) => {
+            let cancellation_reason = cancellation.reason();
+            let was_cancelled = cancellation_reason.is_some();
+            return recover(
+                &mut artifact,
+                adapter,
+                &boundary,
+                cancellation_reason
+                    .unwrap_or_else(|| format!("Verification authorization failed: {error}")),
+                was_cancelled,
+            );
+        }
+    };
+    if request.verification.isolation.profile == IsolationProfile::HostManaged {
+        let Some(authorization) = host_authorization else {
+            return recover(
+                &mut artifact,
+                adapter,
+                &boundary,
+                "Host-managed verification did not return authenticated authority evidence."
+                    .to_owned(),
+                false,
+            );
+        };
+        artifact.host_authorization = Some(authorization);
+        step(
+            &mut artifact,
+            ChangeTransactionPhase::VerificationAuthorized,
+            true,
+            "Authenticated the exact host-managed capability and verification policy.",
+        );
+    } else if host_authorization.is_some() {
+        return recover(
+            &mut artifact,
+            adapter,
+            &boundary,
+            "Non-host verification returned unexpected host authority evidence.".to_owned(),
+            false,
+        );
+    }
     if let Some(reason) = cancellation.reason() {
         return recover(&mut artifact, adapter, &boundary, reason, true);
     }

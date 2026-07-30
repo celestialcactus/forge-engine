@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 pub const RUN_PROTOCOL_VERSION: &str = "forge.kernel.bridge.v2";
-pub const TRANSACTION_PROTOCOL_VERSION: &str = "forge.kernel.transaction.v1";
+pub const TRANSACTION_PROTOCOL_VERSION: &str = "forge.kernel.transaction.v2";
 pub const CANDIDATE_PROTOCOL_VERSION: &str = "forge.kernel.candidate.v1";
 pub const SOVEREIGN_CHANGE_PROTOCOL_VERSION: &str = "forge.kernel.changeset.v2";
 pub const MAX_START_FRAME_BYTES: usize = 24 * 1_048_576;

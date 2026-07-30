@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -11,7 +11,7 @@ import {
   RustCandidateTransactionRuntime,
   type CandidateTransactionRequest,
   type RustCandidateTransactionRuntimeOptions,
-} from '../../src/hybrid/rust-candidate-transaction-runtime.js';
+} from '../../src/hybrid/rust-candidate-transaction-runtime.js';import { signHostBoundaryStatement } from '../../src/hybrid/host-authority-transcript.js';
 import {
   RustCandidateLifecycleRuntime,
   type CandidateLifecycleSubject,
@@ -165,6 +165,152 @@ test('TypeScript host invokes a verified Rust-owned candidate transaction end to
   }
 });
 
+const hostRuntime = (
+  value: Fixture,
+  options: { readonly invalidSignature?: boolean; readonly marker?: string; readonly stallAttestor?: boolean } = {},
+): RustCandidateTransactionRuntime => {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  const publicDer = publicKey.export({ format: 'der', type: 'spki' });
+  const publicKeyHex = publicDer.subarray(publicDer.byteLength - 32).toString('hex');
+  const base = runtimeOptions(
+    value,
+    options.marker === undefined
+      ? "const fs=require('node:fs');process.exit(fs.readFileSync('evidence.txt','utf8')==='after\\n'?0:1)"
+      : "const fs=require('node:fs');fs.writeFileSync(process.env.FORGE_TEST_MARKER,'started')",
+    options.marker === undefined ? [] : [{ name: 'FORGE_TEST_MARKER', value: options.marker }],
+  );
+  return new RustCandidateTransactionRuntime({
+    ...base,
+    verificationChecks: base.verificationChecks.map((check) => ({
+      ...check,
+      isolationPolicy: {
+        profile: 'host_managed',
+        requiredControls: ['process', 'filesystem'],
+        allowedHostProviderIds: ['fixture.host'],
+      },
+    })),
+    hostAuthority: {
+      ledgerRoot: join(value.root, 'host-authority-ledger'),
+      trustedKeys: [{
+        providerId: 'fixture.host',
+        keyId: 'fixture-key',
+        publicKeyHex,
+      }],
+      challengeTtlMs: 5_000,
+    },
+    hostAttestor: (challenge) => {
+      if (options.stallAttestor === true) return new Promise(() => {});
+      const statement = {
+        challengeId: challenge.challengeId,
+        keyId: 'fixture-key',
+        boundaryId: 'boundary:typescript-host',
+        processBoundaryInherited: true,
+        attestedControls: ['process', 'filesystem'] as const,
+      };
+      return options.invalidSignature === true
+        ? { statement, signatureHex: '00'.repeat(64) }
+        : signHostBoundaryStatement(challenge, statement, privateKey);
+    },
+  });
+};
+
+const hostRequest = (value: Fixture): CandidateTransactionRequest => ({
+  ...value.request,
+  call: {
+    ...value.request.call,
+    input: {
+      ...(value.request.call.input as Record<string, unknown>),
+      isolationProfile: 'host_managed',
+      isolationProviderId: 'fixture.host',
+      isolationBoundaryId: null,
+    },
+  },
+  verification: {
+    ...value.request.verification,
+    isolation: { profile: 'host_managed', hostProviderId: 'fixture.host' },
+  },
+});
+
+test('TypeScript relays one Rust-bound host challenge and receives auditable host evidence', async () => {
+  assert.equal(existsSync(kernelBinary), true, 'Build forge-kernel or set FORGE_KERNEL_BINARY.');
+  const value = await fixture();
+  try {
+    const artifact = await hostRuntime(value).execute(hostRequest(value));
+    assert.equal(artifact.status, 'verified_candidate');
+    const authorization = artifact.hostAuthorization as {
+      readonly capabilityDigest?: string;
+      readonly policyDigest?: string;
+      readonly authority?: {
+        readonly challenge?: { readonly providerId?: string };
+        readonly statement?: { readonly boundaryId?: string };
+      };
+    } | undefined;
+    assert.match(authorization?.capabilityDigest ?? '', /^[0-9a-f]{64}$/u);
+    assert.match(authorization?.policyDigest ?? '', /^[0-9a-f]{64}$/u);
+    assert.equal(authorization?.authority?.challenge?.providerId, 'fixture.host');
+    assert.equal(authorization?.authority?.statement?.boundaryId, 'boundary:typescript-host');
+    const verification = artifact.verification as {
+      readonly isolation?: {
+        readonly enforcement?: string;
+        readonly forgeEnforced?: boolean;
+        readonly hostAuthority?: unknown;
+      };
+    } | undefined;
+    assert.equal(verification?.isolation?.enforcement, 'host_attested');
+    assert.equal(verification?.isolation?.forgeEnforced, false);
+    assert.notEqual(verification?.isolation?.hostAuthority, undefined);
+    assert.equal(await readFile(join(value.repository, 'evidence.txt'), 'utf8'), 'before\n');
+  } finally {
+    await rm(value.root, { recursive: true, force: true });
+  }
+});
+
+test('invalid host signature recovers before candidate application or verifier launch', async () => {
+  assert.equal(existsSync(kernelBinary), true, 'Build forge-kernel or set FORGE_KERNEL_BINARY.');
+  const value = await fixture();
+  const marker = join(value.root, 'host-verifier-started');
+  try {
+    const artifact = await hostRuntime(value, { invalidSignature: true, marker })
+      .execute(hostRequest(value));
+    assert.equal(artifact.status, 'recovered');
+    assert.equal(artifact.hostAuthorization, undefined);
+    assert.equal(artifact.application, undefined);
+    assert.equal(artifact.verification, undefined);
+    assert.equal(existsSync(marker), false);
+    assert.equal(await readFile(join(value.repository, 'evidence.txt'), 'utf8'), 'before\n');
+    const candidates = (await readdir(value.candidates)).filter((entry) => entry !== '.forge-leases');
+    assert.deepEqual(candidates, []);
+  } finally {
+    await rm(value.root, { recursive: true, force: true });
+  }
+});
+test('cancellation during host negotiation recovers the prepared boundary without applying', async () => {
+  assert.equal(existsSync(kernelBinary), true, 'Build forge-kernel or set FORGE_KERNEL_BINARY.');
+  const value = await fixture();
+  const marker = join(value.root, 'cancelled-host-verifier-started');
+  try {
+    const controller = new AbortController();
+    const execution = hostRuntime(value, { stallAttestor: true, marker })
+      .execute(hostRequest(value), controller.signal);
+    const pendingRoot = join(value.root, 'host-authority-ledger', 'pending');
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      if (existsSync(pendingRoot) && (await readdir(pendingRoot)).length > 0) break;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+    }
+    assert.equal(existsSync(pendingRoot), true, 'host challenge was not issued');
+    controller.abort(new Error('Cancel host negotiation fixture.'));
+    const artifact = await execution;
+    assert.equal(artifact.status, 'cancelled');
+    assert.equal(artifact.application, undefined);
+    assert.equal(artifact.verification, undefined);
+    assert.equal(existsSync(marker), false);
+    const candidates = (await readdir(value.candidates)).filter((entry) => entry !== '.forge-leases');
+    assert.deepEqual(candidates, []);
+  } finally {
+    await rm(value.root, { recursive: true, force: true });
+  }
+});
 test('verifier environment excludes inherited secrets unless policy explicitly allows them', async () => {
   assert.equal(existsSync(kernelBinary), true, 'Build forge-kernel or set FORGE_KERNEL_BINARY.');
   const value = await fixture();

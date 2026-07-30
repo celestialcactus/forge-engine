@@ -5,8 +5,13 @@ import { once } from 'node:events';
 import { spawn } from 'node:child_process';
 import type { Readable } from 'node:stream';
 import type { ApprovalFacts, CapabilityCall } from '../slice0/contracts.js';
+import type {
+  HostIsolationChallenge,
+  HostIsolationControl,
+  SignedHostBoundaryStatement,
+} from './host-authority-transcript.js';
 
-export const rustCandidateTransactionProtocolVersion = 'forge.kernel.transaction.v1';
+export const rustCandidateTransactionProtocolVersion = 'forge.kernel.transaction.v2';
 
 export type CandidateIsolationProfile = 'trusted' | 'host_managed' | 'restricted';
 export type CandidateTransactionStatus =
@@ -18,12 +23,7 @@ export type CandidateTransactionStatus =
 
 export interface CandidateIsolationRequest {
   readonly profile: CandidateIsolationProfile;
-  readonly hostAttestation?: {
-    readonly providerId: string;
-    readonly boundaryId: string;
-    readonly processBoundaryInherited: boolean;
-    readonly attestedControls: readonly string[];
-  };
+  readonly hostProviderId?: string;
 }
 
 export interface CandidateApplicationChange {
@@ -61,6 +61,7 @@ export interface CandidateTransactionArtifact {
   readonly status: CandidateTransactionStatus;
   readonly approval?: unknown;
   readonly boundary?: unknown;
+  readonly hostAuthorization?: unknown;
   readonly application?: unknown;
   readonly verification?: unknown;
   readonly retention?: {
@@ -78,7 +79,13 @@ export interface CandidateTransactionArtifact {
   }[];
 }
 
-export interface TrustedVerificationCheckConfiguration {
+export interface VerificationIsolationPolicyConfiguration {
+  readonly profile: CandidateIsolationProfile;
+  readonly requiredControls?: readonly HostIsolationControl[];
+  readonly allowedHostProviderIds?: readonly string[];
+}
+
+export interface VerificationCheckConfiguration {
   readonly checkId: string;
   readonly executable: string;
   readonly arguments?: readonly string[];
@@ -87,9 +94,29 @@ export interface TrustedVerificationCheckConfiguration {
     readonly value: string;
   }[];
   readonly inheritEnvironment?: readonly string[];
+  readonly isolationPolicy?: VerificationIsolationPolicyConfiguration;
   readonly timeoutMs: number;
   readonly maxOutputBytes: number;
 }
+
+export type TrustedVerificationCheckConfiguration = VerificationCheckConfiguration;
+
+export interface TrustedHostKeyConfiguration {
+  readonly providerId: string;
+  readonly keyId: string;
+  readonly publicKeyHex: string;
+}
+
+export interface HostAuthorityConfiguration {
+  readonly ledgerRoot: string;
+  readonly trustedKeys: readonly TrustedHostKeyConfiguration[];
+  readonly challengeTtlMs: number;
+}
+
+export type HostAttestor = (
+  challenge: HostIsolationChallenge,
+  signal: AbortSignal,
+) => SignedHostBoundaryStatement | Promise<SignedHostBoundaryStatement>;
 
 export interface RustCandidateTransactionRuntimeOptions {
   readonly kernelPath: string;
@@ -98,7 +125,9 @@ export interface RustCandidateTransactionRuntimeOptions {
   readonly repositoryRoot: string;
   readonly candidateParent: string;
   readonly gitExecutable?: string;
-  readonly verificationChecks: readonly TrustedVerificationCheckConfiguration[];
+  readonly verificationChecks: readonly VerificationCheckConfiguration[];
+  readonly hostAuthority?: HostAuthorityConfiguration;
+  readonly hostAttestor?: HostAttestor;
   readonly maxDiffBytes?: number;
   readonly requestIdFactory?: () => string;
 }
@@ -106,6 +135,7 @@ export interface RustCandidateTransactionRuntimeOptions {
 type JsonObject = Record<string, unknown>;
 type ExitState = { readonly code: number | null; readonly signal: NodeJS.Signals | null };
 const maximumOutputFrameBytes = 8 * 1_048_576;
+const maximumOutputFrames = 4;
 
 const isObject = (value: unknown): value is JsonObject =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -119,30 +149,58 @@ const cancellationReason = (signal: AbortSignal): string => {
     : candidate;
 };
 
-const collectOutputFrame = async (stream: Readable): Promise<string> => {
-  const chunks: Buffer[] = [];
-  let bytes = 0;
+const outputFrames = async function* (stream: Readable): AsyncGenerator<string> {
+  let pending = Buffer.alloc(0);
+  let count = 0;
   for await (const chunk of stream) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
-    bytes += buffer.byteLength;
-    if (bytes > maximumOutputFrameBytes + 1) {
+    const incoming = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+    pending = Buffer.concat([pending, incoming]);
+    if (pending.byteLength > maximumOutputFrameBytes + 1 && !pending.includes(0x0a)) {
       throw new Error('Rust kernel output exceeded the transaction frame limit.');
     }
-    chunks.push(buffer);
+    let newline = pending.indexOf(0x0a);
+    while (newline >= 0) {
+      let frame = pending.subarray(0, newline);
+      pending = pending.subarray(newline + 1);
+      if (frame.at(-1) === 0x0d) frame = frame.subarray(0, frame.length - 1);
+      if (frame.byteLength > maximumOutputFrameBytes) {
+        throw new Error('Rust kernel output exceeded the transaction frame limit.');
+      }
+      if (frame.byteLength > 0) {
+        count += 1;
+        if (count > maximumOutputFrames) {
+          throw new Error('Rust kernel emitted too many transaction frames.');
+        }
+        yield frame.toString('utf8');
+      }
+      newline = pending.indexOf(0x0a);
+    }
   }
-  const output = Buffer.concat(chunks, bytes);
-  if (output.length === 0 || output.at(-1) !== 0x0a) {
+  if (pending.byteLength !== 0) {
     throw new Error('Rust kernel exited without a newline-terminated transaction frame.');
   }
-  const frames = output
-    .subarray(0, output.length - 1)
-    .toString('utf8')
-    .split('\n')
-    .filter((frame) => frame.length > 0);
-  if (frames.length !== 1) {
-    throw new Error('Rust kernel emitted an invalid number of transaction frames.');
+};
+
+const invokeHostAttestor = async (
+  attestor: HostAttestor,
+  challenge: HostIsolationChallenge,
+  signal: AbortSignal,
+): Promise<SignedHostBoundaryStatement | undefined> => {
+  if (signal.aborted) return undefined;
+  const remaining = Math.max(1, Math.min(300_000, challenge.expiresAtUnixMs - Date.now()));
+  let timer: NodeJS.Timeout | undefined;
+  let abortListener: (() => void) | undefined;
+  const interrupted = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), remaining);
+    abortListener = () => resolve(undefined);
+    signal.addEventListener('abort', abortListener, { once: true });
+  });
+  try {
+    return await Promise.race([Promise.resolve(attestor(challenge, signal)), interrupted]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    if (abortListener !== undefined) signal.removeEventListener('abort', abortListener);
   }
-  return frames[0] as string;
 };
 
 const validateArtifact = (
@@ -160,6 +218,23 @@ const validateArtifact = (
     throw new Error('Rust kernel returned an invalid ChangeTransactionArtifact envelope.');
   }
   return candidate as unknown as CandidateTransactionArtifact;
+};
+
+const validateChallenge = (candidate: unknown): HostIsolationChallenge => {
+  if (!isObject(candidate)
+    || candidate.schemaVersion !== 1
+    || typeof candidate.challengeId !== 'string'
+    || typeof candidate.nonceHex !== 'string'
+    || typeof candidate.issuedAtUnixMs !== 'number'
+    || typeof candidate.expiresAtUnixMs !== 'number'
+    || typeof candidate.providerId !== 'string'
+    || typeof candidate.capabilityDigest !== 'string'
+    || typeof candidate.policyDigest !== 'string'
+    || !Array.isArray(candidate.requiredControls)
+  ) {
+    throw new Error('Rust kernel returned an invalid host isolation challenge.');
+  }
+  return candidate as unknown as HostIsolationChallenge;
 };
 
 export class RustCandidateTransactionRuntime {
@@ -204,7 +279,6 @@ export class RustCandidateTransactionRuntime {
       });
       child.once('exit', (code, exitSignal) => resolve({ code, signal: exitSignal }));
     });
-    const outputPromise = collectOutputFrame(child.stdout);
 
     const writeMessage = async (message: JsonObject): Promise<void> => {
       if (child.stdin.destroyed || !child.stdin.writable) {
@@ -225,6 +299,71 @@ export class RustCandidateTransactionRuntime {
       });
     };
 
+    const collectResult = async (): Promise<CandidateTransactionArtifact> => {
+      let terminal: CandidateTransactionArtifact | undefined;
+      let challengeSeen = false;
+      for await (const raw of outputFrames(child.stdout)) {
+        let message: unknown;
+        try {
+          message = JSON.parse(raw) as unknown;
+        } catch (error) {
+          throw new Error('Rust kernel emitted invalid transaction JSON: ' + errorMessage(error));
+        }
+        if (!isObject(message) || typeof message.type !== 'string') {
+          throw new Error('Rust kernel emitted a transaction message without a type.');
+        }
+        if (message.type === 'protocol.error') {
+          throw new Error(
+            'Rust kernel transaction protocol error'
+            + (typeof message.code === 'string' ? ' [' + message.code + ']' : '')
+            + ': '
+            + String(message.message ?? 'unknown error'),
+          );
+        }
+        if (message.protocolVersion !== rustCandidateTransactionProtocolVersion
+          || message.requestId !== requestId
+        ) {
+          throw new Error('Rust kernel emitted a mismatched transaction frame.');
+        }
+        if (message.type === 'transaction.host_challenge') {
+          if (challengeSeen || terminal !== undefined) {
+            throw new Error('Rust kernel emitted an unexpected duplicate host challenge.');
+          }
+          challengeSeen = true;
+          if (this.#options.hostAttestor === undefined) {
+            throw new Error('Rust kernel requested host authority but no host attestor is configured.');
+          }
+          const challenge = validateChallenge(message.challenge);
+          const signedStatement = await invokeHostAttestor(
+            this.#options.hostAttestor,
+            challenge,
+            signal,
+          );
+          if (signedStatement !== undefined) {
+            await writeMessage({
+              type: 'transaction.host_statement',
+              protocolVersion: rustCandidateTransactionProtocolVersion,
+              requestId,
+              signedStatement,
+            });
+          }
+          continue;
+        }
+        if (message.type === 'transaction.result') {
+          if (terminal !== undefined) {
+            throw new Error('Rust kernel emitted duplicate transaction results.');
+          }
+          terminal = validateArtifact(message.artifact, request);
+          continue;
+        }
+        throw new Error('Rust kernel emitted an unsupported transaction frame: ' + message.type);
+      }
+      if (terminal === undefined) {
+        throw new Error('Rust kernel exited without a terminal transaction result.');
+      }
+      return terminal;
+    };
+
     try {
       await writeMessage({
         type: 'transaction.start',
@@ -237,6 +376,9 @@ export class RustCandidateTransactionRuntime {
           gitExecutable: this.#options.gitExecutable ?? 'git',
           verificationChecks: this.#options.verificationChecks,
           maxDiffBytes: this.#options.maxDiffBytes ?? 100_000,
+          ...(this.#options.hostAuthority === undefined
+            ? {}
+            : { hostAuthority: this.#options.hostAuthority }),
         },
         ...(signal.aborted ? { initialCancellationReason: cancellationReason(signal) } : {}),
       });
@@ -244,33 +386,9 @@ export class RustCandidateTransactionRuntime {
         signal.addEventListener('abort', sendCancellation, { once: true });
         if (signal.aborted) sendCancellation();
       }
-      const [exit, raw] = await Promise.all([exitPromise, outputPromise]);
+      const [exit, artifact] = await Promise.all([exitPromise, collectResult()]);
       if (launchError !== undefined) {
         throw new Error('Rust kernel failed to start: ' + launchError.message);
-      }
-      let message: unknown;
-      try {
-        message = JSON.parse(raw) as unknown;
-      } catch (error) {
-        throw new Error('Rust kernel emitted invalid transaction JSON: ' + errorMessage(error));
-      }
-      if (!isObject(message) || typeof message.type !== 'string') {
-        throw new Error('Rust kernel emitted a transaction message without a type.');
-      }
-      if (message.type === 'protocol.error') {
-        throw new Error(
-          'Rust kernel transaction protocol error'
-          + (typeof message.code === 'string' ? ' [' + message.code + ']' : '')
-          + ': '
-          + String(message.message ?? 'unknown error'),
-        );
-      }
-      if (
-        message.type !== 'transaction.result'
-        || message.protocolVersion !== rustCandidateTransactionProtocolVersion
-        || message.requestId !== requestId
-      ) {
-        throw new Error('Rust kernel emitted a mismatched transaction result.');
       }
       if (exit.code !== 0) {
         const signalSuffix = exit.signal === null ? '' : ' (' + exit.signal + ')';
@@ -282,7 +400,7 @@ export class RustCandidateTransactionRuntime {
           + (detail.length === 0 ? '.' : ': ' + detail),
         );
       }
-      return validateArtifact(message.artifact, request);
+      return artifact;
     } finally {
       signal.removeEventListener('abort', sendCancellation);
       if (!child.stdin.destroyed) child.stdin.end();
