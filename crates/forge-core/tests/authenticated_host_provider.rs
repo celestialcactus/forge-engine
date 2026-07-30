@@ -16,7 +16,7 @@ use forge_core::{
     HostPolicyPosture, IsolatedProcessSpec, IsolationControl, IsolationEnforcement,
     IsolationPolicy, IsolationProvider, IsolationRequest, NoCancellation,
     SignedHostBoundaryStatement, TrustedHostKey, UserConsentFact, UserConsentStatus,
-    VerificationCheck, VerificationSelection, derive_host_execution_binding,
+    VerificationCheck, VerificationRunner, VerificationSelection, derive_host_execution_binding,
     host_attestation_signing_bytes, proposal_id_for_manifest,
 };
 use serde_json::json;
@@ -352,7 +352,34 @@ fn tampered_consumed_evidence_fails_before_verifier_launch() {
             &NoCancellation,
         )
         .unwrap_err();
-    assert!(error.contains("missing field") || error.contains("invalid"));
+    assert!(error.contains("corrupt or has an unknown schema"));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_pending_grant_blocks_duplicate_authorization_before_another_challenge_is_consumed() {
+    let root = fixture_root("pending-grant");
+    let (provider, negotiator) = provider(&root);
+    let runner =
+        VerificationRunner::try_new_with_isolation_provider(vec![check()], Arc::new(provider))
+            .unwrap();
+    let request = request();
+
+    assert!(
+        runner
+            .authorize_transaction(&request, &NoCancellation)
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        runner
+            .authorize_transaction(&request, &NoCancellation)
+            .unwrap_err()
+            .contains("already pending")
+    );
+    assert_eq!(negotiator.calls.load(Ordering::SeqCst), 1);
+
+    runner.discard_host_authorization();
     fs::remove_dir_all(root).unwrap();
 }
 

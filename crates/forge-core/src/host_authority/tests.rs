@@ -206,6 +206,22 @@ fn concurrent_consumers_allow_exactly_one_success() {
 }
 
 #[test]
+fn public_issue_reaps_expired_pending_challenges_before_capacity_check() {
+    let root = fixture_root("expired-pending");
+    let ledger = HostChallengeLedger::new(root.clone(), trust()).expect("ledger");
+    let expired = ledger
+        .issue_at(request(), 1, [12_u8; NONCE_BYTES])
+        .expect("expired fixture");
+    assert!(ledger.pending_path(&expired.challenge_id).is_file());
+
+    let current = ledger.issue(request()).expect("current challenge");
+
+    assert!(!ledger.pending_path(&expired.challenge_id).exists());
+    assert!(ledger.pending_path(&current.challenge_id).is_file());
+    fs::remove_dir_all(root).expect("cleanup");
+}
+
+#[test]
 fn public_issue_rejects_unexpected_ledger_entries() {
     let root = fixture_root("capacity-shape");
     let ledger = HostChallengeLedger::new(root.clone(), trust()).expect("ledger");

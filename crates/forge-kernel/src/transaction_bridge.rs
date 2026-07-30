@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
-        mpsc::{self, Receiver, RecvTimeoutError},
+        mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError},
     },
     thread,
     time::{Duration, Instant},
@@ -21,7 +21,8 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::protocol::{
-    MAX_HOST_FRAME_BYTES, TRANSACTION_PROTOCOL_VERSION, read_bounded_frame, send_json,
+    MAX_TRANSACTION_CONTROL_FRAME_BYTES, TRANSACTION_PROTOCOL_VERSION, read_bounded_frame,
+    send_json,
 };
 
 const MAX_REQUEST_ID_BYTES: usize = 128;
@@ -422,10 +423,10 @@ fn input_router(
     mut reader: BufReader<io::Stdin>,
     request_id: String,
     cancellation: Arc<CancellationState>,
-    statements: mpsc::Sender<SignedHostBoundaryStatement>,
+    statements: SyncSender<SignedHostBoundaryStatement>,
 ) {
     loop {
-        let frame = match read_bounded_frame(&mut reader, MAX_HOST_FRAME_BYTES) {
+        let frame = match read_bounded_frame(&mut reader, MAX_TRANSACTION_CONTROL_FRAME_BYTES) {
             Ok(Some(frame)) => frame,
             Ok(None) => return,
             Err(_) => {
@@ -462,10 +463,24 @@ fn input_router(
             } => {
                 if protocol_version != TRANSACTION_PROTOCOL_VERSION
                     || incoming_request_id != request_id
-                    || statements.send(signed_statement).is_err()
                 {
                     cancellation.set_once("Transaction protocol input became invalid.".to_owned());
                     return;
+                }
+                match statements.try_send(signed_statement) {
+                    Ok(()) => {}
+                    Err(TrySendError::Full(_)) => {
+                        cancellation.set_once(
+                            "Transaction protocol sent more than one pending host statement."
+                                .to_owned(),
+                        );
+                        return;
+                    }
+                    Err(TrySendError::Disconnected(_)) => {
+                        cancellation
+                            .set_once("Transaction host statement channel closed.".to_owned());
+                        return;
+                    }
                 }
             }
         }
@@ -496,7 +511,7 @@ pub fn execute(
         }
         cancellation.set_once(reason.to_owned());
     }
-    let (statement_sender, statement_receiver) = mpsc::channel();
+    let (statement_sender, statement_receiver) = mpsc::sync_channel(1);
     let negotiator: Arc<dyn HostBoundaryNegotiator> = Arc::new(ProtocolHostNegotiator {
         request_id: start.request_id.clone(),
         writer: Arc::clone(&writer),

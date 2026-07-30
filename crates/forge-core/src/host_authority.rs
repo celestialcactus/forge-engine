@@ -104,8 +104,8 @@ impl HostChallengeLedger {
     }
 
     pub fn issue(&self, request: HostChallengeRequest) -> Result<HostIsolationChallenge, String> {
-        self.enforce_issue_capacity()?;
         let now = system_time_ms()?;
+        self.enforce_issue_capacity(now)?;
         let mut nonce = [0_u8; NONCE_BYTES];
         getrandom::fill(&mut nonce)
             .map_err(|error| format!("Cannot obtain host challenge randomness: {error}"))?;
@@ -335,7 +335,8 @@ impl HostChallengeLedger {
             .map_err(|_| "Consumed host evidence signature is invalid.".to_owned())
     }
 
-    fn enforce_issue_capacity(&self) -> Result<(), String> {
+    fn enforce_issue_capacity(&self, now: u64) -> Result<(), String> {
+        self.reap_expired_pending(now)?;
         ensure_record_capacity(
             &self.root.join("pending"),
             MAX_PENDING_RECORDS,
@@ -346,6 +347,41 @@ impl HostChallengeLedger {
             MAX_CONSUMED_RECORDS,
             "consumed host challenge",
         )
+    }
+
+    fn reap_expired_pending(&self, now: u64) -> Result<(), String> {
+        for entry in fs::read_dir(self.root.join("pending"))
+            .map_err(|error| format!("Cannot inspect pending host challenge ledger: {error}"))?
+        {
+            let entry = entry.map_err(|error| {
+                format!("Cannot inspect pending host challenge record: {error}")
+            })?;
+            let path = entry.path();
+            let metadata = fs::symlink_metadata(&path).map_err(|error| {
+                format!("Cannot inspect pending host challenge record: {error}")
+            })?;
+            if !metadata.file_type().is_file()
+                || metadata.file_type().is_symlink()
+                || path.extension().and_then(|value| value.to_str()) != Some("json")
+            {
+                return Err(
+                    "pending host challenge ledger contains an unexpected entry.".to_owned(),
+                );
+            }
+            let challenge: HostIsolationChallenge = read_bounded_json(&path)?;
+            validate_challenge(&challenge)?;
+            if path != self.pending_path(&challenge.challenge_id) {
+                return Err(
+                    "Pending host challenge filename does not match its identity.".to_owned(),
+                );
+            }
+            if challenge.expires_at_unix_ms <= now {
+                fs::remove_file(&path).map_err(|error| {
+                    format!("Cannot remove expired pending host challenge: {error}")
+                })?;
+            }
+        }
+        Ok(())
     }
 
     fn pending_path(&self, challenge_id: &str) -> PathBuf {

@@ -1,6 +1,6 @@
 # Slice 2F-2b: authenticated host provider and bridge
 
-- **Status:** In progress
+- **Status:** Local implementation complete; hosted/native and VS Code acceptance pending
 - **Opened:** 2026-07-30
 - **Branch:** `feature/slice-2f2b-host-provider-bridge`
 - **Base:** protected `develop` at `aa73e0e`
@@ -78,6 +78,32 @@ candidate application. Failure after application must recover it before return.
 - Trusted transactions remain behaviorally compatible.
 - Native Rust and hybrid gates pass on Windows/macOS; Ubuntu remains compatible.
 - The controlled seven-tool VS Code read-only tether remains mutation free.
+
+## Local implementation checkpoint
+
+The feature branch now contains the Rust-derived binding, authenticated provider,
+one-use grant, durable evidence revalidation, transaction v2 challenge/statement
+frames, and TypeScript signer transport described above. A second audit added these
+service-core corrections before hosted validation:
+
+- duplicate authorization is rejected before another challenge is issued or
+  consumed;
+- at most one 64 KiB host statement may be pending in the transaction protocol;
+- corrupt consumed evidence has a regression matching the actual fail-closed
+  error path; and
+- expired abandoned challenges are validated and reaped before the pending-ledger
+  capacity gate, preventing handshake failures from permanently exhausting it.
+
+Local gates pass Rust workspace check, rustfmt, all-target Clippy with warnings
+denied, and `npm run check` with 39/39 Node tests. Native Rust test execution is
+still unavailable on this workstation: GNU lacks `dlltool.exe`, MSVC lacks
+`link.exe`, and GNU/LLVM lacks `x86_64-w64-mingw32-clang`. Hosted Windows/macOS/
+Ubuntu runners remain the executable authority. The controlled VS Code tether is
+also still pending for this head.
+
+Core completion remains 94% until those external gates pass. Consumed host records
+remain bounded and durable; retention/export/rotation is an explicit later policy
+problem and Forge does not silently delete audit evidence.
 
 ## Explicitly deferred
 

@@ -95,6 +95,13 @@ impl VerificationRunner {
             &request.verification.isolation,
         )?;
         let binding = derive_host_execution_binding(request, check, &capabilities.provider_id)?;
+        let mut pending = self
+            .pending_host_execution
+            .lock()
+            .map_err(|_| "Host execution grant state is unavailable.".to_owned())?;
+        if pending.is_some() {
+            return Err("A host execution grant is already pending consumption.".to_owned());
+        }
         let grant = self.isolation_provider.authorize_host_managed(
             &check.isolation_policy,
             &request.verification.isolation,
@@ -109,13 +116,6 @@ impl VerificationRunner {
                 "Host provider returned authorization for a different Rust execution binding."
                     .to_owned(),
             );
-        }
-        let mut pending = self
-            .pending_host_execution
-            .lock()
-            .map_err(|_| "Host execution grant state is unavailable.".to_owned())?;
-        if pending.is_some() {
-            return Err("A host execution grant is already pending consumption.".to_owned());
         }
         *pending = Some(PendingHostExecution {
             transaction_id: request.transaction_id.clone(),

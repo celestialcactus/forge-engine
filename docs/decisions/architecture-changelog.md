@@ -1,5 +1,20 @@
 # Architecture Changelog
 
+## 2026-07-30 - Slice 2F-2b local implementation audit
+
+- Implemented the Rust-derived capability/policy binding, authenticated host
+  provider, one-use execution grant, durable pre-launch evidence revalidation,
+  transaction v2 negotiation frames, and TypeScript signer transport.
+- The second audit blocked duplicate authorization before challenge consumption,
+  bounded the control queue/frame, corrected the corrupt-evidence regression, and
+  reaped validated expired pending challenges before capacity enforcement.
+- Local Rust check/rustfmt/Clippy and `npm run check` (39/39 Node tests) pass. Native
+  execution remains blocked by missing local Windows linkers, so hosted Windows/
+  macOS/Ubuntu and controlled VS Code gates remain mandatory.
+- Recorded
+  [Checkpoint 44](checkpoints/2026-07-30-44-host-provider-bridge-local-audit.md).
+  Core completion remains 94% until external acceptance closes.
+
 ## 2026-07-30 - Slice 2F-2b host provider/bridge opened
 
 - Accepted
