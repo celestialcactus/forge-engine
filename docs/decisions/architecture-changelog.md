@@ -1,5 +1,26 @@
 # Architecture Changelog
 
+## 2026-07-30 — Slice 2F-1 isolation authority contract accepted
+
+- Accepted Slice 2F-1 at `ef0a125`: providers now advertise bounded capabilities;
+  Forge validates request support before execution and returned evidence against
+  provider, policy, and request afterward.
+- The baseline provider is trusted-only. Raw host-managed and unsupported
+  restricted requests fail before verifier launch; failed validation cannot retain
+  or promote a candidate.
+- Hosted cross-platform run
+  [30559452883](https://github.com/celestialcactus/forge-engine/actions/runs/30559452883)
+  passed Windows/macOS, and hybrid run
+  [30559452477](https://github.com/celestialcactus/forge-engine/actions/runs/30559452477)
+  passed Windows/macOS/Ubuntu.
+- A fresh controlled VS Code regression remained exactly one read-only Forge call
+  with seven selected Forge tools and no mutation. This is a tether regression,
+  not a restricted-provider test.
+- Recorded
+  [Checkpoint 40](checkpoints/2026-07-30-40-isolation-authority-contract-hosted-and-vscode-gate.md).
+  Core completion is conservatively 93%; authenticated host negotiation and a
+  proven Windows/macOS restricted backend remain.
+
 ## 2026-07-30 — Slice 2F-1 isolation authority contract opened
 
 - Accepted

@@ -3,6 +3,8 @@
 - **Status:** accepted for Slice 2F-1 implementation
 - **Date:** 2026-07-30
 - **Owners:** ForgeEngine project
+- **Implementation:** `ef0a125`
+- **Checkpoint:** 2026-07-30-40
 - **Supersedes:** baseline `host_managed` execution in ADR-0008
 - **Refines:** ADR-0008 and ADR-0010
 
@@ -62,3 +64,8 @@ until a platform backend passes its adversarial gate.
 - preflight rejects unsupported profiles before verifier launch;
 - evidence validation rejects provider spoofing and missing/unadvertised controls;
 - all accepted trusted-mode behavior remains green across supported platforms.
+
+Hosted Windows/macOS and hybrid Windows/macOS/Ubuntu gates passed at implementation
+`ef0a125`. The controlled seven-tool VS Code read-only regression also remained a
+single mutation-free Forge call. See
+[Checkpoint 40](../checkpoints/2026-07-30-40-isolation-authority-contract-hosted-and-vscode-gate.md).

@@ -1,9 +1,11 @@
 # Slice 2F-1: isolation authority contract
 
-- **Status:** In progress
+- **Status:** Accepted
 - **Opened:** 2026-07-30
+- **Accepted:** 2026-07-30
 - **Branch:** `feature/slice-2f1-host-auth-restricted-contract`
 - **Base:** protected `develop` at `337aea8`
+- **Implementation:** `ef0a125`
 - **Tier-1 platforms:** Windows and macOS
 - **Compatibility platform:** Ubuntu
 
@@ -62,3 +64,32 @@ signature protocol or an operating-system sandbox. Those become separate Slice
 
 No raw shell or unrestricted file-write tool is introduced by any Slice 2F
 increment.
+
+## Acceptance evidence
+
+- Local `npm run check` passed with 37 tests, type checking, and the production
+  build. Rust formatting passed. A direct local Rust link remains unavailable on
+  this Windows installation because the MSVC linker is not installed; hosted
+  native jobs are therefore the Rust execution authority.
+- Hosted cross-platform run
+  [30559452883](https://github.com/celestialcactus/forge-engine/actions/runs/30559452883)
+  passed Windows and macOS. Hosted hybrid run
+  [30559452477](https://github.com/celestialcactus/forge-engine/actions/runs/30559452477)
+  passed Windows, macOS, and Ubuntu, including Rust format, clippy, tests, release
+  build, Node conformance, the sovereign CLI exercise, and the latency gate.
+- Six focused authority regressions prove baseline trusted-only support,
+  descriptor incoherence rejection, required restricted-control preflight,
+  provider/control spoof rejection, missing-control rejection, and a valid
+  authenticated-host-shaped contract.
+- The worktree transaction regression proves an unauthenticated host-managed
+  request launches no verifier, retains no candidate, and leaves the original
+  workspace unchanged.
+- A fresh controlled VS Code regression retained exactly seven Forge tools, used
+  exactly one workspace-summary call, used no built-in tools, and made no
+  mutation. It returned run
+  `run:02dbeb85-340d-41f5-8080-eb5f362136c7`, snapshot
+  `workspace:7b3c009ae89d6632`, 147 files, `truncated: true`, and the canonical
+  six-event sequence.
+
+This acceptance proves the authority contract and fail-closed baseline. It does
+not prove an authenticated host handshake or operating-system containment.

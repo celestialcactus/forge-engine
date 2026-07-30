@@ -44,12 +44,13 @@ SGU-005 moves process launch and lifecycle beneath a Rust `IsolationProvider`.
 Policy selects `trusted`, `host_managed`, or `restricted`; the approved capability
 call binds that selection, and verification evidence records who enforced what.
 
-The baseline provider supports honest developer-permission execution and
-allowlisted host-attested boundaries. It rejects `restricted` rather than silently
-falling back. A real Forge-enforced backend remains a separate platform milestone.
-The contract and baseline provider passed hosted Windows, macOS, and Linux
-conformance. See ADR-0008 and Checkpoint 18. A real Forge-enforced restricted
-backend remains deferred.
+The baseline provider supports honest developer-permission execution only. ADR-0014
+retired raw host-attested execution: `host_managed` and `restricted` now fail before
+verifier launch until a provider advertises and proves the required authority. The
+provider-capability contract passed hosted Windows, macOS, and Ubuntu conformance.
+See ADR-0008, ADR-0014, and Checkpoints 18 and 40. Authenticated host negotiation
+and a real Forge-enforced restricted backend remain deferred to Slice 2F-2 and
+Slice 2F-3 respectively.
 
 ## Slice 2C private host bridge
 
@@ -178,9 +179,9 @@ separate Slice 2F pilot gate.
 
 A Git worktree is a recoverability boundary, not a security sandbox. Verification
 now routes through one Rust isolation-provider contract. The baseline `trusted`
-profile still runs with the Forge process permissions; `host_managed` records an
-allowlisted host assertion without claiming Forge enforcement; `restricted` fails
-closed because no Forge OS backend exists yet. The process-ownership local gate
+profile still runs with the Forge process permissions; `host_managed` fails closed
+because no authenticated host provider exists; `restricted` fails closed because
+no Forge OS backend exists yet. The process-ownership local gate
 adds suspended pre-execution Windows Job Object assignment and checked Unix process-
 group teardown. This guarantees supervised lifecycle cleanup where accepted; it
 does not restrict verifier permissions, filesystem, network, or credentials.
