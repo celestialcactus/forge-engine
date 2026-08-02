@@ -1,6 +1,6 @@
 # Slice 2F-2b: authenticated host provider and bridge
 
-- **Status:** Local implementation complete; hosted/native and VS Code acceptance pending
+- **Status:** Local implementation and VS Code tether accepted; hosted/native acceptance pending
 - **Opened:** 2026-07-30
 - **Branch:** `feature/slice-2f2b-host-provider-bridge`
 - **Base:** protected `develop` at `aa73e0e`
@@ -98,8 +98,15 @@ Local gates pass Rust workspace check, rustfmt, all-target Clippy with warnings
 denied, and `npm run check` with 39/39 Node tests. Native Rust test execution is
 still unavailable on this workstation: GNU lacks `dlltool.exe`, MSVC lacks
 `link.exe`, and GNU/LLVM lacks `x86_64-w64-mingw32-clang`. Hosted Windows/macOS/
-Ubuntu runners remain the executable authority. The controlled VS Code tether is
-also still pending for this head.
+Ubuntu runners remain the executable authority.
+
+The controlled VS Code tether passed on 2026-08-02 from a fresh Agent chat with
+only the seven Forge tools enabled. The host made exactly one
+`forge_workspace_summary` call with `maxFiles: 20`, used no built-in tool, and did
+not mutate the worktree. It returned run
+`run:859f6ea9-86a2-4cbe-a082-a4f983449654`, snapshot
+`workspace:8bd7b47cfdf4b512`, 267 total files, `truncated: true`, and the canonical
+six-event sequence from `run.started` through `run.completed`.
 
 Core completion remains 94% until those external gates pass. Consumed host records
 remain bounded and durable; retention/export/rotation is an explicit later policy

@@ -3,7 +3,7 @@
 - **Date:** 2026-07-30
 - **Branch:** `feature/slice-2f2b-host-provider-bridge`
 - **Base:** protected `develop` at `aa73e0e`
-- **State:** local implementation complete; hosted/native and VS Code acceptance pending
+- **State:** local implementation and VS Code tether accepted; hosted/native acceptance pending
 - **ADR:** [ADR-0016](../ADRs/ADR-0016-rust-derived-host-execution-grant.md)
 - **Task:** [Slice 2F-2b](../../tasks/SLICE-002F2B-host-provider-bridge.md)
 
@@ -51,8 +51,19 @@ The resulting artifact preserves the full authorization evidence.
 - Open the draft PR and pass native Windows/macOS plus Ubuntu compatibility gates.
 - Prove host-managed success, invalid signature before apply/launch, cancellation
   during negotiation, durable evidence revalidation, and trusted compatibility.
-- Repeat the controlled seven-tool VS Code read-only regression from a fresh chat.
 - Only then mark Slice 2F-2b accepted or increase the core-completion estimate.
+
+## VS Code acceptance addendum (2026-08-02)
+
+The exact feature worktree was opened as a trusted VS Code workspace, the MCP
+server discovered all seven Forge tools, and no built-in tools were enabled. A
+fresh Agent chat made exactly one `forge_workspace_summary` call with
+`maxFiles: 20` and completed without retry, artifact externalization, or fallback.
+The response reported run `run:859f6ea9-86a2-4cbe-a082-a4f983449654`, snapshot
+`workspace:8bd7b47cfdf4b512`, 267 files, `truncated: true`, and ordered events
+`run.started`, `context.planned`, `capability.requested`, `approval.decided`,
+`capability.completed`, `run.completed`. A post-test `git status --short --branch`
+was clean.
 
 ## Honest boundary
 

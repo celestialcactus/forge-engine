@@ -1,3 +1,10 @@
+# 2026-08-02
+
+- Passed the controlled Slice 2F-2b VS Code tether gate from the exact feature
+  worktree with only seven Forge tools enabled. One bounded workspace-summary call
+  completed without retry, fallback, externalization, or mutation and preserved
+  the canonical six-event lifecycle. Hosted native acceptance remains open; core
+  completion stays at 94%. See Checkpoint 45 and the Slice 2F-2b task.
 # Architecture Changelog
 
 ## 2026-07-30 - Slice 2F-2b local implementation audit
