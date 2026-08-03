@@ -11,8 +11,7 @@ test('product CLI fails closed instead of selecting the TypeScript conformance r
   const environment = { ...process.env, FORGE_KERNEL_BINARY: missingKernel };
   const run = spawnSync(process.execPath, [
     ...cli,
-    'run',
-    'Inspect the fixture.',
+    'inspect',
     '--workspace',
     fixtureRoot,
     '--json',
@@ -39,4 +38,27 @@ test('product CLI fails closed instead of selecting the TypeScript conformance r
   assert.equal(report.kernel.ready, false);
   assert.equal(report.kernel.path, null);
   assert.match(report.kernel.message, /not an executable file/u);
+});
+
+test('does not expose superseded candidate commands or fake task execution', () => {
+  const environment = { ...process.env, FORGE_KERNEL_BINARY: join(fixtureRoot, 'missing-forge-kernel') };
+  const help = spawnSync(process.execPath, [...cli, 'help'], {
+    encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment,
+  });
+  assert.equal(help.status, 0);
+  assert.doesNotMatch(help.stdout, /forge candidate/u);
+
+  const candidate = spawnSync(process.execPath, [...cli, 'candidate', 'inspect', 'legacy-id'], {
+    encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment,
+  });
+  assert.notEqual(candidate.status, 0);
+  assert.match(candidate.stderr, /Unknown Forge command: candidate/u);
+  assert.doesNotMatch(candidate.stdout, /Legacy usage/u);
+
+  const run = spawnSync(process.execPath, [...cli, 'run', 'pretend to execute this task'], {
+    encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment,
+  });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /explicit --provider/u);
+  assert.doesNotMatch(run.stdout, /totalFiles/u);
 });

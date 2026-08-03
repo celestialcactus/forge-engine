@@ -5,17 +5,17 @@ import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { ApprovalFacts, CapabilityCall, RunArtifact } from './slice0/contracts.js';
+import { developerEvidenceTools } from './inference/developer-tools.js';
+import { ProviderTaskPlanner } from './inference/planner.js';
+import { createInferenceProvider, resolveInferenceRoute } from './inference/routing.js';
 import { startForgeMcpServer } from './mcp/server.js';
 import {
   probeForgeKernelBinary,
   requireForgeKernelBinary,
   resolveForgeKernelBinary,
 } from './hybrid/kernel-binary.js';
-import {
-  RustCandidateLifecycleRuntime,
-  type CandidateLifecycleSubject,
-} from './hybrid/rust-candidate-lifecycle-runtime.js';
-import type { TrustedVerificationCheckConfiguration } from './hybrid/rust-candidate-transaction-runtime.js';
+
+import type { TrustedVerificationCheckConfiguration } from './hybrid/verification-configuration.js';
 import {
   RustSovereignChangeRuntime,
   type SovereignChangeProposal,
@@ -39,7 +39,10 @@ const { positionals, values } = parseArgs({
     'max-symbols': { type: 'string' },
     'max-diagnostics': { type: 'string' },
     'max-bytes': { type: 'string' },
-    'candidate-parent': { type: 'string' },
+    'max-turns': { type: 'string' },
+    'timeout-ms': { type: 'string' },
+    provider: { type: 'string' },
+    model: { type: 'string' },
     'engine-root': { type: 'string' },
     approve: { type: 'boolean', default: false },
   },
@@ -66,17 +69,6 @@ const engineRoot = (): string => resolve(
     ?? join(homedir(), '.forge'),
 );
 
-const candidateLifecycle = (): RustCandidateLifecycleRuntime => {
-  const configuredParent = values['candidate-parent'] ?? process.env.FORGE_CANDIDATE_PARENT;
-  if (configuredParent === undefined || configuredParent.trim().length === 0) {
-    throw new Error('Legacy candidate lifecycle commands require --candidate-parent <path> or FORGE_CANDIDATE_PARENT.');
-  }
-  return new RustCandidateLifecycleRuntime({
-    kernelPath: requireKernel(),
-    repositoryRoot: workspaceRoot,
-    candidateParent: resolve(configuredParent),
-  });
-};
 
 const sovereignChangeRuntime = (
   verificationChecks: readonly TrustedVerificationCheckConfiguration[] = [],
@@ -195,41 +187,13 @@ const printArtifact = (artifact: RunArtifact): void => {
   console.log(`Status: ${artifact.status}`);
   console.log(`Capability success: ${artifact.capabilityResults.at(-1)?.success ?? false}`);
   console.log(`Workspace: ${artifact.snapshot.rootLabel} (${artifact.snapshot.files.length} files)`);
-  console.log(JSON.stringify(payload.evidence, null, 2));
+  for (const evidence of artifact.inferenceEvidence ?? []) {
+    console.log(`Inference: ${evidence.provider}/${evidence.model} ${evidence.finishReason} ${evidence.durationMs}ms; fallback=${evidence.routing.fallbackUsed}`);
+  }
+  if (artifact.output !== undefined) console.log(artifact.output);
+  else console.log(JSON.stringify(payload.evidence, null, 2));
 };
 
-const legacyCandidateApproval = (callId: string, capabilityId: string): ApprovalFacts => ({
-  schemaVersion: 1,
-  callId,
-  capabilityId,
-  hostPolicy: {
-    posture: 'ask',
-    source: 'forge.cli.explicit-operation',
-    reason: 'The local CLI requires explicit consent for candidate mutation.',
-  },
-  userConsent: {
-    status: 'granted',
-    source: 'forge.cli.--approve',
-    reason: 'The developer supplied --approve for this exact lifecycle call.',
-  },
-});
-
-const candidateCall = (
-  capabilityId: string,
-  operationIdName: 'promotionId' | 'discardId',
-  operationId: string,
-  subject: CandidateLifecycleSubject,
-) => {
-  const callId = `candidate-cli:${randomUUID()}`;
-  return {
-    call: {
-      id: callId,
-      capabilityId,
-      input: { [operationIdName]: operationId, subject },
-    },
-    approvalFacts: legacyCandidateApproval(callId, capabilityId),
-  };
-};
 
 try {
   if (command === 'doctor') {
@@ -336,39 +300,24 @@ try {
         throw new Error('Usage: forge change <propose|inspect|accept|discard> ...');
       }
     }
-  } else if (command === 'candidate') {
-    const action = positionals[1];
-    const candidateId = positionals[2]?.trim();
-    if (candidateId === undefined || candidateId.length === 0) {
-      throw new Error('Legacy usage: forge candidate <inspect|accept|discard> <candidate-id> --candidate-parent <path> [--approve]');
-    }
-    const lifecycle = candidateLifecycle();
-    if (action === 'inspect') {
-      printJsonArtifact(await lifecycle.inspect(candidateId));
-    } else if (action === 'accept' || action === 'discard') {
-      requireConsent(`legacy forge candidate ${action}`);
-      const subject = (await lifecycle.inspect(candidateId)).subject;
-      const operationId = `${action}:cli:${randomUUID()}`;
-      const capabilityId = action === 'accept' ? 'workspace.candidate.promote' : 'workspace.candidate.discard';
-      const exact = candidateCall(
-        capabilityId,
-        action === 'accept' ? 'promotionId' : 'discardId',
-        operationId,
-        subject,
-      );
-      printJsonArtifact(action === 'accept'
-        ? await lifecycle.promote({ promotionId: operationId, subject, ...exact })
-        : await lifecycle.discard({ discardId: operationId, subject, ...exact }));
-    } else {
-      throw new Error('Legacy usage: forge candidate <inspect|accept|discard> ...');
-    }
+
   } else if (command === 'run') {
     const task = positionals.slice(1).join(' ').trim();
-    if (task.length === 0) throw new Error('Usage: forge run <task> [--workspace <path>] [--json]');
-    printArtifact(await workspaceService().run(task, integerOption(values['max-files'], 200, '--max-files')));
+    if (task.length === 0) throw new Error('Usage: forge run <task> --provider <ollama|openai> --model <model> [--workspace <path>] [--json]');
+    const route = resolveInferenceRoute(values.provider, values.model);
+    const timeoutMs = integerOption(values['timeout-ms'], 120_000, '--timeout-ms');
+    if (timeoutMs < 1 || timeoutMs > 900_000) throw new Error('--timeout-ms must be from 1 to 900000.');
+    const planner = new ProviderTaskPlanner({
+      provider: createInferenceProvider(route),
+      route,
+      tools: developerEvidenceTools,
+    });
+    printArtifact(await workspaceService().executeTask(task, planner, {
+      maxTurns: integerOption(values['max-turns'], 8, '--max-turns'),
+    }, AbortSignal.timeout(timeoutMs)));
   } else if (command === 'mcp') {
     await startForgeMcpServer(workspaceRoot, productServiceOptions());
-  } else {
+  } else if (command === 'help') {
     console.log([
       'ForgeEngine V1 — sovereign evidence runtime',
       '',
@@ -387,12 +336,14 @@ try {
       '  forge diagnostics [--config <tsconfig>] [--json] [--max-diagnostics <count>]',
       '  forge git-status [--json]',
       '  forge git-diff [--staged] [--json] [--max-bytes <count>]',
-      '  forge run <task> [--json]',
+      '  forge run <task> --provider <ollama|openai> --model <model> [--max-turns <count>] [--timeout-ms <ms>] [--json]',
       '  forge mcp [--workspace <path>]',
       '',
       'Product commands require the Rust kernel. Source builds discover target/release or target/debug; FORGE_KERNEL_BINARY overrides discovery. State defaults to ~/.forge and can be overridden with --engine-root or FORGE_ENGINE_ROOT.',
       'Verification is currently trusted local execution; Forge owns process cleanup but does not yet enforce an OS sandbox.',
     ].join('\n'));
+  } else {
+    throw new Error(`Unknown Forge command: ${command}`);
   }
 } finally {
   service?.close();

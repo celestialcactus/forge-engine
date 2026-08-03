@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { spawn } from 'node:child_process';
 import type { Readable } from 'node:stream';
 import type { ApprovalFacts, CapabilityCall } from '../slice0/contracts.js';
-import type { TrustedVerificationCheckConfiguration } from './rust-candidate-transaction-runtime.js';
+import type { TrustedVerificationCheckConfiguration } from './verification-configuration.js';
 
 export const rustSovereignChangeProtocolVersion = 'forge.kernel.changeset.v2';
 

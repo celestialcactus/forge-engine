@@ -1,9 +1,40 @@
 # Architecture Changelog
 
+## 2026-08-03 - Real inference local gate
+
+- Added bounded Ollama Chat and OpenAI Responses adapters behind the existing
+  `TaskPlanner` bridge, plus explicit provider/model routing with no fallback.
+- Added Rust-recorded terminal inference evidence and mirrored fail-closed
+  validation without creating a second runtime or event hierarchy.
+- Bumped the run bridge to `forge.kernel.bridge.v3` so stale kernels cannot silently
+  discard the new evidence contract.
+- Consolidated the seven evidence capabilities into one reusable pack and one
+  service planner/runtime composition path.
+- Removed the public legacy candidate commands/exports and replaced fake task
+  execution with provider-backed `forge run`; smoke now names `forge inspect`.
+- Extracted shared verification configuration so the sovereign change path no
+  longer depends on the legacy candidate transaction adapter for its types.
+- Local typecheck, 49 tests, build, Rust formatting, live Ollama text, and live
+  one-tool gates passed. Native Rust, hosted cross-platform, product CLI, and VS
+  Code gates remain open. See [Checkpoint 50](checkpoints/2026-08-03-50-real-inference-local-gate.md).
+
+## 2026-08-03 - Real inference path and debt-retirement gate opened
+
+- Merged kernel convergence through PR #15 at `1fcab25` and opened CLI ship lane 2
+  on `feature/cli-real-inference`.
+- Accepted [ADR-0018](ADRs/ADR-0018-provider-neutral-inference-and-debt-retirement.md):
+  provider adapters reuse the canonical TypeScript planner bridge while Rust keeps
+  run, policy, events, budgets, and terminal-artifact authority.
+- Made removal of the fake inventory-backed `forge run`, the public legacy
+  `forge candidate` command, and public legacy runtime exports part of the slice
+  gate. No inference-specific runtime or parallel orchestration layer is allowed.
+- Recorded [Checkpoint 49](checkpoints/2026-08-03-49-real-inference-start.md) and
+  opened [CLI ship lane 2](../tasks/SLICE-CLI2-real-inference.md).
+
 ## 2026-08-03 - Kernel convergence hosted and VS Code gate
 
 - Accepted kernel convergence on feature branch `feature/cli-kernel-convergence`
-  at implementation head `ca9809f`; PR #15 remains open and unmerged.
+  at implementation head `ca9809f`; PR #15 subsequently merged as `1fcab25`.
 - Hosted Node run `30839933843` passed Windows and macOS. Hosted hybrid run
   `30839933999` passed Windows, macOS, and Ubuntu, including native release builds,
   product smoke, and retained kernel artifacts.

@@ -17,10 +17,8 @@ import {
   type ChangeProposalOptions,
   type TextChangeRequest,
 } from './change-proposal.js';
-import { createWorkspaceReadCapability, createWorkspaceSymbolsCapability } from './files.js';
-import { createGitDiffCapability, createGitStatusCapability } from './git-evidence.js';
-import { createTypeScriptDiagnosticsCapability } from './typescript-evidence.js';
-import { createWorkspaceSearchCapability, createWorkspaceSnapshot, workspaceInventoryCapability } from './workspace.js';
+import { createDeveloperEvidenceCapabilities } from './capability-pack.js';
+import { createWorkspaceSnapshot } from './workspace.js';
 import {
   WorkspaceSnapshotCache,
   type WorkspaceChangeObserver,
@@ -101,6 +99,11 @@ export interface GitDiffOptions {
   readonly maxBytes?: number;
 }
 
+export interface ExecuteTaskOptions {
+  readonly contextBudgetBytes?: number;
+  readonly maxTurns?: number;
+}
+
 export interface RustKernelServiceOptions {
   readonly binaryPath: string;
   readonly arguments?: readonly string[];
@@ -139,6 +142,7 @@ export class ForgeWorkspaceService {
   readonly #snapshots: WorkspaceSnapshotCache;
   readonly #runIdFactory: () => string;
   readonly #runtime: ForgeWorkspaceRuntimeConfiguration;
+  readonly #evidenceCapabilities: ReadonlyMap<string, Capability>;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -152,21 +156,49 @@ export class ForgeWorkspaceService {
     });
     this.#runIdFactory = options.runIdFactory ?? (() => `run:${randomUUID()}`);
     this.#runtime = runtime;
-  }
-
-  async run(task: string, maxFiles = 200, signal?: AbortSignal): Promise<RunArtifact> {
-    if (task.trim().length === 0) throw new Error('A Forge task must not be empty.');
-    return this.#runCapability(task, workspaceInventoryCapability, { maxFiles }, signal);
+    const capabilities = createDeveloperEvidenceCapabilities(workspaceRoot);
+    this.#evidenceCapabilities = new Map(capabilities.map((capability) => [capability.id, capability]));
+    if (this.#evidenceCapabilities.size !== capabilities.length) throw new Error('Developer evidence capability IDs must be unique.');
   }
 
   async inspect(maxFiles = 200, signal?: AbortSignal): Promise<RunArtifact> {
-    return this.run('Inspect the opened workspace.', maxFiles, signal);
+    return this.#runCapability(
+      'Inspect the opened workspace.',
+      this.#evidenceCapability('workspace.inventory'),
+      { maxFiles },
+      signal,
+    );
+  }
+
+  async executeTask(
+    task: string,
+    planner: TaskPlanner,
+    options: ExecuteTaskOptions = {},
+    signal?: AbortSignal,
+  ): Promise<RunArtifact> {
+    if (task.trim().length === 0) throw new Error('A Forge task must not be empty.');
+    const contextBudgetBytes = options.contextBudgetBytes ?? 65_536;
+    const maxTurns = options.maxTurns ?? 8;
+    if (!Number.isInteger(contextBudgetBytes) || contextBudgetBytes < 1 || contextBudgetBytes > 1_048_576) {
+      throw new Error('contextBudgetBytes must be an integer from 1 to 1048576.');
+    }
+    if (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > 32) {
+      throw new Error('maxTurns must be an integer from 1 to 32.');
+    }
+    return this.#runPlanner(
+      task,
+      planner,
+      [...this.#evidenceCapabilities.values()],
+      contextBudgetBytes,
+      maxTurns,
+      signal,
+    );
   }
 
   async search(query: string, options: SearchWorkspaceOptions = {}, signal?: AbortSignal): Promise<RunArtifact> {
     return this.#runCapability(
       `Search the opened workspace for: ${query}`,
-      createWorkspaceSearchCapability(this.workspaceRoot),
+      this.#evidenceCapability('workspace.search'),
       { query, maxMatches: options.maxMatches ?? 50, caseSensitive: options.caseSensitive ?? false },
       signal,
     );
@@ -175,7 +207,7 @@ export class ForgeWorkspaceService {
   async read(path: string, options: ReadWorkspaceOptions = {}, signal?: AbortSignal): Promise<RunArtifact> {
     return this.#runCapability(
       `Read bounded workspace evidence from: ${path}`,
-      createWorkspaceReadCapability(this.workspaceRoot),
+      this.#evidenceCapability('workspace.read'),
       { path, startLine: options.startLine ?? 1, maxLines: options.maxLines ?? 200 },
       signal,
     );
@@ -184,7 +216,7 @@ export class ForgeWorkspaceService {
   async symbols(options: SymbolOptions = {}, signal?: AbortSignal): Promise<RunArtifact> {
     return this.#runCapability(
       options.query === undefined ? 'List workspace declarations.' : `Find workspace declarations matching: ${options.query}`,
-      createWorkspaceSymbolsCapability(this.workspaceRoot),
+      this.#evidenceCapability('workspace.symbols'),
       { query: options.query, maxFiles: options.maxFiles ?? 200, maxSymbols: options.maxSymbols ?? 500 },
       signal,
     );
@@ -206,32 +238,42 @@ export class ForgeWorkspaceService {
   async diagnostics(options: DiagnosticOptions = {}, signal?: AbortSignal): Promise<RunArtifact> {
     return this.#runCapability(
       'Collect no-emit TypeScript diagnostics.',
-      createTypeScriptDiagnosticsCapability(this.workspaceRoot),
+      this.#evidenceCapability('typescript.diagnostics'),
       { configPath: options.configPath, maxDiagnostics: options.maxDiagnostics ?? 200 },
       signal,
     );
   }
 
   async gitStatus(signal?: AbortSignal): Promise<RunArtifact> {
-    return this.#runCapability('Inspect read-only Git status.', createGitStatusCapability(this.workspaceRoot), {}, signal);
+    return this.#runCapability('Inspect read-only Git status.', this.#evidenceCapability('git.status'), {}, signal);
   }
 
   async gitDiff(options: GitDiffOptions = {}, signal?: AbortSignal): Promise<RunArtifact> {
     return this.#runCapability(
       options.staged === true ? 'Inspect the staged Git diff.' : 'Inspect the unstaged Git diff.',
-      createGitDiffCapability(this.workspaceRoot),
+      this.#evidenceCapability('git.diff'),
       { staged: options.staged ?? false, maxBytes: options.maxBytes ?? 100_000 },
       signal,
     );
   }
 
   async #runCapability(task: string, capability: Capability, input: unknown, signal?: AbortSignal): Promise<RunArtifact> {
+    const call: CapabilityCall = { id: 'call-1', capabilityId: capability.id, input };
+    const planner = new SingleCapabilityPlanner(call);
+    return this.#runPlanner(task, planner, [capability], 65_536, 2, signal);
+  }
+
+  async #runPlanner(
+    task: string,
+    planner: TaskPlanner,
+    capabilities: readonly Capability[],
+    contextBudgetBytes: number,
+    maxTurns: number,
+    signal?: AbortSignal,
+  ): Promise<RunArtifact> {
     signal?.throwIfAborted();
     const snapshot = await this.#workspaceSnapshot();
     signal?.throwIfAborted();
-    const call: CapabilityCall = { id: 'call-1', capabilityId: capability.id, input };
-    const planner = new SingleCapabilityPlanner(call);
-    const capabilities = [capability];
     const runtime = this.#runtime.kind === 'typescript_conformance_fixture'
       ? new TypeScriptConformanceRuntime({ planner, approvalPolicy: readOnlyPolicy, capabilities })
       : new RustKernelRuntime({
@@ -246,10 +288,16 @@ export class ForgeWorkspaceService {
       runId: this.#runIdFactory(),
       task,
       snapshot,
-      contextBudgetBytes: 65_536,
-      maxTurns: 2,
+      contextBudgetBytes,
+      maxTurns,
       ...(signal === undefined ? {} : { signal }),
     });
+  }
+
+  #evidenceCapability(id: string): Capability {
+    const capability = this.#evidenceCapabilities.get(id);
+    if (capability === undefined) throw new Error(`Developer evidence capability is not registered: ${id}`);
+    return capability;
   }
 
   async #workspaceSnapshot(): Promise<WorkspaceSnapshot> {
@@ -282,6 +330,7 @@ export function artifactPayload(artifact: RunArtifact): Readonly<Record<string, 
   return {
     schemaVersion: artifact.schemaVersion,
     runId: artifact.runId,
+    task: artifact.task,
     status: artifact.status,
     capability: result === undefined ? null : { callId: result.callId, success: result.success },
     workspace: { id: artifact.snapshot.id, rootLabel: artifact.snapshot.rootLabel },
@@ -291,6 +340,8 @@ export function artifactPayload(artifact: RunArtifact): Readonly<Record<string, 
       omittedItems: artifact.contextPlan?.omitted.length ?? 0,
     },
     evidence,
+    output: artifact.output,
+    inferenceEvidence: artifact.inferenceEvidence ?? [],
     events: artifact.events,
   };
 }

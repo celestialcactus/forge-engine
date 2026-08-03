@@ -107,12 +107,15 @@ This is the immediate execution priority. It turns the accepted protocol and cha
 machinery into something another developer can install, understand, and use. The
 broader V1 slices remain authoritative capability goals.
 
-1. **Kernel convergence — accepted on PR #15; merge pending.** One canonical Rust runtime/capability/event/artifact/
+1. **Kernel convergence — accepted and merged as PR #15 (`1fcab25`).** One canonical Rust runtime/capability/event/artifact/
    policy authority; TypeScript remains integration and an explicitly named
    conformance fixture. **Exit:** CLI and MCP cannot silently fall back to a second
    coordinator, product smoke uses Rust, and missing-kernel state is actionable.
-2. **Real inference path.** One measured local provider family and one direct cloud
-   path with streaming/tool-call normalization and explicit routing. **Exit:** the
+2. **Real inference path — in progress on `feature/cli-real-inference`.** One measured
+   local provider family and one direct cloud path with streaming/tool-call
+   normalization and explicit routing. The work must reuse the canonical
+   `TaskPlanner` bridge, remove the fake inventory-backed `forge run`, and retire
+   the superseded public candidate surface rather than layering around them. **Exit:** the
    same bounded scenario passes provider conformance with latency, cost, tool, and
    cancellation evidence.
 3. **Live CLI loop.** Streaming turns, capability proposals/results, multi-turn

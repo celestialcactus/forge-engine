@@ -131,6 +131,6 @@ test('product CLI auto-discovers the Rust kernel and preserves the supplied task
   assert.match(report.kernel.source, /^source-(debug|release)$/u);
   assert.match(report.kernel.path, /forge-kernel(?:\.exe)?$/u);
   assert.equal(report.kernel.version, '0.1.0');
-  assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v2');
+  assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v3');
   assert.equal(report.kernel.protocols.sovereignChange, 'forge.kernel.changeset.v2');
 });
