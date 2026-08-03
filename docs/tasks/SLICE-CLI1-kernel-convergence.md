@@ -36,7 +36,7 @@ product runtime.
 ## Exit gate
 
 - no implicit TypeScript production fallback remains;
-- local Windows full checks and product smoke pass;
+- local Node checks pass, and local product smoke passes wherever a Rust linker is installed;
 - hosted Windows/macOS product checks pass;
 - the seven-tool VS Code read-only scenario remains one-call and mutation-free;
 - documentation names the trusted-mode limitation and retained restricted work.
