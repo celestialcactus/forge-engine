@@ -39,6 +39,15 @@ export type NormalizedInferenceEvent =
   | { readonly type: 'usage'; readonly inputTokens?: number; readonly outputTokens?: number }
   | { readonly type: 'response.completed'; readonly finishReason: InferenceFinishReason };
 
+export interface ProviderInferenceObservation {
+  readonly requestId: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly event: NormalizedInferenceEvent;
+}
+
+export type ProviderInferenceObserver = (observation: ProviderInferenceObservation) => void;
+
 export interface InferenceProvider {
   readonly id: string;
   readonly locality: InferenceLocality;

@@ -7,6 +7,7 @@ import type {
   PlannerRequest,
   PlannerTurn,
   RunArtifact,
+  RunEvent,
   TaskPlanner,
   WorkspaceSnapshot,
 } from '../slice0/contracts.js';
@@ -102,6 +103,7 @@ export interface GitDiffOptions {
 export interface ExecuteTaskOptions {
   readonly contextBudgetBytes?: number;
   readonly maxTurns?: number;
+  readonly onEvent?: (event: RunEvent) => void;
 }
 
 export interface RustKernelServiceOptions {
@@ -192,6 +194,7 @@ export class ForgeWorkspaceService {
       contextBudgetBytes,
       maxTurns,
       signal,
+      options.onEvent,
     );
   }
 
@@ -270,16 +273,23 @@ export class ForgeWorkspaceService {
     contextBudgetBytes: number,
     maxTurns: number,
     signal?: AbortSignal,
+    onEvent?: (event: RunEvent) => void,
   ): Promise<RunArtifact> {
     signal?.throwIfAborted();
     const snapshot = await this.#workspaceSnapshot();
     signal?.throwIfAborted();
     const runtime = this.#runtime.kind === 'typescript_conformance_fixture'
-      ? new TypeScriptConformanceRuntime({ planner, approvalPolicy: readOnlyPolicy, capabilities })
+      ? new TypeScriptConformanceRuntime({
+          planner,
+          approvalPolicy: readOnlyPolicy,
+          capabilities,
+          ...(onEvent === undefined ? {} : { onEvent }),
+        })
       : new RustKernelRuntime({
           planner,
           approvalFacts: readOnlyApprovalFactsProvider,
           capabilities,
+          ...(onEvent === undefined ? {} : { onEvent }),
           kernelPath: this.#runtime.kernel.binaryPath,
           ...(this.#runtime.kernel.arguments === undefined ? {} : { kernelArguments: this.#runtime.kernel.arguments }),
           ...(this.#runtime.kernel.environment === undefined ? {} : { environment: this.#runtime.kernel.environment }),

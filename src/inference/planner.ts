@@ -11,16 +11,18 @@ import type {
   InferenceRoute,
   InferenceToolCall,
   InferenceToolDefinition,
+  ProviderInferenceObserver,
 } from './contracts.js';
 import { collectProviderInference, type CollectInferenceOptions } from './stream.js';
 
 const maximumToolResultCharacters = 131_072;
 
-export interface ProviderTaskPlannerOptions extends CollectInferenceOptions {
+export interface ProviderTaskPlannerOptions extends Pick<CollectInferenceOptions, 'now'> {
   readonly provider: InferenceProvider;
   readonly route: InferenceRoute;
   readonly tools: readonly InferenceToolDefinition[];
   readonly requestIdFactory?: () => string;
+  readonly onInferenceEvent?: ProviderInferenceObserver;
 }
 
 type PendingTool = { readonly providerCall: InferenceToolCall; readonly capabilityId: string };
@@ -47,6 +49,7 @@ export class ProviderTaskPlanner implements TaskPlanner {
   readonly #toolsByName: ReadonlyMap<string, InferenceToolDefinition>;
   readonly #requestIdFactory: () => string;
   readonly #now: (() => number) | undefined;
+  readonly #onInferenceEvent: ProviderInferenceObserver | undefined;
   readonly #messages: InferenceMessage[] = [];
   readonly #pending = new Map<string, PendingTool>();
   #initializedTask: string | undefined;
@@ -60,6 +63,7 @@ export class ProviderTaskPlanner implements TaskPlanner {
     if (this.#toolsByName.size !== options.tools.length) throw new Error('Inference tool names must be unique.');
     this.#requestIdFactory = options.requestIdFactory ?? (() => `inference:${randomUUID()}`);
     this.#now = options.now;
+    this.#onInferenceEvent = options.onInferenceEvent;
     this.id = `provider:${options.route.provider}:${options.route.model}`;
   }
 
@@ -82,7 +86,19 @@ export class ProviderTaskPlanner implements TaskPlanner {
       this.#route,
       { requestId, model: this.#route.model, messages: this.#messages, tools: this.#tools },
       signal,
-      this.#now === undefined ? {} : { now: this.#now },
+      {
+        ...(this.#now === undefined ? {} : { now: this.#now }),
+        ...(this.#onInferenceEvent === undefined
+          ? {}
+          : {
+              onEvent: (event) => this.#onInferenceEvent?.({
+                requestId,
+                provider: this.#provider.id,
+                model: this.#route.model,
+                event,
+              }),
+            }),
+      },
     );
     if (result.finishReason === 'tool_call') {
       const providerCall = result.toolCalls[0];

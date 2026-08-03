@@ -1,5 +1,33 @@
 # Architecture Changelog
 
+## 2026-08-03 - Live CLI local gate
+
+- Implemented ephemeral validated provider streaming and canonical runtime status
+  presentation without introducing a second runtime or event log.
+- Preserved `--json` as one terminal artifact and unified first-SIGINT/deadline
+  cancellation through the existing Rust bridge abort path.
+- Passed typecheck, 52 tests, build, exact-kernel probe, live Qwen text,
+  one-tool continuation, JSON isolation, and live timeout cleanup locally.
+- Hosted Windows/macOS/Ubuntu and controlled VS Code remain pending; live OpenAI
+  remains deliberately paused for developer credential setup.
+- Recorded [Checkpoint 53](checkpoints/2026-08-03-53-live-cli-local-gate.md) and
+  updated [CLI ship lane 3](../tasks/SLICE-CLI3-live-loop.md).
+
+## 2026-08-03 - Live CLI presentation boundary opened
+
+- Merged real inference through PR #16 as `e865de5` and opened CLI ship lane 3 on
+  `feature/cli-live-loop` from that exact `develop` head.
+- Accepted [ADR-0019](ADRs/ADR-0019-ephemeral-live-cli-presentation.md): validated
+  provider deltas are ephemeral human presentation, while Rust-streamed run events
+  and the terminal artifact remain authoritative.
+- Kept `--json` as one terminal JSON document; live human output may stream, but it
+  cannot create a second event log, session runtime, or policy path.
+- OpenAI live acceptance is deliberately paused until the developer configures a
+  project-scoped `OPENAI_API_KEY`; Ollama/Qwen remains the development baseline.
+- Recorded [Checkpoint 52](checkpoints/2026-08-03-52-live-cli-start.md) and opened
+  [CLI ship lane 3](../tasks/SLICE-CLI3-live-loop.md).
+
+
 ## 2026-08-03 - Real inference hosted, product, and VS Code gate
 
 - Accepted CLI ship lane 2 on `feature/cli-real-inference` at implementation head

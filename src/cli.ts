@@ -8,6 +8,7 @@ import type { ApprovalFacts, CapabilityCall, RunArtifact } from './slice0/contra
 import { developerEvidenceTools } from './inference/developer-tools.js';
 import { ProviderTaskPlanner } from './inference/planner.js';
 import { createInferenceProvider, resolveInferenceRoute } from './inference/routing.js';
+import { createRunCancellation, LiveCliPresenter } from './live-cli.js';
 import { startForgeMcpServer } from './mcp/server.js';
 import {
   probeForgeKernelBinary,
@@ -307,14 +308,40 @@ try {
     const route = resolveInferenceRoute(values.provider, values.model);
     const timeoutMs = integerOption(values['timeout-ms'], 120_000, '--timeout-ms');
     if (timeoutMs < 1 || timeoutMs > 900_000) throw new Error('--timeout-ms must be from 1 to 900000.');
-    const planner = new ProviderTaskPlanner({
-      provider: createInferenceProvider(route),
-      route,
-      tools: developerEvidenceTools,
-    });
-    printArtifact(await workspaceService().executeTask(task, planner, {
-      maxTurns: integerOption(values['max-turns'], 8, '--max-turns'),
-    }, AbortSignal.timeout(timeoutMs)));
+    const cancellation = createRunCancellation(timeoutMs);
+    const presenter = values.json ? undefined : new LiveCliPresenter();
+    try {
+      const planner = new ProviderTaskPlanner({
+        provider: createInferenceProvider(route),
+        route,
+        tools: developerEvidenceTools,
+        ...(presenter === undefined
+          ? {}
+          : { onInferenceEvent: (observation) => presenter.onInferenceEvent(observation) }),
+      });
+      const artifact = await workspaceService().executeTask(
+        task,
+        planner,
+        {
+          maxTurns: integerOption(values['max-turns'], 8, '--max-turns'),
+          ...(presenter === undefined ? {} : { onEvent: (event) => presenter.onRunEvent(event) }),
+        },
+        cancellation.signal,
+      );
+      if (presenter === undefined) printArtifact(artifact);
+      else presenter.printSummary(artifact);
+      if (artifact.status !== 'completed') {
+        process.exitCode = artifact.status === 'cancelled'
+          ? cancellation.source === 'sigint'
+            ? 130
+            : cancellation.source === 'timeout'
+              ? 124
+              : 1
+          : 1;
+      }
+    } finally {
+      cancellation.dispose();
+    }
   } else if (command === 'mcp') {
     await startForgeMcpServer(workspaceRoot, productServiceOptions());
   } else if (command === 'help') {
@@ -337,6 +364,7 @@ try {
       '  forge git-status [--json]',
       '  forge git-diff [--staged] [--json] [--max-bytes <count>]',
       '  forge run <task> --provider <ollama|openai> --model <model> [--max-turns <count>] [--timeout-ms <ms>] [--json]',
+      '    Human mode streams validated assistant text and canonical run status; --json emits one terminal artifact.',
       '  forge mcp [--workspace <path>]',
       '',
       'Product commands require the Rust kernel. Source builds discover target/release or target/debug; FORGE_KERNEL_BINARY overrides discovery. State defaults to ~/.forge and can be overridden with --engine-root or FORGE_ENGINE_ROOT.',

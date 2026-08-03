@@ -5,6 +5,7 @@ import type { InferenceEvidence, TaskPlanner } from '../src/slice0/contracts.js'
 import type {
   InferenceProvider,
   NormalizedInferenceEvent,
+  ProviderInferenceObservation,
   ProviderInferenceRequest,
 } from '../src/inference/contracts.js';
 import { developerEvidenceTools } from '../src/inference/developer-tools.js';
@@ -42,8 +43,10 @@ test('normalizes an Ollama text stream into bounded terminal evidence', async ()
       ].join('\n'), { status: 200 });
     },
   });
+  const normalizedEvents: NormalizedInferenceEvent[] = [];
   const result = await collectProviderInference(provider, route, request, new AbortController().signal, {
     now: fixedNow(10, 35),
+    onEvent: (event) => normalizedEvents.push(event),
   });
   assert.equal(result.text, 'Forge ready');
   assert.equal(result.finishReason, 'stop');
@@ -68,6 +71,12 @@ test('normalizes an Ollama text stream into bounded terminal evidence', async ()
       fallbackUsed: false,
     },
   });
+  assert.deepEqual(normalizedEvents.map((event) => event.type), [
+    'text.delta',
+    'text.delta',
+    'usage',
+    'response.completed',
+  ]);
   assert.deepEqual(posted, {
     model: 'fixture-model',
     messages: [{ role: 'user', content: 'Inspect the workspace.' }],
@@ -150,24 +159,42 @@ test('runs a provider tool call and final response through the canonical Forge r
     },
   };
   const ids = ['inference:one', 'inference:two'];
+  const observations: ProviderInferenceObservation[] = [];
   const planner = new ProviderTaskPlanner({
     provider,
     route,
     tools: developerEvidenceTools,
     requestIdFactory: () => ids.shift() ?? 'exhausted',
     now: fixedNow(0, 5, 10, 17),
+    onInferenceEvent: (observation) => observations.push(observation),
   });
   const service = new ForgeWorkspaceService(resolve('tests/fixtures/slice1-workspace'), {
     runtime: typeScriptConformanceFixture,
     runIdFactory: () => 'run:provider-fixture',
   });
-  const artifact = await service.executeTask('Read the fixture README.', planner, { maxTurns: 2 });
+  const streamedRunEvents: string[] = [];
+  const artifact = await service.executeTask('Read the fixture README.', planner, {
+    maxTurns: 2,
+    onEvent: (event) => streamedRunEvents.push(event.type),
+  });
   service.close();
   assert.equal(artifact.status, 'completed');
   assert.equal(artifact.output, 'The README evidence was returned by Forge.');
   assert.equal(artifact.capabilityResults.length, 1);
   assert.equal(artifact.capabilityResults[0]?.success, true);
   assert.equal(artifact.inferenceEvidence?.length, 2);
+  assert.deepEqual(streamedRunEvents, artifact.events.map((event) => event.type));
+  assert.deepEqual(observations.map((observation) => ({
+    requestId: observation.requestId,
+    provider: observation.provider,
+    model: observation.model,
+    type: observation.event.type,
+  })), [
+    { requestId: 'inference:one', provider: 'ollama', model: 'fixture-model', type: 'tool_call.delta' },
+    { requestId: 'inference:one', provider: 'ollama', model: 'fixture-model', type: 'response.completed' },
+    { requestId: 'inference:two', provider: 'ollama', model: 'fixture-model', type: 'text.delta' },
+    { requestId: 'inference:two', provider: 'ollama', model: 'fixture-model', type: 'response.completed' },
+  ]);
   assert.deepEqual(artifact.events.map((event) => event.type), [
     'run.started',
     'context.planned',
