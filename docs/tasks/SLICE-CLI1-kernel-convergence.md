@@ -1,9 +1,10 @@
 # CLI ship lane 1: kernel convergence
 
-- **Status:** Local implementation complete; hosted and VS Code acceptance pending
+- **Status:** Acceptance complete on the feature branch; PR #15 merge pending
 - **Opened:** 2026-08-03
 - **Branch:** `feature/cli-kernel-convergence`
 - **Base:** protected `develop` at `6bc2bfb`
+- **Implementation head:** `ca9809f`
 - **Tier-1 platforms:** Windows and macOS
 - **Compatibility platform:** Ubuntu
 
@@ -41,12 +42,28 @@ product runtime.
 - the seven-tool VS Code read-only scenario remains one-call and mutation-free;
 - documentation names the trusted-mode limitation and retained restricted work.
 
-
-## Local implementation checkpoint
+## Acceptance checkpoint
 
 The runtime fallback is removed from product entry points, kernel discovery and the
 bounded protocol probe are implemented, and Node-only tests explicitly select the
-TypeScript conformance fixture. `npm run check` passes 44/44 tests plus build, and
-Rust formatting passes. Native Windows compilation remains unproven locally because
-this workstation lacks `link.exe`; hosted platform execution and VS Code remain
-mandatory. See [Checkpoint 47](../decisions/checkpoints/2026-08-03-47-kernel-convergence-local-gate.md).
+TypeScript conformance fixture.
+
+- Local `npm run check` passes typecheck, 44/44 tests, and production build.
+- Hosted Node conformance passes on Windows and macOS in run `30839933843`.
+- Hosted hybrid conformance passes on Windows, macOS, and Ubuntu in run
+  `30839933999`, including Rust formatting, lint, tests, release build, product
+  smoke, and retained native artifacts.
+- The exact hosted Windows release artifact passes local `forge doctor --json` and
+  `npm run smoke`; the smoke run was
+  `run:4c1137be-9561-42f3-8c7e-02a23b4bcbc5`.
+- A fresh VS Code Agent chat with exactly seven Forge tools enabled completed one
+  workspace-summary call in three seconds with no built-in tool or mutation. It
+  returned run `run:be41c97b-b59e-4eb5-a1aa-2f7bd43b66c5`, snapshot
+  `workspace:866dd8119895837e`, 277 files, `truncated: true`, and the canonical six
+  ordered events.
+
+This accepts kernel convergence on the feature branch. It does not add model
+inference, a live multi-turn CLI, release packaging, or an OS sandbox. The local
+workstation still lacks MSVC `link.exe`; hosted Windows is the native compiler gate.
+See [Checkpoint 47](../decisions/checkpoints/2026-08-03-47-kernel-convergence-local-gate.md)
+and [Checkpoint 48](../decisions/checkpoints/2026-08-03-48-kernel-convergence-hosted-and-vscode-gate.md).

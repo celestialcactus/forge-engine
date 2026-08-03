@@ -1,10 +1,10 @@
 # ADR-0017: Rust product runtime authority and restricted-execution sequencing
 
-- **Status:** accepted for implementation
+- **Status:** accepted and implemented on the feature branch; merge pending
 - **Date:** 2026-08-03
 - **Owners:** ForgeEngine project
-- **Implementation:** pending
-- **Checkpoint:** 2026-08-03-46
+- **Implementation:** `ca9809f` on PR #15
+- **Checkpoint:** 2026-08-03-48
 - **Refines:** ADR-0008, ADR-0014, and the V1 validated build plan
 
 ## Context
@@ -78,3 +78,17 @@ would preserve a real core ambiguity.
 - TypeScript runtime use requires an explicit conformance-fixture selection.
 - Rust/TypeScript parity tests remain green, but product smoke tests exercise Rust.
 - Hosted Windows/macOS gates and a controlled VS Code MCP regression pass.
+
+## Acceptance evidence
+
+- Hosted Node run `30839933843` passed Windows and macOS.
+- Hosted hybrid run `30839933999` passed Windows, macOS, and Ubuntu and retained
+  the exact native artifacts used by each job.
+- The hosted Windows artifact passed local `doctor` and product smoke without an
+  explicit kernel path.
+- VS Code discovered the exact seven Forge tools from the feature worktree and
+  completed the bounded one-call workspace-summary regression in three seconds.
+- No acceptance result implies Forge-enforced containment: trusted execution still
+  inherits the developer process permissions, and `restricted` remains fail-closed.
+
+See [Checkpoint 48](../checkpoints/2026-08-03-48-kernel-convergence-hosted-and-vscode-gate.md).

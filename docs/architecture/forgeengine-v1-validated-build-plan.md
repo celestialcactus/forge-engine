@@ -2,7 +2,7 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
-**Last groomed:** 2026-08-03 after Slice 2F-2b acceptance and the kernel-convergence audit
+**Last groomed:** 2026-08-03 after kernel-convergence hosted and VS Code acceptance
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
 
@@ -107,7 +107,7 @@ This is the immediate execution priority. It turns the accepted protocol and cha
 machinery into something another developer can install, understand, and use. The
 broader V1 slices remain authoritative capability goals.
 
-1. **Kernel convergence.** One canonical Rust runtime/capability/event/artifact/
+1. **Kernel convergence — accepted on PR #15; merge pending.** One canonical Rust runtime/capability/event/artifact/
    policy authority; TypeScript remains integration and an explicitly named
    conformance fixture. **Exit:** CLI and MCP cannot silently fall back to a second
    coordinator, product smoke uses Rust, and missing-kernel state is actionable.
@@ -376,21 +376,21 @@ license rather than being inferred from package metadata.
 
 ## Core completion and delivery forecast
 
-**Forecast date:** 2026-07-30. Completion is measured by accepted behavioral gates,
+**Forecast date:** 2026-08-03. Completion is measured by accepted behavioral gates,
 not source volume or the number of abstractions present.
 
 | Scope | Estimated complete | Remaining critical path |
 | --- | ---: | --- |
-| Core runtime and dependable local change machinery | 96% | Slice 2E and Slice 2F-1 through 2F-2b are accepted. The remaining product-core ambiguity is implicit TypeScript fallback; native restricted execution remains a separately gated hardening boundary. |
-| Shippable standalone CLI alpha | 55% | Slice 2E supplies a real sovereign change workflow. Remaining path is runtime convergence, one measured local and one direct cloud inference path, interactive multi-turn loop, effective config/doctor, packaging, and clean-install smoke tests. |
+| Core runtime and dependable local change machinery | 98% | Kernel convergence now passes local checks, hosted Windows/macOS/Ubuntu gates, native-artifact doctor/smoke, and the controlled VS Code tether. PR #15 still must merge; native restricted execution remains a separately gated hardening boundary. |
+| Shippable standalone CLI alpha | 60% | The CLI now has one Rust product authority and a real sovereign change workflow. It still lacks real model inference, an interactive multi-turn loop, release packaging, and clean-install smoke tests. |
 | Broader V1 platform | 28% | Context quality gates, durable projections, reviewed skills/memory, symmetric host integrations, restricted execution, connectors, and release hardening. |
 
 Assuming one focused implementation lane, working hosted CI, and no material scope
 expansion, the current planning ranges are:
 
-- curated evidence-backed CLI demonstration: **1–2 weeks**;
-- dependable core local change engine: **2–5 weeks**;
-- shippable standalone CLI alpha: **4–7 weeks**;
+- accepted kernel/change machinery on `develop`: **current feature branch; pending PR #15 merge**;
+- first real-inference, evidence-backed CLI demonstration: **1–2 weeks**;
+- shippable standalone CLI alpha: **3–6 weeks**;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
 
@@ -419,13 +419,14 @@ merely because implementation has started.
 ## Go/no-go
 
 **Go for the near-term CLI ship lane while retaining bounded Slice 2F hardening.**
-Slice 2E is accepted: the same Rust-owned ChangeSet v2 authority now applies,
+Kernel convergence is accepted on the feature branch and pending PR #15 merge.
+The same Rust-owned ChangeSet v2 authority now applies,
 verifies, durably records, reconciles, accepts, discards, cleans up, and explains a
 representative change set through the public CLI on Windows/macOS/Ubuntu. Slice 2F-1
 through Slice 2F-2b are accepted, while raw host assertions still fail closed.
-Converge CLI and MCP on that one Rust authority before adding inference or a live
-loop. `restricted` remains fail-closed until a separately proven Windows/macOS
-backend passes adversarial gates; the trusted developer alpha must name that
+CLI and MCP now use that one Rust authority; after merge, proceed to the measured
+real-inference path before the live loop. `restricted` remains fail-closed until a
+separately proven Windows/macOS backend passes adversarial gates; the trusted developer alpha must name that
 limitation.
 
 **No-go for parallel context compression, learned memory, skills, connector,

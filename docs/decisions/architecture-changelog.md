@@ -1,5 +1,21 @@
 # Architecture Changelog
 
+## 2026-08-03 - Kernel convergence hosted and VS Code gate
+
+- Accepted kernel convergence on feature branch `feature/cli-kernel-convergence`
+  at implementation head `ca9809f`; PR #15 remains open and unmerged.
+- Hosted Node run `30839933843` passed Windows and macOS. Hosted hybrid run
+  `30839933999` passed Windows, macOS, and Ubuntu, including native release builds,
+  product smoke, and retained kernel artifacts.
+- The exact hosted Windows artifact passed local `doctor` and product smoke. The
+  controlled VS Code gate then discovered exactly seven Forge tools and completed
+  one bounded workspace-summary call in three seconds without built-ins or
+  mutation.
+- Kernel convergence does not add model inference, a live multi-turn loop,
+  packaging, or Forge-enforced OS containment. `restricted` remains fail-closed.
+- Recorded [Checkpoint 48](checkpoints/2026-08-03-48-kernel-convergence-hosted-and-vscode-gate.md)
+  and updated [ADR-0017](ADRs/ADR-0017-product-runtime-authority-and-restricted-sequencing.md).
+
 ## 2026-08-03 - Kernel convergence local gate
 
 - Removed the implicit TypeScript product fallback: CLI and MCP now require the Rust
