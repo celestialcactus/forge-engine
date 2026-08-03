@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -34,7 +34,7 @@ test('kernel discovery selects a source build without an environment override', 
   const resolution = resolveForgeKernelBinary({ packageRoot: root, environment: {} });
   assert.equal(resolution.ready, true);
   assert.equal(resolution.source, 'source-debug');
-  assert.equal(requireForgeKernelBinary(resolution), binary);
+  assert.equal(requireForgeKernelBinary(resolution), await realpath(binary));
 });
 
 test('an invalid environment override does not silently fall through to another kernel', async (context) => {
