@@ -111,13 +111,15 @@ broader V1 slices remain authoritative capability goals.
    policy authority; TypeScript remains integration and an explicitly named
    conformance fixture. **Exit:** CLI and MCP cannot silently fall back to a second
    coordinator, product smoke uses Rust, and missing-kernel state is actionable.
-2. **Real inference path — in progress on `feature/cli-real-inference`.** One measured
-   local provider family and one direct cloud path with streaming/tool-call
-   normalization and explicit routing. The work must reuse the canonical
-   `TaskPlanner` bridge, remove the fake inventory-backed `forge run`, and retire
-   the superseded public candidate surface rather than layering around them. **Exit:** the
-   same bounded scenario passes provider conformance with latency, cost, tool, and
-   cancellation evidence.
+2. **Real inference path — accepted on the feature branch at implementation head
+   `cf26d85`; PR #16 merge pending.** One measured local Ollama family and one
+   direct OpenAI Responses transport use normalized text/tool/usage/finish evidence
+   with explicit routing and no fallback. The canonical `TaskPlanner` bridge is
+   retained; the fake inventory-backed `forge run` and superseded public candidate
+   surface are removed. OpenAI is transport-conformant, not live-accepted, because
+   no cloud credential was present. **Exit achieved:** hosted Windows/macOS/Ubuntu,
+   exact-kernel product, live local text/tool, cancellation/error conformance, and
+   controlled VS Code gates pass.
 3. **Live CLI loop.** Streaming turns, capability proposals/results, multi-turn
    continuation, and a final evidence summary. **Exit:** a developer completes an
    evidence-backed repository task interactively without hand-authoring proposal
@@ -384,16 +386,16 @@ not source volume or the number of abstractions present.
 
 | Scope | Estimated complete | Remaining critical path |
 | --- | ---: | --- |
-| Core runtime and dependable local change machinery | 98% | Kernel convergence now passes local checks, hosted Windows/macOS/Ubuntu gates, native-artifact doctor/smoke, and the controlled VS Code tether. PR #15 still must merge; native restricted execution remains a separately gated hardening boundary. |
-| Shippable standalone CLI alpha | 60% | The CLI now has one Rust product authority and a real sovereign change workflow. It still lacks real model inference, an interactive multi-turn loop, release packaging, and clean-install smoke tests. |
+| Core runtime and dependable local change machinery | 98% | Kernel convergence is merged on `develop`; native restricted execution remains a separately gated hardening boundary. |
+| Shippable standalone CLI alpha | 70% | The explicit provider-backed inference path is accepted on its feature branch after hosted, exact-kernel product, and controlled VS Code gates. Interactive streaming, recovery UX, packaging, and clean-install smoke remain open. |
 | Broader V1 platform | 28% | Context quality gates, durable projections, reviewed skills/memory, symmetric host integrations, restricted execution, connectors, and release hardening. |
 
 Assuming one focused implementation lane, working hosted CI, and no material scope
 expansion, the current planning ranges are:
 
-- accepted kernel/change machinery on `develop`: **current feature branch; pending PR #15 merge**;
-- first real-inference, evidence-backed CLI demonstration: **1–2 weeks**;
-- shippable standalone CLI alpha: **3–6 weeks**;
+- accepted kernel/change machinery on `develop`: **complete at merged PR #15 (`1fcab25`)**;
+- first real-inference, evidence-backed CLI demonstration: **accepted on `feature/cli-real-inference` at implementation head `cf26d85`; PR #16 merge pending**;
+- shippable standalone CLI alpha: **3–5 weeks**;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
 
@@ -422,13 +424,14 @@ merely because implementation has started.
 ## Go/no-go
 
 **Go for the near-term CLI ship lane while retaining bounded Slice 2F hardening.**
-Kernel convergence is accepted on the feature branch and pending PR #15 merge.
+Kernel convergence is merged on `develop` at `1fcab25`.
 The same Rust-owned ChangeSet v2 authority now applies,
 verifies, durably records, reconciles, accepts, discards, cleans up, and explains a
 representative change set through the public CLI on Windows/macOS/Ubuntu. Slice 2F-1
 through Slice 2F-2b are accepted, while raw host assertions still fail closed.
-CLI and MCP now use that one Rust authority; after merge, proceed to the measured
-real-inference path before the live loop. `restricted` remains fail-closed until a
+CLI and MCP now use that one Rust authority. The real-inference feature passes
+hosted, exact-kernel product, and controlled VS Code gates on its feature branch;
+after PR #16 merges, proceed to the live CLI loop. `restricted` remains fail-closed until a
 separately proven Windows/macOS backend passes adversarial gates; the trusted developer alpha must name that
 limitation.
 

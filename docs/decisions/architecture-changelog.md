@@ -1,5 +1,24 @@
 # Architecture Changelog
 
+## 2026-08-03 - Real inference hosted, product, and VS Code gate
+
+- Accepted CLI ship lane 2 on `feature/cli-real-inference` at implementation head
+  `cf26d85`; draft PR #16 remains the merge boundary.
+- Hosted Node run `30848081978` passed Windows and macOS. Hosted hybrid run
+  `30848081363` passed Windows, macOS, and Ubuntu, including Rust checks, product
+  smoke, release artifacts, hybrid contracts, and the bridge benchmark.
+- The exact hosted Windows kernel passed `doctor`, real product inspection, a live
+  Ollama text run, and a live bounded one-tool run through the Rust-owned artifact.
+- A controlled VS Code Agent run exposed exactly seven selected Forge tools and
+  completed one workspace-summary call in four seconds with no built-in call,
+  mutation, retry, or artifact externalization.
+- OpenAI remains transport-conformant rather than live-accepted because no cloud
+  credential was present. Interactive streaming remains CLI ship lane 3; this
+  acceptance does not claim an OS sandbox or public MCP mutation.
+- Recorded [Checkpoint 51](checkpoints/2026-08-03-51-real-inference-hosted-product-and-vscode-gate.md)
+  and updated [CLI ship lane 2](../tasks/SLICE-CLI2-real-inference.md).
+
+
 ## 2026-08-03 - Real inference local gate
 
 - Added bounded Ollama Chat and OpenAI Responses adapters behind the existing

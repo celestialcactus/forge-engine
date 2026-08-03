@@ -1,6 +1,6 @@
 # CLI ship lane 2: real inference path
 
-**Status:** local adapter/conformance gate passed; hosted Rust and VS Code gates pending
+**Status:** accepted on feature branch at implementation head `cf26d85`; PR #16 merge pending
 **Branch:** `feature/cli-real-inference`
 **Base:** merged kernel-convergence `develop` at `1fcab25`
 
@@ -11,6 +11,8 @@ using one live local provider family and one direct cloud adapter without adding
 parallel runtime.
 
 Local evidence is recorded in [Checkpoint 50](../decisions/checkpoints/2026-08-03-50-real-inference-local-gate.md).
+Hosted, exact-kernel product, and controlled VS Code acceptance is recorded in
+[Checkpoint 51](../decisions/checkpoints/2026-08-03-51-real-inference-hosted-product-and-vscode-gate.md).
 
 ## Debt retired in this slice
 
