@@ -86,25 +86,27 @@ test('official MCP client preserves the seven-tool compact contract over the Rus
     await client.close();
   }
 });
-test('product CLI auto-discovers the Rust kernel and preserves the supplied task', async () => {
+test('product CLI auto-discovers the Rust kernel for a real inspection', async () => {
   const environment = { ...process.env };
   delete environment.FORGE_KERNEL_BINARY;
-  const task = 'Explain the fixture workspace deterministically.';
   const { stdout } = await execFileAsync(process.execPath, [
     resolve('node_modules/tsx/dist/cli.mjs'),
     resolve('src/cli.ts'),
-    'run',
-    task,
+    'inspect',
     '--workspace',
     fixtureRoot,
+    '--max-files',
+    '1',
     '--json',
   ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment });
   const payload = JSON.parse(stdout) as {
     readonly status: string;
-    readonly events: Array<{ readonly type: string; readonly task?: string }>;
+    readonly task: string;
+    readonly evidence: { readonly files: readonly string[]; readonly totalFiles: number; readonly truncated: boolean };
   };
   assert.equal(payload.status, 'completed');
-  assert.equal(payload.events.find((event) => event.type === 'run.started')?.task, task);
+  assert.equal(payload.task, 'Inspect the opened workspace.');
+  assert.deepEqual(payload.evidence, { files: ['README.md'], totalFiles: 2, truncated: true });
 
   const doctor = await execFileAsync(process.execPath, [
     resolve('node_modules/tsx/dist/cli.mjs'),
