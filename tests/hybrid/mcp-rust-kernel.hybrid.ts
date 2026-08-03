@@ -102,11 +102,23 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
   const payload = JSON.parse(stdout) as {
     readonly status: string;
     readonly task: string;
-    readonly evidence: { readonly files: readonly string[]; readonly totalFiles: number; readonly truncated: boolean };
+    readonly evidence: {
+      readonly snapshotId: string;
+      readonly rootLabel: string;
+      readonly files: ReadonlyArray<{ readonly path: string; readonly bytes: number }>;
+      readonly totalFiles: number;
+      readonly truncated: boolean;
+    };
   };
   assert.equal(payload.status, 'completed');
   assert.equal(payload.task, 'Inspect the opened workspace.');
-  assert.deepEqual(payload.evidence, { files: ['README.md'], totalFiles: 2, truncated: true });
+  assert.match(payload.evidence.snapshotId, /^workspace:/u);
+  assert.equal(payload.evidence.rootLabel, 'slice1-workspace');
+  assert.equal(payload.evidence.totalFiles, 2);
+  assert.equal(payload.evidence.truncated, true);
+  assert.equal(payload.evidence.files.length, 1);
+  assert.equal(payload.evidence.files[0]?.path, 'README.md');
+  assert.ok((payload.evidence.files[0]?.bytes ?? 0) > 0);
 
   const doctor = await execFileAsync(process.execPath, [
     resolve('node_modules/tsx/dist/cli.mjs'),
