@@ -22,6 +22,8 @@
 - VS Code's extension host did not inherit a terminal-only kernel override. Forge
   failed closed until the accepted kernel was installed at its normal discovery
   path; the machine cannot rebuild it locally until the MSVC linker is installed.
+- Draft PR 17 then passed all five hosted jobs at `5326122`: Node on Windows and
+  macOS, plus the real Rust-kernel/TypeScript product on Windows, macOS, and Ubuntu.
 - Updated [ADR-0020](ADRs/ADR-0020-explicit-local-context-and-provider-evidence-projection.md)
   and recorded [Checkpoint 56](checkpoints/2026-08-03-56-low-compute-model-floor.md).
 

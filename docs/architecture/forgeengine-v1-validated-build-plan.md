@@ -136,7 +136,9 @@ broader V1 slices remain authoritative capability goals.
    evidence-backed repository task interactively without reconstructing flags, and
    the hosted plus controlled VS Code gates pass. **Controlled VS Code achieved:**
    one summary call returned the canonical evidence/event projection without a
-   retry loop; the hosted rerun remains open.
+   retry loop. **Hosted achieved:** Node passed on Windows/macOS and the real
+   Rust-kernel/TypeScript product passed on Windows/macOS/Ubuntu at `5326122`.
+   The developer-controlled live OpenAI credential gate remains open.
 4. **Developer capability pack.** Bounded read/search, patch/edit, process/test,
    Git status/diff, and verification over the accepted authority. Add an explicit
    outcome-verification state that distinguishes a valid terminal planner turn from
@@ -403,7 +405,7 @@ not source volume or the number of abstractions present.
 | Scope | Estimated complete | Remaining critical path |
 | --- | ---: | --- |
 | Core runtime and dependable local change machinery | 98% | Kernel convergence is merged on `develop`; native restricted execution remains a separately gated hardening boundary. |
-| Shippable standalone CLI alpha | 75% | The explicit provider path is accepted; the live interactive loop, Qwen hardening, measured local model floor, and controlled VS Code gate pass. Hosted rerun, recovery UX, packaging, and clean-install smoke remain open. |
+| Shippable standalone CLI alpha | 76% | The explicit provider path is accepted; the live interactive loop, Qwen hardening, measured local model floor, controlled VS Code, and hosted cross-platform gates pass. The live OpenAI credential gate, recovery UX, packaging, and clean-install smoke remain open. |
 | Broader V1 platform | 28% | Context quality gates, durable projections, reviewed skills/memory, symmetric host integrations, restricted execution, connectors, and release hardening. |
 
 Assuming one focused implementation lane, working hosted CI, and no material scope

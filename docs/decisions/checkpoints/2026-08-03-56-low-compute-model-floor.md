@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-03
 **Branch:** feature/cli-live-loop
-**State:** local model-floor, provider-context, full local, and controlled VS Code gates passed; hosted rerun and live OpenAI gates pending
+**State:** local model-floor, provider-context, full local, controlled VS Code, and hosted cross-platform gates passed; live OpenAI credential gate pending
 
 ## Why this checkpoint exists
 
@@ -66,6 +66,9 @@ automatic routing policy or a general quality guarantee.
   was placed at the normal ignored discovery path `target/debug/forge-kernel.exe`.
   Building a fresh binary on this machine is blocked by a missing MSVC `link.exe`;
   clean-install packaging and `forge doctor` must make that prerequisite explicit.
+- Draft PR 17 passed all five hosted jobs on commit `5326122`: Node on Windows
+  and macOS plus the real Rust-kernel/TypeScript product on Windows, macOS, and
+  Ubuntu.
 - Exact run IDs and the full prompt matrix are retained in the development record;
   the ratios above are the decision-relevant summary.
 

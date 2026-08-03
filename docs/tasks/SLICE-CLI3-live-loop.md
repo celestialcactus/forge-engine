@@ -1,6 +1,6 @@
 # CLI ship lane 3: live CLI loop
 
-**Status:** local live-loop, Qwen hardening, interactive DX, and controlled VS Code gates green; hosted rerun and credentialed OpenAI gates pending
+**Status:** local live-loop, Qwen hardening, interactive DX, controlled VS Code, and hosted cross-platform gates green; credentialed OpenAI gate pending
 **Branch:** `feature/cli-live-loop`
 **Base:** merged real-inference `develop` at `e865de5`
 
@@ -89,6 +89,8 @@ and [Checkpoint 56](../decisions/checkpoints/2026-08-03-56-low-compute-model-flo
   completed with one summary call, no recovery loop, and the canonical six-event
   order. The extension host required the Rust kernel at its normal discovery path;
   it did not inherit a terminal-only environment override.
+- Draft PR 17 passed Node on Windows/macOS and the real Rust-kernel/TypeScript
+  product on Windows/macOS/Ubuntu at commit `5326122`.
 - The exact hosted Windows kernel from the accepted inference slice passed the
   bridge-v3 product probe; current Rust sources match that accepted revision.
 - Live `qwen2.5-coder:7b` text and one-tool continuation both completed. The tool
