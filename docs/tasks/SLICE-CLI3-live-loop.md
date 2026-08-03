@@ -1,6 +1,6 @@
 # CLI ship lane 3: live CLI loop
 
-**Status:** implementation complete; hosted, VS Code, and credentialed OpenAI gates pending
+**Status:** implementation and hosted gates complete; VS Code and credentialed OpenAI gates pending
 **Branch:** `feature/cli-live-loop`
 **Base:** merged real-inference `develop` at `e865de5`
 
@@ -68,9 +68,16 @@ See [ADR-0019](../decisions/ADRs/ADR-0019-ephemeral-live-cli-presentation.md) an
 - Live JSON mode parsed as one terminal artifact and contained no `assistant>`
   prefix.
 
+## Hosted acceptance
+
+Draft PR #17 at `d5ac3d7` passed all five hosted jobs:
+
+- Node 22 on Windows and macOS: run `30854109399`.
+- Rust kernel plus TypeScript product gate on Windows, macOS, and Ubuntu: run
+  `30854109588`.
+
 ## Remaining acceptance
 
-- Run hosted Windows/macOS/Ubuntu checks on this exact branch.
 - Repeat the controlled seven-tool VS Code MCP regression to prove no tether
   regression.
 - Exercise a real terminal Ctrl+C gesture where the host permits controlled input;

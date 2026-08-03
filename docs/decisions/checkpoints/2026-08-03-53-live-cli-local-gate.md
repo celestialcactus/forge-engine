@@ -52,8 +52,16 @@ to exit 124.
 - stdout and stderr may be grouped differently by capture tools. That visual order
   is explicitly non-authoritative; the Rust artifact remains the ordered record.
 
+## Hosted gate
+
+Draft PR #17 at `d5ac3d7` passed Node 22 on Windows/macOS in run
+`30854109399` and the full Rust-kernel-plus-TypeScript product matrix on
+Windows/macOS/Ubuntu in run `30854109588`.
+
 ## Remaining gate
 
-Hosted Windows/macOS/Ubuntu and controlled VS Code validation are still required.
-A real OpenAI request is deliberately not part of this checkpoint. Work must pause
+Controlled VS Code validation is still required. The exact worktree is open, but
+VS Code initially placed the new folder in Restricted Mode; the developer must make
+that Workspace Trust decision before Copilot or MCP can run. A real OpenAI request
+is deliberately not part of this checkpoint. Work must pause
 at that gate until the developer configures `OPENAI_API_KEY`.

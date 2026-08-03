@@ -8,8 +8,10 @@
   cancellation through the existing Rust bridge abort path.
 - Passed typecheck, 52 tests, build, exact-kernel probe, live Qwen text,
   one-tool continuation, JSON isolation, and live timeout cleanup locally.
-- Hosted Windows/macOS/Ubuntu and controlled VS Code remain pending; live OpenAI
-  remains deliberately paused for developer credential setup.
+- Draft PR #17 at `d5ac3d7` passed Node on Windows/macOS and the full Rust product
+  matrix on Windows/macOS/Ubuntu. Controlled VS Code remains pending because the
+  fresh worktree requires a developer-owned Workspace Trust decision; live OpenAI
+  remains deliberately paused for credential setup.
 - Recorded [Checkpoint 53](checkpoints/2026-08-03-53-live-cli-local-gate.md) and
   updated [CLI ship lane 3](../tasks/SLICE-CLI3-live-loop.md).
 

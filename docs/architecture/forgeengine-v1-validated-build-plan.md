@@ -119,7 +119,7 @@ broader V1 slices remain authoritative capability goals.
    no cloud credential was present. **Exit achieved:** hosted Windows/macOS/Ubuntu,
    exact-kernel product, live local text/tool, cancellation/error conformance, and
    controlled VS Code gates pass.
-3. **Live CLI loop â€” implementation complete locally on `feature/cli-live-loop`; hosted and VS Code gates pending.**
+3. **Live CLI loop — implementation and hosted gates complete on `feature/cli-live-loop`; controlled VS Code pending.**
    Validated provider text streams in human mode, canonical Rust lifecycle status
    remains authoritative, `--json` stays terminal-only, and Ctrl+C/deadline
    cancellation share one abort path. Live Qwen text, bounded tool continuation,
