@@ -202,6 +202,18 @@ fn concurrent_consumers_allow_exactly_one_success() {
             .collect();
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0], "Host challenge replay was rejected.");
+        let mut root_entries: Vec<_> = fs::read_dir(&root)
+            .expect("ledger root")
+            .map(|entry| {
+                entry
+                    .expect("ledger entry")
+                    .file_name()
+                    .into_string()
+                    .expect("UTF-8 ledger entry")
+            })
+            .collect();
+        root_entries.sort();
+        assert_eq!(root_entries, ["consumed".to_owned(), "pending".to_owned()]);
         fs::remove_dir_all(root).expect("cleanup");
     }
 }

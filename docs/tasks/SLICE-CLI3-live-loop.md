@@ -110,8 +110,9 @@ Draft PR #17 at `d5ac3d7` passed all five hosted jobs:
   `30854109588`.
 
 The expanded implementation at `5326122` again passed all five jobs. A following
-checkpoint-only head exposed the host-authority replay race on macOS. Checkpoint 57
-records the bounded correction; its hosted matrix is now the acceptance authority.
+checkpoint-only head exposed the host-authority replay race on macOS. The first
+recheck then exposed partial record publication on Ubuntu and macOS; Checkpoint 57
+records the atomic correction. Its second hosted matrix is the acceptance authority.
 The controlled seven-tool VS Code MCP regression already passed with one Forge call
 and no recovery loop.
 

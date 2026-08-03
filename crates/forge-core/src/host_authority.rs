@@ -650,21 +650,54 @@ fn write_new_json<T: Serialize>(path: &Path, value: &T, label: &str) -> Result<(
             "Serialized {label} exceeds the ledger bound."
         )));
     }
-    let mut file = match OpenOptions::new().write(true).create_new(true).open(path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            return Err(WriteNewError::AlreadyExists);
+    let ledger_root = path
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| WriteNewError::Failed(format!("Cannot locate {label} ledger root.")))?;
+    let mut staging_nonce = [0_u8; 16];
+    getrandom::fill(&mut staging_nonce).map_err(|error| {
+        WriteNewError::Failed(format!("Cannot obtain {label} staging randomness: {error}"))
+    })?;
+    let staging = ledger_root.join(format!(
+        ".host-authority-write-{}-{}.tmp",
+        std::process::id(),
+        encode_hex(&staging_nonce)
+    ));
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&staging)
+        .map_err(|error| WriteNewError::Failed(format!("Cannot stage {label}: {error}")))?;
+    let staging_result = file
+        .write_all(&bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|error| format!("Cannot write and synchronize {label}: {error}"));
+    drop(file);
+    if let Err(error) = staging_result {
+        return match fs::remove_file(&staging) {
+            Ok(()) => Err(WriteNewError::Failed(error)),
+            Err(cleanup_error) => Err(WriteNewError::Failed(format!(
+                "{error}; staged-record cleanup also failed: {cleanup_error}"
+            ))),
+        };
+    }
+    let publish = fs::hard_link(&staging, path);
+    let cleanup = fs::remove_file(&staging);
+    match (publish, cleanup) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            Err(WriteNewError::AlreadyExists)
         }
-        Err(error) => {
-            return Err(WriteNewError::Failed(format!(
-                "Cannot create {label}: {error}"
-            )));
-        }
-    };
-    file.write_all(&bytes)
-        .map_err(|error| WriteNewError::Failed(format!("Cannot write {label}: {error}")))?;
-    file.sync_all()
-        .map_err(|error| WriteNewError::Failed(format!("Cannot synchronize {label}: {error}")))
+        (Err(error), Ok(())) => Err(WriteNewError::Failed(format!(
+            "Cannot atomically publish {label}: {error}"
+        ))),
+        (Ok(()), Err(error)) => Err(WriteNewError::Failed(format!(
+            "Published {label}, but staged-record cleanup failed: {error}"
+        ))),
+        (Err(publish_error), Err(cleanup_error)) => Err(WriteNewError::Failed(format!(
+            "Cannot atomically publish {label}: {publish_error}; staged-record cleanup also failed: {cleanup_error}"
+        ))),
+    }
 }
 
 fn ensure_record_capacity(path: &Path, maximum: usize, label: &str) -> Result<(), String> {
