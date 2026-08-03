@@ -20,7 +20,7 @@ outcome.
 
 | Objective | Evidence | Verdict |
 | --- | --- | --- |
-| One kernel, many hosts | `ForgeRuntime` and `Slice0Runtime` resolve to the same implementation; the provisional alternate stack was removed. | Pass |
+| One kernel, many hosts | At this historical audit, `ForgeRuntime` and `Slice0Runtime` resolved to the same implementation and the provisional alternate stack was removed. ADR-0017 later assigned product authority to Rust and retained TypeScript only as a conformance fixture. | Pass |
 | Scripted read-only `forge run` | CLI preserves the developer task and executes an explicit inventory plan through `ForgeWorkspaceService` and the accepted runtime. | Pass |
 | Deterministic trace and context plan | Fixed run ID plus identical task/snapshot inputs reproduce the same real-adapter trace, context plan, and capability result. | Pass |
 | Evidence before prose | Inventory, search, reads, declarations, diagnostics, Git status, and Git diff are deterministic adapters. | Pass |

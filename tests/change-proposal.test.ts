@@ -4,12 +4,13 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 import type { ChangeProposalArtifact } from '../src/v1/change-proposal.js';
-import { artifactPayload, ForgeWorkspaceService } from '../src/v1/service.js';
+import { artifactPayload, ForgeWorkspaceService, typeScriptConformanceFixture } from '../src/v1/service.js';
 
 const fixtureRoot = resolve('tests/fixtures/slice1-workspace');
 const readmePath = resolve(fixtureRoot, 'README.md');
 const sha256 = (content: Uint8Array): string => createHash('sha256').update(content).digest('hex');
 const createObservedService = (): ForgeWorkspaceService => new ForgeWorkspaceService(fixtureRoot, {
+    runtime: typeScriptConformanceFixture,
   snapshotObserver: () => ({ close() {} }),
 });
 

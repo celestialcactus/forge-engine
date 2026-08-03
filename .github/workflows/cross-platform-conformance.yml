@@ -45,6 +45,3 @@ jobs:
 
       - name: Typecheck, test, and build
         run: npm run check
-
-      - name: Exercise packaged CLI
-        run: npm run smoke

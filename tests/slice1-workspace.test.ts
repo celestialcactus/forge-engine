@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { equivalentTrace } from '../src/slice0/contracts.js';
-import { artifactPayload, ForgeWorkspaceService } from '../src/v1/service.js';
+import { artifactPayload, ForgeWorkspaceService, typeScriptConformanceFixture } from '../src/v1/service.js';
 import { createWorkspaceSnapshot } from '../src/v1/workspace.js';
 
 const fixtureRoot = resolve('tests/fixtures/slice1-workspace');
@@ -32,6 +32,7 @@ test('excludes Rust target output while retaining source and Cargo evidence', as
 
 test('preserves the developer task and repeats the same real-adapter trace for fixed inputs', async () => {
   const service = new ForgeWorkspaceService(fixtureRoot, {
+    runtime: typeScriptConformanceFixture,
     snapshotObserver: () => ({ close() {} }),
     runIdFactory: () => 'run:deterministic-slice-1',
   });
@@ -52,7 +53,7 @@ test('preserves the developer task and repeats the same real-adapter trace for f
 });
 
 test('rejects an empty developer task instead of inventing intent', async () => {
-  await assert.rejects(new ForgeWorkspaceService(fixtureRoot).run('   '), /must not be empty/u);
+  await assert.rejects(new ForgeWorkspaceService(fixtureRoot, { runtime: typeScriptConformanceFixture }).run('   '), /must not be empty/u);
 });
 
 test('reuses an observed workspace snapshot and refreshes after invalidation', async () => {
@@ -60,6 +61,7 @@ test('reuses an observed workspace snapshot and refreshes after invalidation', a
   let invalidate: (() => void) | undefined;
   let observerClosed = false;
   const service = new ForgeWorkspaceService(fixtureRoot, {
+    runtime: typeScriptConformanceFixture,
     snapshotProvider: async (workspaceRoot) => {
       snapshotCalls++;
       await new Promise<void>((resolveDelay) => setImmediate(resolveDelay));
@@ -98,6 +100,7 @@ test('reuses an observed workspace snapshot and refreshes after invalidation', a
 test('rescans after the bounded reuse ceiling even without an observed event', async () => {
   let snapshotCalls = 0;
   const service = new ForgeWorkspaceService(fixtureRoot, {
+    runtime: typeScriptConformanceFixture,
     snapshotProvider: async (workspaceRoot) => {
       snapshotCalls++;
       return createWorkspaceSnapshot(workspaceRoot);
@@ -115,6 +118,7 @@ test('rescans after the bounded reuse ceiling even without an observed event', a
 test('falls back to scan-per-call when change observation is unavailable', async () => {
   let snapshotCalls = 0;
   const service = new ForgeWorkspaceService(fixtureRoot, {
+    runtime: typeScriptConformanceFixture,
     snapshotProvider: async (workspaceRoot) => {
       snapshotCalls++;
       return createWorkspaceSnapshot(workspaceRoot);
@@ -136,6 +140,7 @@ test('does not join a stale in-flight scan after invalidation', async () => {
   const firstGate = new Promise<void>((resolveGate) => { releaseFirst = resolveGate; });
   const firstStarted = new Promise<void>((resolveStarted) => { markFirstStarted = resolveStarted; });
   const service = new ForgeWorkspaceService(fixtureRoot, {
+    runtime: typeScriptConformanceFixture,
     snapshotProvider: async () => {
       const call = ++snapshotCalls;
       if (call === 1) {
@@ -169,7 +174,7 @@ test('does not join a stale in-flight scan after invalidation', async () => {
   service.close();
 });
 test('runs real workspace inventory through the accepted Forge run contract', async () => {
-  const artifact = await new ForgeWorkspaceService(fixtureRoot).inspect(1);
+  const artifact = await new ForgeWorkspaceService(fixtureRoot, { runtime: typeScriptConformanceFixture }).inspect(1);
   const payload = artifactPayload(artifact);
   const evidence = payload.evidence as { totalFiles: number; files: unknown[]; truncated: boolean };
   assert.equal(artifact.status, 'completed');
@@ -188,7 +193,7 @@ test('runs real workspace inventory through the accepted Forge run contract', as
 });
 
 test('returns bounded attributable literal search evidence', async () => {
-  const artifact = await new ForgeWorkspaceService(fixtureRoot).search('forge needle', { maxMatches: 5 });
+  const artifact = await new ForgeWorkspaceService(fixtureRoot, { runtime: typeScriptConformanceFixture }).search('forge needle', { maxMatches: 5 });
   const payload = artifactPayload(artifact);
   const evidence = payload.evidence as { matches: Array<{ path: string; line: number; preview: string }> };
   assert.equal(artifact.status, 'completed');

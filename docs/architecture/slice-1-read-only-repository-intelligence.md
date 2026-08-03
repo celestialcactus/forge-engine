@@ -27,8 +27,11 @@ CLI, MCP, or embedded caller
 ```
 
 The provisional session/provider runtime created during the earliest reconstruction
-pass was removed at the closure audit. `ForgeRuntime` and `Slice0Runtime` are now
-two exported names for the same implementation, not competing stacks.
+pass was removed at the closure audit. At that checkpoint `ForgeRuntime` and
+`Slice0Runtime` were two names for the same TypeScript implementation. ADR-0017
+subsequently made the Rust adapter `ForgeRuntime` and renamed the TypeScript path
+`TypeScriptConformanceRuntime`; it is an explicit parity fixture, not a product
+fallback.
 
 ## Capability set
 

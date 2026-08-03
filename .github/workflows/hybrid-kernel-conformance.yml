@@ -65,6 +65,9 @@ jobs:
           FORGE_KERNEL_BINARY: ${{ github.workspace }}/target/debug/forge-kernel${{ matrix.binary-suffix }}
         run: npm run test:hybrid
 
+      - name: Exercise product CLI with automatic kernel discovery
+        run: npm run smoke
+
       - name: Build optimized kernel
         run: npm run rust:build:release
 

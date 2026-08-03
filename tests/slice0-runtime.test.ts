@@ -9,11 +9,11 @@ import {
   slice0Workspace,
   workspaceInventory,
 } from '../src/slice0/fixtures.js';
-import { Slice0Runtime } from '../src/slice0/runtime.js';
+import { TypeScriptConformanceRuntime } from '../src/slice0/runtime.js';
 
 const inspectCall = { id: 'call-1', capabilityId: 'workspace.inventory', input: {} };
 
-const successfulRuntime = () => new Slice0Runtime({
+const successfulRuntime = () => new TypeScriptConformanceRuntime({
   planner: new ScriptedPlanner([{ kind: 'call', call: inspectCall }, { kind: 'complete', output: 'Workspace inspected.' }]),
   approvalPolicy: allowAll,
   capabilities: [workspaceInventory],
@@ -64,7 +64,7 @@ test('produces an equivalent ordered trace for identical fixture inputs', async 
 });
 
 test('records a denied capability as inspectable tool evidence and continues', async () => {
-  const runtime = new Slice0Runtime({
+  const runtime = new TypeScriptConformanceRuntime({
     planner: new ScriptedPlanner([{ kind: 'call', call: inspectCall }, { kind: 'complete', output: 'Denied request handled.' }]),
     approvalPolicy: denyAll,
     capabilities: [workspaceInventory],
@@ -81,7 +81,7 @@ test('records a denied capability as inspectable tool evidence and continues', a
 });
 
 test('records a capability failure without corrupting the terminal run state', async () => {
-  const runtime = new Slice0Runtime({
+  const runtime = new TypeScriptConformanceRuntime({
     planner: new ScriptedPlanner([
       { kind: 'call', call: { id: 'call-explodes', capabilityId: 'fixture.explodes', input: {} } },
       { kind: 'complete', output: 'Failure was reported.' },

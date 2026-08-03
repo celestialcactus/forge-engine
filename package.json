@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.v1.json",
+    "build:product": "npm run rust:build && npm run build",
     "dev": "tsx src/cli.ts",
     "forge": "node dist/src/cli.js",
     "test": "tsx --test tests/**/*.test.ts",
@@ -22,6 +23,7 @@
     "test:hybrid": "tsx --test tests/hybrid/**/*.hybrid.ts",
     "benchmark:hybrid": "tsx scripts/benchmark-hybrid.mts",
     "check:hybrid": "npm run rust:fmt && npm run rust:lint && npm run rust:test && npm run rust:build && npm run check && npm run test:hybrid",
+    "check:product": "npm run check:hybrid && npm run smoke",
     "prebuild": "node scripts/clean.mjs"
   },
   "engines": {

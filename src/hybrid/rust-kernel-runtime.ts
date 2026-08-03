@@ -16,7 +16,6 @@ import type {
   RunRequest,
   WorkspaceSnapshot,
 } from '../slice0/contracts.js';
-import type { Slice0RuntimeOptions } from '../slice0/runtime.js';
 
 export const rustKernelProtocolVersion = 'forge.kernel.bridge.v2';
 
@@ -25,7 +24,10 @@ export interface ApprovalFactsProvider {
   collect(call: CapabilityCall, signal: AbortSignal): Promise<ApprovalFacts>;
 }
 
-export interface RustKernelRuntimeOptions extends Omit<Slice0RuntimeOptions, 'approvalPolicy'> {
+export interface RustKernelRuntimeOptions {
+  readonly planner: import('../slice0/contracts.js').TaskPlanner;
+  readonly capabilities: readonly Capability[];
+  readonly onEvent?: (event: RunEvent) => void;
   readonly approvalFacts: ApprovalFactsProvider;
   readonly kernelPath: string;
   readonly kernelArguments?: readonly string[];
@@ -92,10 +94,10 @@ const validateArtifact = (
 };
 
 export class RustKernelRuntime {
-  readonly #planner: Slice0RuntimeOptions['planner'];
+  readonly #planner: RustKernelRuntimeOptions['planner'];
   readonly #approvalFacts: ApprovalFactsProvider;
   readonly #capabilities: ReadonlyMap<string, Capability>;
-  readonly #onEvent: Slice0RuntimeOptions['onEvent'];
+  readonly #onEvent: RustKernelRuntimeOptions['onEvent'];
   readonly #kernelPath: string;
   readonly #kernelArguments: readonly string[];
   readonly #environment: Readonly<NodeJS.ProcessEnv> | undefined;

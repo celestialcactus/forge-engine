@@ -7,6 +7,11 @@ import { parseArgs } from 'node:util';
 import type { ApprovalFacts, CapabilityCall, RunArtifact } from './slice0/contracts.js';
 import { startForgeMcpServer } from './mcp/server.js';
 import {
+  probeForgeKernelBinary,
+  requireForgeKernelBinary,
+  resolveForgeKernelBinary,
+} from './hybrid/kernel-binary.js';
+import {
   RustCandidateLifecycleRuntime,
   type CandidateLifecycleSubject,
 } from './hybrid/rust-candidate-lifecycle-runtime.js';
@@ -42,22 +47,17 @@ const { positionals, values } = parseArgs({
 
 const command = positionals[0] ?? 'help';
 const workspaceRoot = resolve(values.workspace ?? process.cwd());
-const configuredKernel = process.env.FORGE_KERNEL_BINARY?.trim();
-const serviceOptions: ForgeWorkspaceServiceOptions = configuredKernel === undefined || configuredKernel.length === 0
-  ? {}
-  : { kernel: { binaryPath: configuredKernel } };
+const kernelResolution = resolveForgeKernelBinary();
+const kernelProbe = command === 'doctor' ? await probeForgeKernelBinary(kernelResolution) : undefined;
+const requireKernel = (): string => requireForgeKernelBinary(kernelResolution);
+const productServiceOptions = (): ForgeWorkspaceServiceOptions => ({
+  runtime: { kind: 'rust_kernel', kernel: { binaryPath: requireKernel() } },
+});
 let service: ForgeWorkspaceService | undefined;
 
 const workspaceService = (): ForgeWorkspaceService => {
-  service ??= new ForgeWorkspaceService(workspaceRoot, serviceOptions);
+  service ??= new ForgeWorkspaceService(workspaceRoot, productServiceOptions());
   return service;
-};
-
-const requireKernel = (): string => {
-  if (configuredKernel === undefined || configuredKernel.length === 0) {
-    throw new Error('Sovereign change commands require FORGE_KERNEL_BINARY.');
-  }
-  return configuredKernel;
 };
 
 const engineRoot = (): string => resolve(
@@ -234,20 +234,35 @@ const candidateCall = (
 try {
   if (command === 'doctor') {
     const report = {
-      ok: true,
+      ok: kernelProbe?.ready === true,
       node: process.version,
       platform: process.platform,
-      runtime: configuredKernel === undefined || configuredKernel.length === 0 ? 'typescript-control' : 'rust-kernel-typescript-adapter',
+      runtime: kernelProbe?.ready === true ? 'rust-kernel-typescript-adapter' : 'unavailable',
+      kernel: {
+        ready: kernelProbe?.ready === true,
+        path: kernelResolution.path ?? null,
+        source: kernelResolution.source ?? null,
+        searchedPaths: kernelResolution.searchedPaths,
+        version: kernelProbe?.kernelVersion ?? null,
+        protocols: {
+          run: kernelProbe?.runProtocolVersion ?? null,
+          transaction: kernelProbe?.transactionProtocolVersion ?? null,
+          candidate: kernelProbe?.candidateProtocolVersion ?? null,
+          sovereignChange: kernelProbe?.sovereignChangeProtocolVersion ?? null,
+        },
+        message: kernelProbe?.message ?? kernelResolution.message,
+      },
       mcp: 'stdio',
       workspaceRoot,
       engineRoot: engineRoot(),
       readOnlyFeatures: ['summary', 'search', 'read', 'symbols', 'typescript-diagnostics', 'git-status', 'git-diff'],
-      changeFlow: configuredKernel === undefined || configuredKernel.length === 0 ? 'unavailable' : 'forge.kernel.changeset.v2',
+      changeFlow: kernelProbe?.ready === true ? 'forge.kernel.changeset.v2' : 'unavailable',
       isolation: 'trusted verification; process lifecycle owned; no Forge-enforced OS sandbox',
     };
+    if (!report.ok) process.exitCode = 1;
     console.log(values.json
       ? JSON.stringify(report)
-      : `ForgeEngine doctor: OK\nNode: ${report.node}\nRuntime: ${report.runtime}\nMCP: ${report.mcp}\nChange flow: ${report.changeFlow}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
+      : `ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}\nNode: ${report.node}\nRuntime: ${report.runtime}\nKernel: ${report.kernel.path ?? report.kernel.message}\nMCP: ${report.mcp}\nChange flow: ${report.changeFlow}\nIsolation: ${report.isolation}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
   } else if (command === 'inspect') {
     printArtifact(await workspaceService().inspect(integerOption(values['max-files'], 200, '--max-files')));
   } else if (command === 'search') {
@@ -352,7 +367,7 @@ try {
     if (task.length === 0) throw new Error('Usage: forge run <task> [--workspace <path>] [--json]');
     printArtifact(await workspaceService().run(task, integerOption(values['max-files'], 200, '--max-files')));
   } else if (command === 'mcp') {
-    await startForgeMcpServer(workspaceRoot);
+    await startForgeMcpServer(workspaceRoot, productServiceOptions());
   } else {
     console.log([
       'ForgeEngine V1 — sovereign evidence runtime',
@@ -375,7 +390,7 @@ try {
       '  forge run <task> [--json]',
       '  forge mcp [--workspace <path>]',
       '',
-      'Change commands require FORGE_KERNEL_BINARY. State defaults to ~/.forge and can be overridden with --engine-root or FORGE_ENGINE_ROOT.',
+      'Product commands require the Rust kernel. Source builds discover target/release or target/debug; FORGE_KERNEL_BINARY overrides discovery. State defaults to ~/.forge and can be overridden with --engine-root or FORGE_ENGINE_ROOT.',
       'Verification is currently trusted local execution; Forge owns process cleanup but does not yet enforce an OS sandbox.',
     ].join('\n'));
   }
