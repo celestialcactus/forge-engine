@@ -1,6 +1,6 @@
 # CLI ship lane 3: live CLI loop
 
-**Status:** live-loop, Qwen, interactive DX, and controlled VS Code gates green; bounded host-authority race correction awaits hosted rerun; credentialed OpenAI gate pending
+**Status:** live-loop, Qwen, interactive DX, controlled VS Code, and hosted cross-platform gates green; credentialed OpenAI gate pending
 **Branch:** `feature/cli-live-loop`
 **Base:** merged real-inference `develop` at `e865de5`
 
@@ -115,14 +115,14 @@ recheck then exposed partial record publication on Ubuntu and macOS. Atomic
 publication passed those platforms but revealed colon-bearing NTFS alternate-stream
 paths on Windows. The following macOS/Ubuntu core tests passed, while two integration
 fixtures still assumed the retired private path; Checkpoint 57 records the fixture
-correction. The next hosted matrix is the acceptance authority.
+correction. Exact implementation `86daa83` then passed Node on Windows/macOS and
+the full Rust-kernel/TypeScript product on Windows/macOS/Ubuntu.
 The controlled seven-tool VS Code MCP regression already passed with one Forge call
 and no recovery loop.
 
 ## Remaining acceptance
 
-- Pass the corrected host-authority regression and full product matrix on hosted
-  Windows, macOS, and Ubuntu.
+
 - Exercise a real terminal Ctrl+C gesture where the host permits controlled input;
   deterministic SIGINT and live timeout coverage are already green.
 - Pause before any live OpenAI request and wait for developer key configuration.

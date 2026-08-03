@@ -20,6 +20,9 @@
   hardcoded the retired private path were corrected to locate the ledger record by
   behavior. Local formatting and the 57-test TypeScript gate pass; the next hosted
   Rust/product validation is the acceptance authority.
+- Exact implementation `86daa83` passed hosted Node on Windows/macOS and the full
+  Rust-kernel/TypeScript product on Windows/macOS/Ubuntu. The bounded correction is
+  accepted.
 - Recorded [Checkpoint 57](checkpoints/2026-08-03-57-host-authority-replay-race.md).
 
 ## 2026-08-03 - Low-compute model floor and provider-context correction

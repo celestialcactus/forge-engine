@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-03
 **Branch:** feature/cli-live-loop
-**State:** implementation and integration fixtures corrected; fourth hosted cross-platform rerun pending
+**State:** accepted on hosted Windows, macOS, and Ubuntu
 
 ## Failure observed
 
@@ -57,5 +57,6 @@ No provider, CLI, policy, event, or artifact contract changed.
   races, on macOS and Ubuntu. Two integration fixtures still hardcoded the retired
   private filename; they now discover and tamper with the single consumed record
   through the ledger directory instead of duplicating storage encoding.
-- The corrected real Rust regression and full product matrix must pass on hosted
-  Windows, macOS, and Ubuntu before this correction is accepted.
+- Acceptance achieved at `86daa83`: Node run `30861244002` passed Windows/macOS,
+  and hybrid product run `30861244006` passed the real Rust kernel plus TypeScript
+  adapter on Windows/macOS/Ubuntu.
