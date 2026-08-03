@@ -69,6 +69,15 @@ fn issues_verifies_persists_and_rejects_restart_replay() {
         challenge.challenge_id,
         "host-challenge:15df218011a72c63d997484bd87643a32aa6d33513f0444b714ce53e49f596b2"
     );
+    assert_eq!(
+        ledger
+            .pending_path(&challenge.challenge_id)
+            .file_name()
+            .and_then(|name| name.to_str()),
+        Some(
+            "host-challenge%3A15df218011a72c63d997484bd87643a32aa6d33513f0444b714ce53e49f596b2.json"
+        )
+    );
     let response = signed(&challenge, "boundary.fixture");
     let evidence = ledger
         .verify_and_consume_at(&response, 2_000)

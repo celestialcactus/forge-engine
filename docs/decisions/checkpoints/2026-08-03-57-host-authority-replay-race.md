@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-03
 **Branch:** feature/cli-live-loop
-**State:** atomic-publication correction implemented; second hosted cross-platform rerun pending
+**State:** atomic publication and Windows-safe private filename correction implemented; third hosted cross-platform rerun pending
 
 ## Failure observed
 
@@ -11,7 +11,9 @@ A documentation-only PR-head rerun first failed the macOS hybrid job in
 consumer succeeded, but the loser sometimes returned a pending-file read error. A
 first defensive recheck plus a 32-iteration regression then exposed the deeper race
 on both Ubuntu and macOS: the consumed filename was visible while its JSON still had
-zero length.
+zero length. Atomic publication passed those platforms, then Windows exposed that
+public IDs containing `:` had historically been interpreted as NTFS alternate data
+streams instead of ordinary private ledger filenames.
 
 ## Root cause
 
@@ -19,7 +21,8 @@ The ledger used `create_new` directly at the final record path and then wrote th
 JSON. This prevented two writers, but it did not prevent readers from observing the
 empty or partially written destination. The earlier pending-file race and the later
 partial-consumed-record race were two outcomes of the same non-atomic publication
-boundary.
+boundary. The filesystem path layer also copied the public `host-challenge:<digest>`
+identity directly into a filename; `:` is not a portable filename character.
 
 ## Bounded correction
 
@@ -27,6 +30,8 @@ boundary.
   file.
 - Atomically publish the complete immutable file with a no-overwrite hard link, then
   remove the staging name. A competing publisher still receives `AlreadyExists`.
+- Preserve the public challenge ID while encoding `:` as `%3A` only in private
+  record filenames. The mapping is collision-free because `%` is forbidden in IDs.
 - Before classifying a missing or unreadable pending record, recheck and fully
   validate the consumed signature, transcript, identity, controls, and timing.
 - Preserve fail-closed errors when evidence is missing, corrupt, or disappears.
@@ -45,5 +50,8 @@ No provider, CLI, policy, event, or artifact contract changed.
 - Hosted run `30860312796` proved that the defensive recheck alone was insufficient:
   Ubuntu and macOS both observed a zero-length in-progress consumed record. That
   evidence drove the atomic-publication correction above.
+- Hosted run `30860656367` passed the atomic-publication regression on macOS and
+  Ubuntu. Windows rejected hard-link publication to the colon-bearing destination
+  with OS error 123, revealing the alternate-data-stream path defect.
 - The corrected real Rust regression and full product matrix must pass on hosted
   Windows, macOS, and Ubuntu before this correction is accepted.

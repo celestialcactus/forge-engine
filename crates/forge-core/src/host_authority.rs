@@ -401,14 +401,18 @@ impl HostChallengeLedger {
     fn pending_path(&self, challenge_id: &str) -> PathBuf {
         self.root
             .join("pending")
-            .join(format!("{challenge_id}.json"))
+            .join(challenge_record_filename(challenge_id))
     }
 
     fn consumed_path(&self, challenge_id: &str) -> PathBuf {
         self.root
             .join("consumed")
-            .join(format!("{challenge_id}.json"))
+            .join(challenge_record_filename(challenge_id))
     }
+}
+
+fn challenge_record_filename(challenge_id: &str) -> String {
+    format!("{}.json", challenge_id.replace(':', "%3A"))
 }
 
 pub fn host_attestation_signing_bytes(

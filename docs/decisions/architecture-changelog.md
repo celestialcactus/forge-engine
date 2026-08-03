@@ -12,6 +12,9 @@
   complete immutable content atomically with no-overwrite hard links. Consumed
   evidence is still cryptographically revalidated; missing or corrupt evidence
   remains fail-closed.
+- The atomic boundary passed macOS and Ubuntu, while Windows revealed that copying
+  the public colon-bearing challenge ID into a filename had used NTFS alternate data
+  streams. Private filenames now encode `:` as `%3A` without changing public IDs.
 - The regression requires exactly one success and one exact replay rejection in all
   32 races. Local formatting and the 57-test TypeScript gate pass; the second hosted
   Rust/product validation is the acceptance authority.
