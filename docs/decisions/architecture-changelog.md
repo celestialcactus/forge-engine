@@ -1,5 +1,17 @@
 # Architecture Changelog
 
+## 2026-08-03 - Deterministic host-authority replay under concurrency
+
+- A macOS hybrid rerun exposed a time-of-check/time-of-use race in host challenge
+  consumption: the losing consumer could see the pending record disappear before
+  it observed the winner's consumed evidence.
+- The ledger now rechecks and cryptographically validates consumed evidence before
+  classifying a concurrent loser as a replay. Missing or corrupt evidence remains
+  fail-closed.
+- Strengthened the regression to 32 races with exactly one success and one exact
+  replay rejection each. Local formatting and the 57-test TypeScript gate pass;
+  hosted Rust/product validation remains the acceptance authority.
+- Recorded [Checkpoint 57](checkpoints/2026-08-03-57-host-authority-replay-race.md).
 ## 2026-08-03 - Low-compute model floor and provider-context correction
 
 - Exercised qwen2.5-coder 0.5B, 1.5B, 3B, and 7B against bounded text, read,

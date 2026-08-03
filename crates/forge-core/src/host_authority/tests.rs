@@ -173,36 +173,37 @@ fn challenge_identity_binds_capability_policy_provider_and_controls() {
 
 #[test]
 fn concurrent_consumers_allow_exactly_one_success() {
-    let root = fixture_root("race");
-    let issuer = HostChallengeLedger::new(root.clone(), trust()).expect("ledger");
-    let challenge = issuer
-        .issue_at(request(), 100, [8_u8; NONCE_BYTES])
-        .expect("challenge");
-    let response = Arc::new(signed(&challenge, "boundary.race"));
-    let barrier = Arc::new(Barrier::new(2));
-    let mut handles = Vec::new();
-    for _ in 0..2 {
-        let ledger = HostChallengeLedger::new(root.clone(), trust()).expect("consumer");
-        let response = Arc::clone(&response);
-        let barrier = Arc::clone(&barrier);
-        handles.push(thread::spawn(move || {
-            barrier.wait();
-            ledger.verify_and_consume_at(&response, 101)
-        }));
-    }
-    let results: Vec<_> = handles
-        .into_iter()
-        .map(|handle| handle.join().expect("consumer join"))
-        .collect();
-    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
-    assert_eq!(results.iter().filter(|result| result.is_err()).count(), 1);
-    assert!(
-        results
+    for iteration in 0..32 {
+        let root = fixture_root(&format!("race-{iteration}"));
+        let issuer = HostChallengeLedger::new(root.clone(), trust()).expect("ledger");
+        let challenge = issuer
+            .issue_at(request(), 100, [8_u8; NONCE_BYTES])
+            .expect("challenge");
+        let response = Arc::new(signed(&challenge, "boundary.race"));
+        let barrier = Arc::new(Barrier::new(2));
+        let mut handles = Vec::new();
+        for _ in 0..2 {
+            let ledger = HostChallengeLedger::new(root.clone(), trust()).expect("consumer");
+            let response = Arc::clone(&response);
+            let barrier = Arc::clone(&barrier);
+            handles.push(thread::spawn(move || {
+                barrier.wait();
+                ledger.verify_and_consume_at(&response, 101)
+            }));
+        }
+        let results: Vec<_> = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("consumer join"))
+            .collect();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        let errors: Vec<_> = results
             .iter()
             .filter_map(|result| result.as_ref().err())
-            .any(|error| error.contains("replay"))
-    );
-    fs::remove_dir_all(root).expect("cleanup");
+            .collect();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0], "Host challenge replay was rejected.");
+        fs::remove_dir_all(root).expect("cleanup");
+    }
 }
 
 #[test]

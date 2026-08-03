@@ -196,17 +196,19 @@ impl HostChallengeLedger {
     ) -> Result<AuthenticatedHostAuthorityEvidence, String> {
         validate_statement(&signed.statement)?;
         let challenge_id = &signed.statement.challenge_id;
-        if self.consumed_path(challenge_id).exists() {
-            self.inspect_consumed(challenge_id).map_err(|error| {
-                format!("Host challenge is already consumed and its evidence is invalid: {error}")
-            })?;
-            return Err("Host challenge replay was rejected.".to_owned());
-        }
+        self.reject_replay_if_consumed(challenge_id)?;
         let pending = self.pending_path(challenge_id);
         if !pending.exists() {
+            self.reject_replay_if_consumed(challenge_id)?;
             return Err("Host challenge is missing or was never issued.".to_owned());
         }
-        let challenge: HostIsolationChallenge = read_bounded_json(&pending)?;
+        let challenge: HostIsolationChallenge = match read_bounded_json(&pending) {
+            Ok(challenge) => challenge,
+            Err(error) => {
+                self.reject_replay_if_consumed(challenge_id)?;
+                return Err(error);
+            }
+        };
         validate_challenge(&challenge)?;
         if challenge.challenge_id != *challenge_id {
             return Err(
@@ -269,7 +271,10 @@ impl HostChallengeLedger {
         match write_new_json(&consumed, &evidence, "consumed host challenge") {
             Ok(()) => {}
             Err(WriteNewError::AlreadyExists) => {
-                return Err("Host challenge replay was rejected.".to_owned());
+                self.reject_replay_if_consumed(challenge_id)?;
+                return Err(
+                    "Consumed host challenge disappeared during replay validation.".to_owned(),
+                );
             }
             Err(WriteNewError::Failed(error)) => return Err(error),
         }
@@ -277,6 +282,15 @@ impl HostChallengeLedger {
             format!("Consumed host challenge was recorded but pending cleanup failed: {error}")
         })?;
         Ok(evidence)
+    }
+
+    fn reject_replay_if_consumed(&self, challenge_id: &str) -> Result<(), String> {
+        match self.inspect_consumed(challenge_id).map_err(|error| {
+            format!("Host challenge is already consumed and its evidence is invalid: {error}")
+        })? {
+            Some(_) => Err("Host challenge replay was rejected.".to_owned()),
+            None => Ok(()),
+        }
     }
 
     fn validate_consumed_evidence(

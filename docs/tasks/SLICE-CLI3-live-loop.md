@@ -1,6 +1,6 @@
 # CLI ship lane 3: live CLI loop
 
-**Status:** local live-loop, Qwen hardening, interactive DX, controlled VS Code, and hosted cross-platform gates green; credentialed OpenAI gate pending
+**Status:** live-loop, Qwen, interactive DX, and controlled VS Code gates green; bounded host-authority race correction awaits hosted rerun; credentialed OpenAI gate pending
 **Branch:** `feature/cli-live-loop`
 **Base:** merged real-inference `develop` at `e865de5`
 
@@ -17,6 +17,8 @@ See [ADR-0019](../decisions/ADRs/ADR-0019-ephemeral-live-cli-presentation.md) an
 [ADR-0021](../decisions/ADRs/ADR-0021-ephemeral-interactive-shell.md),
 [Checkpoint 55](../decisions/checkpoints/2026-08-03-55-interactive-cli-local-gate.md),
 and [Checkpoint 56](../decisions/checkpoints/2026-08-03-56-low-compute-model-floor.md).
+The post-gate concurrency correction is recorded in
+[Checkpoint 57](../decisions/checkpoints/2026-08-03-57-host-authority-replay-race.md).
 
 ## In scope
 
@@ -107,10 +109,16 @@ Draft PR #17 at `d5ac3d7` passed all five hosted jobs:
 - Rust kernel plus TypeScript product gate on Windows, macOS, and Ubuntu: run
   `30854109588`.
 
+The expanded implementation at `5326122` again passed all five jobs. A following
+checkpoint-only head exposed the host-authority replay race on macOS. Checkpoint 57
+records the bounded correction; its hosted matrix is now the acceptance authority.
+The controlled seven-tool VS Code MCP regression already passed with one Forge call
+and no recovery loop.
+
 ## Remaining acceptance
 
-- Repeat the controlled seven-tool VS Code MCP regression to prove no tether
-  regression.
+- Pass the corrected host-authority regression and full product matrix on hosted
+  Windows, macOS, and Ubuntu.
 - Exercise a real terminal Ctrl+C gesture where the host permits controlled input;
   deterministic SIGINT and live timeout coverage are already green.
 - Pause before any live OpenAI request and wait for developer key configuration.
