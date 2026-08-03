@@ -1,9 +1,59 @@
 # Architecture Changelog
 
+## 2026-08-03 - Real inference hosted, product, and VS Code gate
+
+- Accepted CLI ship lane 2 on `feature/cli-real-inference` at implementation head
+  `cf26d85`; draft PR #16 remains the merge boundary.
+- Hosted Node run `30848081978` passed Windows and macOS. Hosted hybrid run
+  `30848081363` passed Windows, macOS, and Ubuntu, including Rust checks, product
+  smoke, release artifacts, hybrid contracts, and the bridge benchmark.
+- The exact hosted Windows kernel passed `doctor`, real product inspection, a live
+  Ollama text run, and a live bounded one-tool run through the Rust-owned artifact.
+- A controlled VS Code Agent run exposed exactly seven selected Forge tools and
+  completed one workspace-summary call in four seconds with no built-in call,
+  mutation, retry, or artifact externalization.
+- OpenAI remains transport-conformant rather than live-accepted because no cloud
+  credential was present. Interactive streaming remains CLI ship lane 3; this
+  acceptance does not claim an OS sandbox or public MCP mutation.
+- Recorded [Checkpoint 51](checkpoints/2026-08-03-51-real-inference-hosted-product-and-vscode-gate.md)
+  and updated [CLI ship lane 2](../tasks/SLICE-CLI2-real-inference.md).
+
+
+## 2026-08-03 - Real inference local gate
+
+- Added bounded Ollama Chat and OpenAI Responses adapters behind the existing
+  `TaskPlanner` bridge, plus explicit provider/model routing with no fallback.
+- Added Rust-recorded terminal inference evidence and mirrored fail-closed
+  validation without creating a second runtime or event hierarchy.
+- Bumped the run bridge to `forge.kernel.bridge.v3` so stale kernels cannot silently
+  discard the new evidence contract.
+- Consolidated the seven evidence capabilities into one reusable pack and one
+  service planner/runtime composition path.
+- Removed the public legacy candidate commands/exports and replaced fake task
+  execution with provider-backed `forge run`; smoke now names `forge inspect`.
+- Extracted shared verification configuration so the sovereign change path no
+  longer depends on the legacy candidate transaction adapter for its types.
+- Local typecheck, 49 tests, build, Rust formatting, live Ollama text, and live
+  one-tool gates passed. Native Rust, hosted cross-platform, product CLI, and VS
+  Code gates remain open. See [Checkpoint 50](checkpoints/2026-08-03-50-real-inference-local-gate.md).
+
+## 2026-08-03 - Real inference path and debt-retirement gate opened
+
+- Merged kernel convergence through PR #15 at `1fcab25` and opened CLI ship lane 2
+  on `feature/cli-real-inference`.
+- Accepted [ADR-0018](ADRs/ADR-0018-provider-neutral-inference-and-debt-retirement.md):
+  provider adapters reuse the canonical TypeScript planner bridge while Rust keeps
+  run, policy, events, budgets, and terminal-artifact authority.
+- Made removal of the fake inventory-backed `forge run`, the public legacy
+  `forge candidate` command, and public legacy runtime exports part of the slice
+  gate. No inference-specific runtime or parallel orchestration layer is allowed.
+- Recorded [Checkpoint 49](checkpoints/2026-08-03-49-real-inference-start.md) and
+  opened [CLI ship lane 2](../tasks/SLICE-CLI2-real-inference.md).
+
 ## 2026-08-03 - Kernel convergence hosted and VS Code gate
 
 - Accepted kernel convergence on feature branch `feature/cli-kernel-convergence`
-  at implementation head `ca9809f`; PR #15 remains open and unmerged.
+  at implementation head `ca9809f`; PR #15 subsequently merged as `1fcab25`.
 - Hosted Node run `30839933843` passed Windows and macOS. Hosted hybrid run
   `30839933999` passed Windows, macOS, and Ubuntu, including native release builds,
   product smoke, and retained kernel artifacts.

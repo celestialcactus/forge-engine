@@ -17,7 +17,7 @@ import type {
   WorkspaceSnapshot,
 } from '../slice0/contracts.js';
 
-export const rustKernelProtocolVersion = 'forge.kernel.bridge.v2';
+export const rustKernelProtocolVersion = 'forge.kernel.bridge.v3';
 
 
 export interface ApprovalFactsProvider {

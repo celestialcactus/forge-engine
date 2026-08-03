@@ -1,9 +1,118 @@
 use crate::context::{compile_context, required_context_bytes};
 use crate::contracts::{
     ApprovalDecision, ApprovalFacts, ApprovalOutcome, CapabilityCall, CapabilityResult,
-    ContextItemKind, ContextPlan, HostPolicyPosture, PlannerRequest, PlannerTurn, RunArtifact,
-    RunEvent, RunEventData, RunRequest, RunStatus, UserConsentStatus, WorkspaceSnapshot,
+    ContextItemKind, ContextPlan, HostPolicyPosture, InferenceCostStatus, InferenceEvidence,
+    InferenceFinishReason, InferenceLocality, PlannerRequest, PlannerTurn, RunArtifact, RunEvent,
+    RunEventData, RunRequest, RunStatus, UserConsentStatus, WorkspaceSnapshot,
 };
+
+fn valid_usd_amount(amount: &str) -> bool {
+    let mut parts = amount.split('.');
+    let whole = parts.next().unwrap_or_default();
+    let fraction = parts.next();
+    !whole.is_empty()
+        && whole.bytes().all(|byte| byte.is_ascii_digit())
+        && fraction.is_none_or(|value| {
+            !value.is_empty()
+                && value.len() <= 12
+                && value.bytes().all(|byte| byte.is_ascii_digit())
+        })
+        && parts.next().is_none()
+}
+
+fn inference_validation_error(turn: &PlannerTurn) -> Option<String> {
+    let evidence = match turn {
+        PlannerTurn::Complete { inference, .. } | PlannerTurn::Call { inference, .. } => {
+            inference.as_ref()?
+        }
+    };
+    if evidence.schema_version != 1 {
+        return Some("Inference evidence schemaVersion must be 1.".to_owned());
+    }
+    for (label, value, maximum) in [
+        ("requestId", evidence.request_id.as_str(), 512),
+        ("provider", evidence.provider.as_str(), 100),
+        ("model", evidence.model.as_str(), 200),
+    ] {
+        let length = value.chars().count();
+        if length == 0 || length > maximum {
+            return Some(format!("Inference evidence {label} has an invalid length."));
+        }
+    }
+    if evidence.duration_ms > 86_400_000 {
+        return Some("Inference evidence durationMs is outside the supported range.".to_owned());
+    }
+    if evidence.output_characters > 65_536 {
+        return Some(
+            "Inference evidence outputCharacters is outside the supported range.".to_owned(),
+        );
+    }
+    if evidence.tool_call_count > 1 {
+        return Some("Inference evidence toolCallCount must be zero or one.".to_owned());
+    }
+    for (label, value) in [
+        ("inputTokens", evidence.usage.input_tokens),
+        ("outputTokens", evidence.usage.output_tokens),
+    ] {
+        if value.is_some_and(|tokens| tokens > 1_000_000_000_000) {
+            return Some(format!(
+                "Inference evidence {label} is outside the supported range."
+            ));
+        }
+    }
+    let routing = &evidence.routing;
+    if routing.fallback_used
+        || routing.requested_provider != routing.selected_provider
+        || routing.selected_provider != evidence.provider
+        || routing.requested_model != routing.selected_model
+        || routing.selected_model != evidence.model
+    {
+        return Some(
+            "Inference evidence routing does not prove an explicit no-fallback route.".to_owned(),
+        );
+    }
+    if evidence.locality == InferenceLocality::Local
+        && evidence.cost.status != InferenceCostStatus::NotApplicable
+    {
+        return Some("Local inference cost status must be not_applicable.".to_owned());
+    }
+    if evidence.locality == InferenceLocality::Cloud
+        && evidence.cost.status == InferenceCostStatus::NotApplicable
+    {
+        return Some("Cloud inference cost status must not be not_applicable.".to_owned());
+    }
+    if let Some(amount) = &evidence.cost.amount_usd {
+        if evidence.cost.status != InferenceCostStatus::Reported
+            && evidence.cost.status != InferenceCostStatus::Estimated
+        {
+            return Some("Inference cost amount requires reported or estimated status.".to_owned());
+        }
+        if !valid_usd_amount(amount) {
+            return Some(
+                "Inference cost amountUsd must be a non-negative decimal string.".to_owned(),
+            );
+        }
+    }
+    match turn {
+        PlannerTurn::Call { .. }
+            if evidence.finish_reason != InferenceFinishReason::ToolCall
+                || evidence.tool_call_count != 1 =>
+        {
+            Some("Capability planner turns require one tool_call inference completion.".to_owned())
+        }
+        PlannerTurn::Complete { output, .. }
+            if evidence.finish_reason != InferenceFinishReason::Stop
+                || evidence.tool_call_count != 0
+                || evidence.output_characters != output.chars().count() as u64 =>
+        {
+            Some(
+                "Completed planner turns require matching stopped text inference evidence."
+                    .to_owned(),
+            )
+        }
+        _ => None,
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeSignal {
@@ -124,6 +233,7 @@ struct RunState {
     status: RunStatus,
     context_plan: Option<ContextPlan>,
     capability_results: Vec<CapabilityResult>,
+    inference_evidence: Vec<InferenceEvidence>,
     output: Option<String>,
     events: Vec<RunEvent>,
     sequence: u64,
@@ -136,6 +246,7 @@ impl RunState {
             status: RunStatus::Running,
             context_plan: None,
             capability_results: Vec::new(),
+            inference_evidence: Vec::new(),
             output: None,
             events: Vec::new(),
             sequence: 0,
@@ -162,6 +273,11 @@ impl RunState {
             status: self.status.clone(),
             context_plan: self.context_plan.clone(),
             capability_results: self.capability_results.clone(),
+            inference_evidence: if self.inference_evidence.is_empty() {
+                None
+            } else {
+                Some(self.inference_evidence.clone())
+            },
             output: self.output.clone(),
             events: self.events.clone(),
         }
@@ -238,14 +354,29 @@ impl Slice0Runtime<'_> {
             if let Some(reason) = self.cancellation.reason() {
                 return self.cancel(&mut state, reason);
             }
+            if let Some(message) = inference_validation_error(&next) {
+                return self.fail(&mut state, "invalid_inference_evidence", message);
+            }
+            let inference = match &next {
+                PlannerTurn::Complete { inference, .. } | PlannerTurn::Call { inference, .. } => {
+                    inference.clone()
+                }
+            };
+            if let Some(evidence) = inference {
+                state.inference_evidence.push(evidence.clone());
+                state.emit(
+                    RunEventData::InferenceCompleted { evidence },
+                    self.event_sink,
+                );
+            }
             match next {
-                PlannerTurn::Complete { output } => {
+                PlannerTurn::Complete { output, .. } => {
                     state.output = Some(output.clone());
                     state.status = RunStatus::Completed;
                     state.emit(RunEventData::RunCompleted { output }, self.event_sink);
                     return state.artifact();
                 }
-                PlannerTurn::Call { call } => {
+                PlannerTurn::Call { call, .. } => {
                     if let Some(artifact) = self.execute(&mut state, call) {
                         return artifact;
                     }

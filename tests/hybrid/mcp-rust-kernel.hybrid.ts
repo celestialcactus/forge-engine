@@ -86,25 +86,39 @@ test('official MCP client preserves the seven-tool compact contract over the Rus
     await client.close();
   }
 });
-test('product CLI auto-discovers the Rust kernel and preserves the supplied task', async () => {
+test('product CLI auto-discovers the Rust kernel for a real inspection', async () => {
   const environment = { ...process.env };
   delete environment.FORGE_KERNEL_BINARY;
-  const task = 'Explain the fixture workspace deterministically.';
   const { stdout } = await execFileAsync(process.execPath, [
     resolve('node_modules/tsx/dist/cli.mjs'),
     resolve('src/cli.ts'),
-    'run',
-    task,
+    'inspect',
     '--workspace',
     fixtureRoot,
+    '--max-files',
+    '1',
     '--json',
   ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment });
   const payload = JSON.parse(stdout) as {
     readonly status: string;
-    readonly events: Array<{ readonly type: string; readonly task?: string }>;
+    readonly task: string;
+    readonly evidence: {
+      readonly snapshotId: string;
+      readonly rootLabel: string;
+      readonly files: ReadonlyArray<{ readonly path: string; readonly bytes: number }>;
+      readonly totalFiles: number;
+      readonly truncated: boolean;
+    };
   };
   assert.equal(payload.status, 'completed');
-  assert.equal(payload.events.find((event) => event.type === 'run.started')?.task, task);
+  assert.equal(payload.task, 'Inspect the opened workspace.');
+  assert.match(payload.evidence.snapshotId, /^workspace:/u);
+  assert.equal(payload.evidence.rootLabel, 'slice1-workspace');
+  assert.equal(payload.evidence.totalFiles, 2);
+  assert.equal(payload.evidence.truncated, true);
+  assert.equal(payload.evidence.files.length, 1);
+  assert.equal(payload.evidence.files[0]?.path, 'README.md');
+  assert.ok((payload.evidence.files[0]?.bytes ?? 0) > 0);
 
   const doctor = await execFileAsync(process.execPath, [
     resolve('node_modules/tsx/dist/cli.mjs'),
@@ -131,6 +145,6 @@ test('product CLI auto-discovers the Rust kernel and preserves the supplied task
   assert.match(report.kernel.source, /^source-(debug|release)$/u);
   assert.match(report.kernel.path, /forge-kernel(?:\.exe)?$/u);
   assert.equal(report.kernel.version, '0.1.0');
-  assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v2');
+  assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v3');
   assert.equal(report.kernel.protocols.sovereignChange, 'forge.kernel.changeset.v2');
 });

@@ -77,6 +77,76 @@ pub struct CapabilityResult {
     pub content: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceLocality {
+    Local,
+    Cloud,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceFinishReason {
+    Stop,
+    ToolCall,
+    Length,
+    ContentFilter,
+    Error,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceCostStatus {
+    NotApplicable,
+    Unavailable,
+    Reported,
+    Estimated,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InferenceUsage {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InferenceCost {
+    pub status: InferenceCostStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount_usd: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InferenceRouting {
+    pub requested_provider: String,
+    pub selected_provider: String,
+    pub requested_model: String,
+    pub selected_model: String,
+    pub fallback_used: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InferenceEvidence {
+    pub schema_version: u8,
+    pub request_id: String,
+    pub provider: String,
+    pub locality: InferenceLocality,
+    pub model: String,
+    pub finish_reason: InferenceFinishReason,
+    pub duration_ms: u64,
+    pub output_characters: u64,
+    pub tool_call_count: u64,
+    pub usage: InferenceUsage,
+    pub cost: InferenceCost,
+    pub routing: InferenceRouting,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum RunEventData {
@@ -101,6 +171,8 @@ pub enum RunEventData {
     },
     #[serde(rename = "capability.completed")]
     CapabilityCompleted { result: CapabilityResult },
+    #[serde(rename = "inference.completed")]
+    InferenceCompleted { evidence: InferenceEvidence },
     #[serde(rename = "run.completed")]
     RunCompleted { output: String },
     #[serde(rename = "run.failed")]
@@ -136,6 +208,8 @@ pub struct RunArtifact {
     pub context_plan: Option<ContextPlan>,
     pub capability_results: Vec<CapabilityResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub inference_evidence: Option<Vec<InferenceEvidence>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<String>,
     pub events: Vec<RunEvent>,
 }
@@ -160,12 +234,20 @@ pub struct PlannerRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind")]
+#[serde(tag = "kind", deny_unknown_fields)]
 pub enum PlannerTurn {
     #[serde(rename = "complete")]
-    Complete { output: String },
+    Complete {
+        output: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        inference: Option<InferenceEvidence>,
+    },
     #[serde(rename = "call")]
-    Call { call: CapabilityCall },
+    Call {
+        call: CapabilityCall,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        inference: Option<InferenceEvidence>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

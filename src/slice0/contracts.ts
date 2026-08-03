@@ -61,12 +61,44 @@ export interface CapabilityResult {
   readonly content: string;
 }
 
+export type InferenceLocality = 'local' | 'cloud';
+export type InferenceFinishReason = 'stop' | 'tool_call' | 'length' | 'content_filter' | 'error';
+export type InferenceCostStatus = 'not_applicable' | 'unavailable' | 'reported' | 'estimated';
+
+export interface InferenceEvidence {
+  readonly schemaVersion: 1;
+  readonly requestId: string;
+  readonly provider: string;
+  readonly locality: InferenceLocality;
+  readonly model: string;
+  readonly finishReason: InferenceFinishReason;
+  readonly durationMs: number;
+  readonly outputCharacters: number;
+  readonly toolCallCount: number;
+  readonly usage: {
+    readonly inputTokens?: number;
+    readonly outputTokens?: number;
+  };
+  readonly cost: {
+    readonly status: InferenceCostStatus;
+    readonly amountUsd?: string;
+  };
+  readonly routing: {
+    readonly requestedProvider: string;
+    readonly selectedProvider: string;
+    readonly requestedModel: string;
+    readonly selectedModel: string;
+    readonly fallbackUsed: false;
+  };
+}
+
 export type RunEventData =
   | { readonly type: 'run.started'; readonly task: string; readonly snapshotId: string }
   | { readonly type: 'context.planned'; readonly plan: ContextPlan }
   | { readonly type: 'capability.requested'; readonly call: CapabilityCall }
   | { readonly type: 'approval.decided'; readonly callId: string; readonly outcome: ApprovalOutcome; readonly reason: string; readonly facts?: ApprovalFacts }
   | { readonly type: 'capability.completed'; readonly result: CapabilityResult }
+  | { readonly type: 'inference.completed'; readonly evidence: InferenceEvidence }
   | { readonly type: 'run.completed'; readonly output: string }
   | { readonly type: 'run.failed'; readonly code: string; readonly message: string }
   | { readonly type: 'run.cancelled'; readonly reason: string }
@@ -85,6 +117,7 @@ export interface RunArtifact {
   readonly status: RunStatus;
   readonly contextPlan?: ContextPlan;
   readonly capabilityResults: readonly CapabilityResult[];
+  readonly inferenceEvidence?: readonly InferenceEvidence[];
   readonly output?: string;
   readonly events: readonly RunEvent[];
 }
@@ -106,8 +139,8 @@ export interface PlannerRequest {
 }
 
 export type PlannerTurn =
-  | { readonly kind: 'complete'; readonly output: string }
-  | { readonly kind: 'call'; readonly call: CapabilityCall };
+  | { readonly kind: 'complete'; readonly output: string; readonly inference?: InferenceEvidence }
+  | { readonly kind: 'call'; readonly call: CapabilityCall; readonly inference?: InferenceEvidence };
 
 export interface TaskPlanner {
   readonly id: string;

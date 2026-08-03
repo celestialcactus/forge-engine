@@ -5,13 +5,71 @@ import type {
   CapabilityCall,
   CapabilityResult,
   ContextPlan,
+  InferenceEvidence,
   RunArtifact,
   RunEvent,
   RunEventData,
   RunRequest,
   RunStatus,
+  PlannerTurn,
   TaskPlanner,
 } from './contracts.js';
+
+const inferenceValidationError = (turn: PlannerTurn): string | undefined => {
+  const evidence = turn.inference;
+  if (evidence === undefined) return undefined;
+  if (evidence.schemaVersion !== 1) return 'Inference evidence schemaVersion must be 1.';
+  for (const [label, value, maximum] of [
+    ['requestId', evidence.requestId, 512],
+    ['provider', evidence.provider, 100],
+    ['model', evidence.model, 200],
+  ] as const) {
+    if (value.length === 0 || value.length > maximum) return `Inference evidence ${label} has an invalid length.`;
+  }
+  if (!Number.isSafeInteger(evidence.durationMs) || evidence.durationMs < 0 || evidence.durationMs > 86_400_000) {
+    return 'Inference evidence durationMs is outside the supported range.';
+  }
+  if (!Number.isSafeInteger(evidence.outputCharacters) || evidence.outputCharacters < 0 || evidence.outputCharacters > 65_536) {
+    return 'Inference evidence outputCharacters is outside the supported range.';
+  }
+  if (!Number.isSafeInteger(evidence.toolCallCount) || evidence.toolCallCount < 0 || evidence.toolCallCount > 1) {
+    return 'Inference evidence toolCallCount must be zero or one.';
+  }
+  for (const [label, value] of [['inputTokens', evidence.usage.inputTokens], ['outputTokens', evidence.usage.outputTokens]] as const) {
+    if (value !== undefined && (!Number.isSafeInteger(value) || value < 0 || value > 1_000_000_000_000)) {
+      return `Inference evidence ${label} is outside the supported range.`;
+    }
+  }
+  const routing = evidence.routing;
+  if (routing.fallbackUsed !== false
+    || routing.requestedProvider !== routing.selectedProvider
+    || routing.selectedProvider !== evidence.provider
+    || routing.requestedModel !== routing.selectedModel
+    || routing.selectedModel !== evidence.model
+  ) return 'Inference evidence routing does not prove an explicit no-fallback route.';
+  if (evidence.locality === 'local' && evidence.cost.status !== 'not_applicable') {
+    return 'Local inference cost status must be not_applicable.';
+  }
+  if (evidence.locality === 'cloud' && evidence.cost.status === 'not_applicable') {
+    return 'Cloud inference cost status must not be not_applicable.';
+  }
+  if (evidence.cost.amountUsd !== undefined
+    && evidence.cost.status !== 'reported'
+    && evidence.cost.status !== 'estimated'
+  ) return 'Inference cost amount requires reported or estimated status.';
+  if (evidence.cost.amountUsd !== undefined && !/^\d+(?:\.\d{1,12})?$/u.test(evidence.cost.amountUsd)) {
+    return 'Inference cost amountUsd must be a non-negative decimal string.';
+  }
+  if (turn.kind === 'call') {
+    if (evidence.finishReason !== 'tool_call' || evidence.toolCallCount !== 1) {
+      return 'Capability planner turns require one tool_call inference completion.';
+    }
+  } else if (evidence.finishReason !== 'stop'
+    || evidence.toolCallCount !== 0
+    || evidence.outputCharacters !== Array.from(turn.output).length
+  ) return 'Completed planner turns require matching stopped text inference evidence.';
+  return undefined;
+};
 
 export interface TypeScriptConformanceRuntimeOptions {
   readonly planner: TaskPlanner;
@@ -43,6 +101,7 @@ export class TypeScriptConformanceRuntime {
     const signal = request.signal ?? new AbortController().signal;
     const events: RunEvent[] = [];
     const results: CapabilityResult[] = [];
+    const inferenceEvidence: InferenceEvidence[] = [];
     let sequence = 0;
     let status: RunStatus = 'running';
     let contextPlan: ContextPlan | undefined;
@@ -62,6 +121,7 @@ export class TypeScriptConformanceRuntime {
       status,
       ...(contextPlan === undefined ? {} : { contextPlan }),
       capabilityResults: results,
+      ...(inferenceEvidence.length === 0 ? {} : { inferenceEvidence }),
       ...(output === undefined ? {} : { output }),
       events,
     });
@@ -82,6 +142,16 @@ export class TypeScriptConformanceRuntime {
         signal.throwIfAborted();
         const next = await this.#planner.next({ task: request.task, contextPlan, capabilityResults: results, turn }, signal);
         signal.throwIfAborted();
+        const inferenceError = inferenceValidationError(next);
+        if (inferenceError !== undefined) {
+          status = 'failed';
+          emit({ type: 'run.failed', code: 'invalid_inference_evidence', message: inferenceError });
+          return artifact();
+        }
+        if (next.inference !== undefined) {
+          inferenceEvidence.push(next.inference);
+          emit({ type: 'inference.completed', evidence: next.inference });
+        }
         if (next.kind === 'complete') {
           output = next.output;
           status = 'completed';

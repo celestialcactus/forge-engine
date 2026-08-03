@@ -30,30 +30,25 @@ test('excludes Rust target output while retaining source and Cargo evidence', as
   assert.deepEqual(snapshot.files.map((file) => file.path), ['Cargo.toml', 'src/lib.rs']);
 });
 
-test('preserves the developer task and repeats the same real-adapter trace for fixed inputs', async () => {
+test('repeats the same explicit inspection trace for fixed inputs', async () => {
   const service = new ForgeWorkspaceService(fixtureRoot, {
     runtime: typeScriptConformanceFixture,
     snapshotObserver: () => ({ close() {} }),
     runIdFactory: () => 'run:deterministic-slice-1',
   });
   try {
-    const task = 'Explain the fixture workspace deterministically.';
-    const first = await service.run(task, 1);
-    const second = await service.run(task, 1);
+    const first = await service.inspect(1);
+    const second = await service.inspect(1);
 
-    assert.equal(first.task, task);
+    assert.equal(first.task, 'Inspect the opened workspace.');
     assert.equal(first.events[0]?.type, 'run.started');
-    assert.equal(first.events[0]?.type === 'run.started' ? first.events[0].task : undefined, task);
+    assert.equal(first.events[0]?.type === 'run.started' ? first.events[0].task : undefined, first.task);
     assert.equal(equivalentTrace(first.events, second.events), true);
     assert.deepEqual(first.contextPlan, second.contextPlan);
     assert.deepEqual(first.capabilityResults, second.capabilityResults);
   } finally {
     service.close();
   }
-});
-
-test('rejects an empty developer task instead of inventing intent', async () => {
-  await assert.rejects(new ForgeWorkspaceService(fixtureRoot, { runtime: typeScriptConformanceFixture }).run('   '), /must not be empty/u);
 });
 
 test('reuses an observed workspace snapshot and refreshes after invalidation', async () => {

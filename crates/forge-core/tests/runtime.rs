@@ -2,9 +2,10 @@ use std::collections::{HashMap, VecDeque};
 
 use forge_core::{
     ApprovalDecision, ApprovalOutcome, ApprovalPolicy, Cancellation, CapabilityAdapter,
-    CapabilityCall, CapabilityResult, NoCancellation, NoopEventSink, PlannerRequest, PlannerTurn,
-    RunRequest, RunStatus, RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceFile,
-    WorkspaceSnapshot,
+    CapabilityCall, CapabilityResult, InferenceCost, InferenceCostStatus, InferenceEvidence,
+    InferenceFinishReason, InferenceLocality, InferenceRouting, InferenceUsage, NoCancellation,
+    NoopEventSink, PlannerRequest, PlannerTurn, RunRequest, RunStatus, RuntimeSignal,
+    Slice0Runtime, TaskPlanner, WorkspaceFile, WorkspaceSnapshot,
 };
 use serde_json::json;
 
@@ -57,9 +58,11 @@ impl ScriptedPlanner {
             turns: VecDeque::from([
                 PlannerTurn::Call {
                     call: inspect_call(),
+                    inference: None,
                 },
                 PlannerTurn::Complete {
                     output: "Workspace inspected.".to_owned(),
+                    inference: None,
                 },
             ]),
         }
@@ -222,6 +225,78 @@ fn equivalent_inputs_produce_equivalent_artifacts() {
 }
 
 #[test]
+fn records_normalized_inference_evidence_before_terminal_completion() {
+    let evidence = InferenceEvidence {
+        schema_version: 1,
+        request_id: "inference:fixture".to_owned(),
+        provider: "ollama".to_owned(),
+        locality: InferenceLocality::Local,
+        model: "fixture-model".to_owned(),
+        finish_reason: InferenceFinishReason::Stop,
+        duration_ms: 25,
+        output_characters: 11,
+        tool_call_count: 0,
+        usage: InferenceUsage {
+            input_tokens: Some(12),
+            output_tokens: Some(3),
+        },
+        cost: InferenceCost {
+            status: InferenceCostStatus::NotApplicable,
+            amount_usd: None,
+        },
+        routing: InferenceRouting {
+            requested_provider: "ollama".to_owned(),
+            selected_provider: "ollama".to_owned(),
+            requested_model: "fixture-model".to_owned(),
+            selected_model: "fixture-model".to_owned(),
+            fallback_used: false,
+        },
+    };
+    let artifact = run(
+        request("inference-run"),
+        &mut ScriptedPlanner {
+            turns: VecDeque::from([PlannerTurn::Complete {
+                output: "Forge ready".to_owned(),
+                inference: Some(evidence.clone()),
+            }]),
+        },
+        &mut allow(),
+        &mut FixtureCapabilities::inventory(),
+        &NoCancellation,
+    );
+    assert_eq!(artifact.inference_evidence, Some(vec![evidence.clone()]));
+    assert!(matches!(
+        artifact.events[2].data,
+        forge_core::RunEventData::InferenceCompleted { evidence: ref recorded } if recorded == &evidence
+    ));
+    assert!(matches!(
+        artifact.events[3].data,
+        forge_core::RunEventData::RunCompleted { .. }
+    ));
+
+    let mut tampered = evidence;
+    tampered.routing.fallback_used = true;
+    let invalid = run(
+        request("tampered-inference-run"),
+        &mut ScriptedPlanner {
+            turns: VecDeque::from([PlannerTurn::Complete {
+                output: "Forge ready".to_owned(),
+                inference: Some(tampered),
+            }]),
+        },
+        &mut allow(),
+        &mut FixtureCapabilities::inventory(),
+        &NoCancellation,
+    );
+    assert_eq!(invalid.status, RunStatus::Failed);
+    assert!(invalid.inference_evidence.is_none());
+    assert!(matches!(
+        invalid.events[2].data,
+        forge_core::RunEventData::RunFailed { ref code, .. } if code == "invalid_inference_evidence"
+    ));
+}
+
+#[test]
 fn records_denial_and_continues() {
     let mut deny = FixedPolicy(ApprovalDecision {
         outcome: ApprovalOutcome::Deny,
@@ -252,9 +327,13 @@ fn records_adapter_failure_without_corrupting_terminal_state() {
     };
     let mut planner = ScriptedPlanner {
         turns: VecDeque::from([
-            PlannerTurn::Call { call },
+            PlannerTurn::Call {
+                call,
+                inference: None,
+            },
             PlannerTurn::Complete {
                 output: "Failure was reported.".to_owned(),
+                inference: None,
             },
         ]),
     };
@@ -322,6 +401,7 @@ fn reports_turn_exhaustion() {
         &mut ScriptedPlanner {
             turns: VecDeque::from([PlannerTurn::Call {
                 call: inspect_call(),
+                inference: None,
             }]),
         },
         &mut allow(),

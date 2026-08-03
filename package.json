@@ -14,7 +14,7 @@
     "test": "tsx --test tests/**/*.test.ts",
     "typecheck": "tsc -p tsconfig.v1.json --noEmit && tsc -p tsconfig.scripts.json",
     "check": "npm run typecheck && npm test && npm run build",
-    "smoke": "node dist/src/cli.js doctor --json && node dist/src/cli.js run smoke",
+    "smoke": "node dist/src/cli.js doctor --json && node dist/src/cli.js inspect --json --max-files 1",
     "rust:fmt": "cargo fmt --all -- --check",
     "rust:lint": "cargo clippy --workspace --all-targets --locked -- -D warnings",
     "rust:test": "cargo test --workspace --locked",

@@ -7,13 +7,21 @@ import type { Readable } from 'node:stream';
 import type { ApprovalFacts, CapabilityCall } from '../slice0/contracts.js';
 import type {
   HostIsolationChallenge,
-  HostIsolationControl,
   SignedHostBoundaryStatement,
 } from './host-authority-transcript.js';
+import type {
+  VerificationCheckConfiguration,
+  VerificationIsolationProfile,
+} from './verification-configuration.js';
+export type {
+  TrustedVerificationCheckConfiguration,
+  VerificationCheckConfiguration,
+  VerificationIsolationPolicyConfiguration,
+} from './verification-configuration.js';
 
 export const rustCandidateTransactionProtocolVersion = 'forge.kernel.transaction.v2';
 
-export type CandidateIsolationProfile = 'trusted' | 'host_managed' | 'restricted';
+export type CandidateIsolationProfile = VerificationIsolationProfile;
 export type CandidateTransactionStatus =
   | 'not_authorized'
   | 'cancelled'
@@ -79,27 +87,6 @@ export interface CandidateTransactionArtifact {
   }[];
 }
 
-export interface VerificationIsolationPolicyConfiguration {
-  readonly profile: CandidateIsolationProfile;
-  readonly requiredControls?: readonly HostIsolationControl[];
-  readonly allowedHostProviderIds?: readonly string[];
-}
-
-export interface VerificationCheckConfiguration {
-  readonly checkId: string;
-  readonly executable: string;
-  readonly arguments?: readonly string[];
-  readonly environment?: readonly {
-    readonly name: string;
-    readonly value: string;
-  }[];
-  readonly inheritEnvironment?: readonly string[];
-  readonly isolationPolicy?: VerificationIsolationPolicyConfiguration;
-  readonly timeoutMs: number;
-  readonly maxOutputBytes: number;
-}
-
-export type TrustedVerificationCheckConfiguration = VerificationCheckConfiguration;
 
 export interface TrustedHostKeyConfiguration {
   readonly providerId: string;

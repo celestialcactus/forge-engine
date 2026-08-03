@@ -16,6 +16,8 @@ The accepted core currently provides:
 - deterministic workspace inventory, literal search, bounded line reads,
   TypeScript declarations/diagnostics, and read-only Git evidence;
 - a seven-tool stdio MCP evidence adapter tested with VS Code;
+- explicit local Ollama and direct OpenAI Responses inference routed through the
+  same Rust-owned run and evidence contract, with no implicit provider fallback;
 - complete bounded ChangeSet v2 operations through a disposable Git worktree,
   verification, durable local transaction state, and explicit accept or discard;
 - supervised verifier process-tree cleanup on Windows, macOS, and Linux;
@@ -28,10 +30,11 @@ The public CLI and MCP server require the Rust kernel. A source checkout discove
 kernel path is invalid. The TypeScript coordinator is retained only as an explicitly
 selected conformance fixture.
 
-`forge run <task>` still executes a deterministic read-only inventory plan. It
-preserves the developer task in the run artifact; it is not yet natural-language
-model orchestration. The next ship-lane increments are real local/cloud inference
-normalization and a streaming multi-turn CLI loop.
+`forge run <task>` requires an explicit `--provider <ollama|openai>` and `--model`.
+Provider streams are normalized in TypeScript, while Rust retains turn budgets,
+capability approval, ordered events, and terminal inference evidence. The current
+command returns the final artifact as JSON or text; the next ship-lane increment is
+the interactive streaming CLI lifecycle rather than a second orchestration runtime.
 
 ## Honest limitations
 
@@ -43,8 +46,11 @@ normalization and a streaming multi-turn CLI loop.
 - `restricted` execution remains unavailable and fails closed until native platform
   providers pass adversarial gates.
 - There is no public MCP mutation tool, generic shell, unrestricted write tool,
-  local/cloud model loop, durable session projection, skills, memory, compression,
-  connector, or automation surface yet.
+  interactive streaming/resumable CLI session, durable session projection, skills,
+  memory, compression, connector, or automation surface yet.
+- OpenAI transport conformance is tested, but a live cloud acceptance run requires
+  the user's own `OPENAI_API_KEY`; Forge does not accept credentials as CLI flags or
+  write them into run evidence.
 - Final npm/native binary packaging and clean-install release smoke are still open.
   The current developer alpha is run from a source checkout.
 
@@ -71,9 +77,14 @@ Useful commands after the product build:
 node dist/src/cli.js doctor --json
 node dist/src/cli.js inspect --workspace C:\path\to\repo --json
 node dist/src/cli.js search "literal text" --workspace C:\path\to\repo --json
-node dist/src/cli.js run "Inspect this workspace" --workspace C:\path\to\repo --json
+node dist/src/cli.js run "Inspect this workspace" --provider ollama --model qwen2.5-coder:7b --workspace C:\path\to\repo --json
 node dist/src/cli.js change propose proposal.json --policy verification-policy.json --approve --json
 ```
+
+The Ollama route expects a locally running Ollama API and an installed model.
+`FORGE_OLLAMA_URL` can select a non-default endpoint. The OpenAI route reads
+`OPENAI_API_KEY`; `FORGE_OPENAI_BASE_URL` can select a compatible direct endpoint.
+Neither route silently falls back to the other.
 
 VS Code uses the workspace-local `.vscode/mcp.json` after a product build. See
 `docs/testing/vscode-developer-test-milestone-a.md` for the controlled prompts.

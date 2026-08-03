@@ -19,7 +19,7 @@ VS Code / MCP / future provider SDK / TypeScript compiler
        tools, workflow definitions, presentation,
            provider/compiler/host integration
                          |
-            forge.kernel.bridge.v2 over NDJSON
+            forge.kernel.bridge.v3 over NDJSON
                          |
                  Rust kernel authority
      validate -> authorize -> schedule -> invoke -> record
@@ -47,7 +47,7 @@ that the boundary is correct.
 ## Bridge protocol v2
 
 Every message is one UTF-8 JSON object followed by LF. Every message carries
-`protocolVersion: "forge.kernel.bridge.v2"` and a caller-selected `requestId`.
+`protocolVersion: "forge.kernel.bridge.v3"` and a caller-selected `requestId`.
 Version 2 replaces adapter-computed approval decisions with attributable facts;
 version 1 remains historical spike evidence and is intentionally rejected by a
 version-2 peer.
