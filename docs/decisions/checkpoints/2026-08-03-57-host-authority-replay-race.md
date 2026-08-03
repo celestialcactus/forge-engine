@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-03
 **Branch:** feature/cli-live-loop
-**State:** atomic publication and Windows-safe private filename correction implemented; third hosted cross-platform rerun pending
+**State:** implementation and integration fixtures corrected; fourth hosted cross-platform rerun pending
 
 ## Failure observed
 
@@ -53,5 +53,9 @@ No provider, CLI, policy, event, or artifact contract changed.
 - Hosted run `30860656367` passed the atomic-publication regression on macOS and
   Ubuntu. Windows rejected hard-link publication to the colon-bearing destination
   with OS error 123, revealing the alternate-data-stream path defect.
+- Hosted run `30861034738` passed every core host-authority test, including all 32
+  races, on macOS and Ubuntu. Two integration fixtures still hardcoded the retired
+  private filename; they now discover and tamper with the single consumed record
+  through the ledger directory instead of duplicating storage encoding.
 - The corrected real Rust regression and full product matrix must pass on hosted
   Windows, macOS, and Ubuntu before this correction is accepted.

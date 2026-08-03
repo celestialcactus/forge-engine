@@ -16,7 +16,9 @@
   the public colon-bearing challenge ID into a filename had used NTFS alternate data
   streams. Private filenames now encode `:` as `%3A` without changing public IDs.
 - The regression requires exactly one success and one exact replay rejection in all
-  32 races. Local formatting and the 57-test TypeScript gate pass; the second hosted
+  32 races. The next macOS/Ubuntu core run passed; two integration fixtures that
+  hardcoded the retired private path were corrected to locate the ledger record by
+  behavior. Local formatting and the 57-test TypeScript gate pass; the next hosted
   Rust/product validation is the acceptance authority.
 - Recorded [Checkpoint 57](checkpoints/2026-08-03-57-host-authority-replay-race.md).
 
