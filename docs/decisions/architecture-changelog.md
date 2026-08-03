@@ -1,5 +1,60 @@
 # Architecture Changelog
 
+## 2026-08-03 - Low-compute model floor and provider-context correction
+
+- Exercised qwen2.5-coder 0.5B, 1.5B, 3B, and 7B against bounded text, read,
+  semantic, and search-to-read tasks instead of validating only the strongest
+  local model.
+- Found that provider prompts exposed selected workspace locators without their
+  contents. Small models treated that pseudo-context as evidence and selected an
+  unrelated file.
+- Replaced locator-only provider context with selected/omitted counts plus an
+  explicit instruction to obtain workspace facts through Forge tools. Internal
+  ContextPlan and RunArtifact contracts are unchanged.
+- Measured task floors were 0.5B text-only, 1.5B literal one-read extraction, 3B
+  one-read semantic interpretation, and 7B search-to-read composition. These are
+  prompt-specific results, not automatic-routing guarantees.
+- The corrected 7B one-read task stayed 3/3 grounded while provider input fell
+  from 3,785 to 2,670 tokens, about 29.5%.
+- The full local gate passed typecheck, 57/57 tests, and build. A controlled VS
+  Code Agent run then used exactly one Forge summary call and returned the
+  canonical six-event order without recovery calls.
+- VS Code's extension host did not inherit a terminal-only kernel override. Forge
+  failed closed until the accepted kernel was installed at its normal discovery
+  path; the machine cannot rebuild it locally until the MSVC linker is installed.
+- Updated [ADR-0020](ADRs/ADR-0020-explicit-local-context-and-provider-evidence-projection.md)
+  and recorded [Checkpoint 56](checkpoints/2026-08-03-56-low-compute-model-floor.md).
+
+## 2026-08-03 - Interactive CLI local gate
+
+- Added a thin plain-forge prompt shell over independent canonical Rust runs.
+- Added deterministic local Ollama model discovery, visible effective route and
+  workspace state, slash controls, --help, and concise default errors.
+- Consolidated one-shot and interactive execution through one provider-task helper;
+  no session runtime, policy path, or event contract was added.
+- A piped-input smoke exposed lost buffered readline lines. A queued input adapter
+  fixed TTY and scripted input through the same path.
+- Full validation passed: typecheck, 57 tests, build, one live interactive read
+  task, and a two-prompt same-process Qwen session.
+- Recorded [ADR-0021](ADRs/ADR-0021-ephemeral-interactive-shell.md) and
+  [Checkpoint 55](checkpoints/2026-08-03-55-interactive-cli-local-gate.md).
+
+## 2026-08-03 - Qwen context and outcome hardening
+
+- Declared an 8K Ollama context window, temperature-zero agent turns, and a
+  validated FORGE_OLLAMA_CONTEXT_TOKENS override.
+- Projected duplicate workspace.read evidence into compact citation-ready provider
+  context without changing the internal capability result or RunArtifact.
+- Rejected printed tool-protocol envelopes instead of falsely accepting them as
+  terminal answers.
+- Full validation passed: typecheck, 54 tests, build, live Qwen text and repeated
+  one-read runs, JSON isolation, and timeout cleanup.
+- A stronger two-tool experiment still exposed early stopping and hallucination.
+  Runtime completion is therefore not documented as grounded outcome acceptance;
+  an explicit outcome-verification contract remains required.
+- Recorded [ADR-0020](ADRs/ADR-0020-explicit-local-context-and-provider-evidence-projection.md)
+  and [Checkpoint 54](checkpoints/2026-08-03-54-qwen-context-and-outcome-hardening.md).
+
 ## 2026-08-03 - Live CLI local gate
 
 - Implemented ephemeral validated provider streaming and canonical runtime status

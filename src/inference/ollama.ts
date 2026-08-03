@@ -9,6 +9,10 @@ import { decodeResponseLines, requireSuccessfulResponse } from './http.js';
 
 type JsonRecord = Record<string, unknown>;
 
+const defaultContextWindowTokens = 8_192;
+const minimumContextWindowTokens = 2_048;
+const maximumContextWindowTokens = 262_144;
+
 const asRecord = (value: unknown): JsonRecord | undefined =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
     ? value as JsonRecord
@@ -39,6 +43,7 @@ const toolArguments = (value: unknown): string => {
 export interface OllamaProviderOptions {
   readonly baseUrl?: string;
   readonly fetch?: InferenceFetch;
+  readonly contextWindowTokens?: number;
 }
 
 export class OllamaChatProvider implements InferenceProvider {
@@ -46,11 +51,20 @@ export class OllamaChatProvider implements InferenceProvider {
   readonly locality = 'local' as const;
   readonly #endpoint: URL;
   readonly #fetch: InferenceFetch;
+  readonly #contextWindowTokens: number;
 
   constructor(options: OllamaProviderOptions = {}) {
     const base = options.baseUrl ?? 'http://127.0.0.1:11434';
     this.#endpoint = new URL('/api/chat', base.endsWith('/') ? base : `${base}/`);
     this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#contextWindowTokens = options.contextWindowTokens ?? defaultContextWindowTokens;
+    if (
+      !Number.isSafeInteger(this.#contextWindowTokens)
+      || this.#contextWindowTokens < minimumContextWindowTokens
+      || this.#contextWindowTokens > maximumContextWindowTokens
+    ) {
+      throw new Error('Ollama contextWindowTokens must be an integer from 2048 to 262144.');
+    }
   }
 
   async *stream(request: ProviderInferenceRequest, signal: AbortSignal): AsyncGenerator<NormalizedInferenceEvent> {
@@ -59,6 +73,7 @@ export class OllamaChatProvider implements InferenceProvider {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         model: request.model,
+        options: { num_ctx: this.#contextWindowTokens, temperature: 0 },
         messages: request.messages.map(ollamaMessage),
         tools: request.tools.map((tool) => ({
           type: 'function',

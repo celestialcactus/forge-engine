@@ -33,9 +33,10 @@ reintroduce the runtime split removed by CLI ship lane 1.
 5. First Ctrl+C requests graceful cancellation through the existing bridge. A
    bounded timeout uses the same abort path and records an attributable reason.
    A later interrupt may retain the host's ordinary force-termination behavior.
-6. This lane exposes the existing multi-turn provider/tool loop. It does not add a
-   persistent REPL, durable resume, mutation capabilities, approval callbacks, or a
-   second session/event store.
+6. This lane exposes the existing multi-turn provider/tool loop and may wrap
+   independent canonical runs in an ephemeral input shell. The shell is not a
+   coordinator and does not add cross-prompt model context, durable resume,
+   mutation capabilities, approval callbacks, or a second session/event store.
 7. Ollama/Qwen is the live development provider. The deterministic OpenAI adapter
    remains in conformance; a live cloud call must pause until the developer supplies
    a project-scoped key through `OPENAI_API_KEY`.

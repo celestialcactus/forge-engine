@@ -119,18 +119,31 @@ broader V1 slices remain authoritative capability goals.
    no cloud credential was present. **Exit achieved:** hosted Windows/macOS/Ubuntu,
    exact-kernel product, live local text/tool, cancellation/error conformance, and
    controlled VS Code gates pass.
-3. **Live CLI loop — implementation and hosted gates complete on `feature/cli-live-loop`; controlled VS Code pending.**
+3. **Live CLI loop - local machinery, Qwen reliability, and interactive DX gates implemented on feature/cli-live-loop; not yet accepted.**
    Validated provider text streams in human mode, canonical Rust lifecycle status
-   remains authoritative, `--json` stays terminal-only, and Ctrl+C/deadline
-   cancellation share one abort path. Live Qwen text, bounded tool continuation,
-   JSON isolation, timeout cleanup, typecheck, 52 tests, and build pass locally.
-   **Exit:** a developer completes an
-   evidence-backed repository task interactively without hand-authoring proposal
-   JSON.
+   remains authoritative, --json stays terminal-only, and Ctrl+C/deadline
+   cancellation share one abort path. Ollama now declares an 8K context, uses
+   deterministic agent sampling, projects compact read evidence, and rejects
+   printed tool-protocol envelopes. Plain forge auto-discovers local Ollama, shows
+   effective state, and accepts repeated independent prompts and slash controls.
+   Live Qwen text, repeated one-tool continuation, JSON isolation, timeout cleanup,
+   typecheck, 57 tests, and build pass locally. A measured 0.5B/1.5B/3B/7B ladder
+   also removed locator-only pseudo-context, reduced the 7B one-read input about
+   29.5%, and established task-specific floors without adding automatic routing.
+   A two-tool Qwen stress case still stopped early and hallucinated; runtime
+   completion is not outcome verification. **Exit:** a developer launches plain
+   forge, sees effective provider/model/workspace state, completes an
+   evidence-backed repository task interactively without reconstructing flags, and
+   the hosted plus controlled VS Code gates pass. **Controlled VS Code achieved:**
+   one summary call returned the canonical evidence/event projection without a
+   retry loop; the hosted rerun remains open.
 4. **Developer capability pack.** Bounded read/search, patch/edit, process/test,
-   Git status/diff, and verification over the accepted authority. **Exit:** a
-   representative change is proposed, reviewed, verified, accepted or discarded,
-   and fully attributed without generic raw powers.
+   Git status/diff, and verification over the accepted authority. Add an explicit
+   outcome-verification state that distinguishes a valid terminal planner turn from
+   an evidence-grounded accepted result; do not infer correctness from model prose.
+   **Exit:** a representative change is proposed, reviewed, verified, accepted or
+   discarded, and fully attributed without generic raw powers; unsupported claims
+   cannot silently inherit an accepted verification state.
 5. **Approval and control.** Visible allow/ask/deny, approval callbacks,
    cancellation, timeouts, iteration/tool budgets, and honest execution posture.
    **Exit:** denial, cancellation, timeout, and exhaustion are deterministic and
@@ -390,7 +403,7 @@ not source volume or the number of abstractions present.
 | Scope | Estimated complete | Remaining critical path |
 | --- | ---: | --- |
 | Core runtime and dependable local change machinery | 98% | Kernel convergence is merged on `develop`; native restricted execution remains a separately gated hardening boundary. |
-| Shippable standalone CLI alpha | 70% | The explicit provider-backed inference path is accepted on its feature branch after hosted, exact-kernel product, and controlled VS Code gates. Interactive streaming, recovery UX, packaging, and clean-install smoke remain open. |
+| Shippable standalone CLI alpha | 75% | The explicit provider path is accepted; the live interactive loop, Qwen hardening, measured local model floor, and controlled VS Code gate pass. Hosted rerun, recovery UX, packaging, and clean-install smoke remain open. |
 | Broader V1 platform | 28% | Context quality gates, durable projections, reviewed skills/memory, symmetric host integrations, restricted execution, connectors, and release hardening. |
 
 Assuming one focused implementation lane, working hosted CI, and no material scope
