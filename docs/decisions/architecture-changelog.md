@@ -1,5 +1,41 @@
+# 2026-08-02
+
+- Passed the controlled Slice 2F-2b VS Code tether gate from the exact feature
+  worktree with only seven Forge tools enabled. One bounded workspace-summary call
+  completed without retry, fallback, externalization, or mutation and preserved
+  the canonical six-event lifecycle. Hosted native acceptance remains open; core
+  completion stays at 94%. See Checkpoint 45 and the Slice 2F-2b task.
 # Architecture Changelog
 
+## 2026-07-30 - Slice 2F-2b local implementation audit
+
+- Implemented the Rust-derived capability/policy binding, authenticated host
+  provider, one-use execution grant, durable pre-launch evidence revalidation,
+  transaction v2 negotiation frames, and TypeScript signer transport.
+- The second audit blocked duplicate authorization before challenge consumption,
+  bounded the control queue/frame, corrected the corrupt-evidence regression, and
+  reaped validated expired pending challenges before capacity enforcement.
+- Local Rust check/rustfmt/Clippy and `npm run check` (39/39 Node tests) pass. Native
+  execution remains blocked by missing local Windows linkers, so hosted Windows/
+  macOS/Ubuntu and controlled VS Code gates remain mandatory.
+- Recorded
+  [Checkpoint 44](checkpoints/2026-07-30-44-host-provider-bridge-local-audit.md).
+  Core completion remains 94% until external acceptance closes.
+
+## 2026-07-30 - Slice 2F-2b host provider/bridge opened
+
+- Accepted
+  [ADR-0016](ADRs/ADR-0016-rust-derived-host-execution-grant.md): capability and
+  verification-policy identities are derived from exact Rust transaction facts,
+  and verified host authority becomes a single-use provider grant.
+- Opened
+  [Slice 2F-2b](../tasks/SLICE-002F2B-host-provider-bridge.md) with pre-application
+  authentication, durable evidence revalidation, bounded host/kernel frames,
+  cancellation, and cross-platform gates.
+- Recorded
+  [Checkpoint 43](checkpoints/2026-07-30-43-host-provider-bridge-design.md).
+  This increment authenticates host-attested execution; it does not claim an OS
+  sandbox or Forge-enforced restricted controls.
 ## 2026-07-30 — Slice 2F-2a signed host challenge accepted
 
 - Accepted Slice 2F-2a at `71a3ec6`: Forge issues a short-lived, bound challenge,

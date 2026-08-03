@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::io::{self, BufReader, BufWriter};
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use forge_core::{
     ApprovalDecision, ApprovalFacts, ApprovalPolicy, Cancellation, CapabilityAdapter,
@@ -421,14 +422,19 @@ fn main() {
     if discriminator.message_type == "transaction.start"
         && discriminator.protocol_version == protocol::TRANSACTION_PROTOCOL_VERSION
     {
-        if let Err(failure) = transaction_bridge::execute(&frame, reader, &mut writer) {
-            send_protocol_error(
-                &mut writer,
-                protocol::TRANSACTION_PROTOCOL_VERSION,
-                failure.request_id.as_deref(),
-                failure.code,
-                &failure.message,
-            );
+        let shared_writer = Arc::new(Mutex::new(writer));
+        if let Err(failure) =
+            transaction_bridge::execute(&frame, reader, Arc::clone(&shared_writer))
+        {
+            if let Ok(mut writer) = shared_writer.lock() {
+                send_protocol_error(
+                    &mut *writer,
+                    protocol::TRANSACTION_PROTOCOL_VERSION,
+                    failure.request_id.as_deref(),
+                    failure.code,
+                    &failure.message,
+                );
+            }
             std::process::exit(2);
         }
         return;

@@ -16,7 +16,7 @@ use forge_core::{
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-const PROTOCOL_VERSION: &str = "forge.kernel.transaction.v1";
+const PROTOCOL_VERSION: &str = "forge.kernel.transaction.v2";
 static FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 struct Fixture {
@@ -235,27 +235,22 @@ fn trusted_transaction_returns_a_retained_candidate_without_mutating_the_workspa
 }
 
 #[test]
-fn non_trusted_isolation_fails_closed_before_candidate_creation() {
+fn host_managed_isolation_requires_explicit_authority_configuration_before_candidate_creation() {
     let fixture = Fixture::new();
     let mut start = fixture.start("verifier_pass_helper", json!([]));
     start["request"]["verification"]["isolation"] = json!({
         "profile": "host_managed",
-        "hostAttestation": {
-            "providerId": "fixture.host",
-            "boundaryId": "boundary:fixture",
-            "processBoundaryInherited": true,
-            "attestedControls": ["filesystem"]
-        }
+        "hostProviderId": "fixture.host"
     });
     start["request"]["call"]["input"]["isolationProfile"] = json!("host_managed");
     start["request"]["call"]["input"]["isolationProviderId"] = json!("fixture.host");
-    start["request"]["call"]["input"]["isolationBoundaryId"] = json!("boundary:fixture");
+    start["request"]["call"]["input"]["isolationBoundaryId"] = json!(null);
 
     let output = run_frame(&serde_json::to_vec(&start).expect("start"));
     assert_eq!(output.status.code(), Some(2));
     let result = output_json(&output);
     assert_eq!(result["type"], "protocol.error");
-    assert_eq!(result["code"], "unsupported_isolation_profile");
+    assert_eq!(result["code"], "missing_host_authority_configuration");
     assert_eq!(
         fs::read_dir(&fixture.candidates)
             .expect("candidate directory")
@@ -263,7 +258,6 @@ fn non_trusted_isolation_fails_closed_before_candidate_creation() {
         0
     );
 }
-
 #[test]
 fn verifier_environment_is_cleared_and_rebuilt_from_explicit_policy() {
     let fixture = Fixture::new();

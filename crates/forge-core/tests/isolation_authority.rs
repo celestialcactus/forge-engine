@@ -1,8 +1,8 @@
 use forge_core::{
-    BaselineIsolationProvider, HostIsolationAttestation, IsolationControl, IsolationEnforcement,
-    IsolationEvidence, IsolationPolicy, IsolationProfile, IsolationProvider,
-    IsolationProviderCapabilities, IsolationRequest, validate_isolation_evidence,
-    validate_isolation_provider_capabilities, validate_isolation_provider_request,
+    BaselineIsolationProvider, IsolationControl, IsolationEnforcement, IsolationEvidence,
+    IsolationPolicy, IsolationProfile, IsolationProvider, IsolationProviderCapabilities,
+    IsolationRequest, validate_isolation_evidence, validate_isolation_provider_capabilities,
+    validate_isolation_provider_request,
 };
 
 fn restricted_capabilities(controls: Vec<IsolationControl>) -> IsolationProviderCapabilities {
@@ -23,6 +23,7 @@ fn restricted_evidence(controls: Vec<IsolationControl>) -> IsolationEvidence {
         boundary_id: Some("boundary:fixture".to_owned()),
         forge_enforced: true,
         controls,
+        host_authority: None,
         limitations: vec!["Fixture provider limitation.".to_owned()],
     }
 }
@@ -66,7 +67,7 @@ fn restricted_preflight_requires_every_policy_control() {
     ]);
     let request = IsolationRequest {
         profile: IsolationProfile::Restricted,
-        host_attestation: None,
+        host_provider_id: None,
     };
 
     assert!(
@@ -85,7 +86,7 @@ fn restricted_evidence_is_bound_to_provider_and_advertised_controls() {
     let policy = IsolationPolicy::restricted(vec![IsolationControl::Process]);
     let request = IsolationRequest {
         profile: IsolationProfile::Restricted,
-        host_attestation: None,
+        host_provider_id: None,
     };
 
     validate_isolation_evidence(
@@ -125,7 +126,7 @@ fn restricted_evidence_cannot_omit_a_policy_required_control() {
     ]);
     let request = IsolationRequest {
         profile: IsolationProfile::Restricted,
-        host_attestation: None,
+        host_provider_id: None,
     };
     let evidence = restricted_evidence(vec![IsolationControl::Process]);
 
@@ -137,7 +138,7 @@ fn restricted_evidence_cannot_omit_a_policy_required_control() {
 }
 
 #[test]
-fn authenticated_host_capability_can_validate_bound_host_evidence() {
+fn authenticated_host_capability_rejects_evidence_without_verified_authority() {
     let capabilities = IsolationProviderCapabilities {
         provider_id: "fixture.host".to_owned(),
         supported_profiles: vec![IsolationProfile::HostManaged],
@@ -149,15 +150,7 @@ fn authenticated_host_capability_can_validate_bound_host_evidence() {
         vec!["fixture.host".to_owned()],
         vec![IsolationControl::Process],
     );
-    let request = IsolationRequest {
-        profile: IsolationProfile::HostManaged,
-        host_attestation: Some(HostIsolationAttestation {
-            provider_id: "fixture.host".to_owned(),
-            boundary_id: "boundary:host".to_owned(),
-            process_boundary_inherited: true,
-            attested_controls: controls.clone(),
-        }),
-    };
+    let request = IsolationRequest::host_managed("fixture.host");
     let evidence = IsolationEvidence {
         requested_profile: IsolationProfile::HostManaged,
         effective_profile: IsolationProfile::HostManaged,
@@ -166,9 +159,13 @@ fn authenticated_host_capability_can_validate_bound_host_evidence() {
         boundary_id: Some("boundary:host".to_owned()),
         forge_enforced: false,
         controls,
+        host_authority: None,
         limitations: vec!["The authenticated host, not Forge, enforces this boundary.".to_owned()],
     };
 
-    validate_isolation_evidence(&capabilities, &policy, &request, &evidence)
-        .expect("authenticated host evidence");
+    assert!(
+        validate_isolation_evidence(&capabilities, &policy, &request, &evidence)
+            .unwrap_err()
+            .contains("inconsistent")
+    );
 }

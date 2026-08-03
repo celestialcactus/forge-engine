@@ -20,18 +20,20 @@ use std::os::{
 };
 #[cfg(unix)]
 use std::path::Path;
+mod host_managed_provider;
 #[cfg(target_os = "macos")]
 mod macos_process_group;
 #[cfg(windows)]
 mod windows_job;
 
+pub use host_managed_provider::*;
+
 use serde::{Deserialize, Serialize};
 
-use crate::Cancellation;
+use crate::{AuthenticatedHostAuthorityEvidence, Cancellation};
 
 const MAX_ARGUMENTS: usize = 64;
 const MAX_ENVIRONMENT_ENTRIES: usize = 128;
-const MAX_ATTESTED_CONTROLS: usize = 16;
 const MIN_OUTPUT_BYTES: usize = 1_024;
 const MAX_OUTPUT_BYTES: usize = 1_048_576;
 const MAX_TIMEOUT: Duration = Duration::from_secs(600);
@@ -71,31 +73,29 @@ pub struct IsolationProviderCapabilities {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct HostIsolationAttestation {
-    pub provider_id: String,
-    pub boundary_id: String,
-    pub process_boundary_inherited: bool,
-    pub attested_controls: Vec<IsolationControl>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct IsolationRequest {
     pub profile: IsolationProfile,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub host_attestation: Option<HostIsolationAttestation>,
+    pub host_provider_id: Option<String>,
 }
 
 impl IsolationRequest {
     pub fn trusted() -> Self {
         Self {
             profile: IsolationProfile::Trusted,
-            host_attestation: None,
+            host_provider_id: None,
+        }
+    }
+
+    pub fn host_managed(provider_id: impl Into<String>) -> Self {
+        Self {
+            profile: IsolationProfile::HostManaged,
+            host_provider_id: Some(provider_id.into()),
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IsolationPolicy {
     pub required_profile: IsolationProfile,
     pub required_controls: Vec<IsolationControl>,
@@ -150,6 +150,8 @@ pub struct IsolationEvidence {
     pub boundary_id: Option<String>,
     pub forge_enforced: bool,
     pub controls: Vec<IsolationControl>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_authority: Option<AuthenticatedHostAuthorityEvidence>,
     pub limitations: Vec<String>,
 }
 
@@ -164,16 +166,21 @@ impl IsolationEvidence {
                     && !self.forge_enforced
                     && self.boundary_id.is_none()
                     && self.controls.is_empty()
+                    && self.host_authority.is_none()
             }
             IsolationProfile::HostManaged => {
-                let Some(attestation) = request.host_attestation.as_ref() else {
+                let Some(provider_id) = request.host_provider_id.as_deref() else {
+                    return false;
+                };
+                let Some(authority) = self.host_authority.as_ref() else {
                     return false;
                 };
                 self.enforcement == IsolationEnforcement::HostAttested
                     && !self.forge_enforced
-                    && self.provider_id == attestation.provider_id
-                    && self.boundary_id.as_deref() == Some(attestation.boundary_id.as_str())
-                    && self.controls == attestation.attested_controls
+                    && self.provider_id == provider_id
+                    && authority.challenge.provider_id == provider_id
+                    && self.boundary_id.as_deref() == Some(authority.statement.boundary_id.as_str())
+                    && self.controls == authority.statement.attested_controls
             }
             IsolationProfile::Restricted => {
                 self.enforcement == IsolationEnforcement::ForgeEnforced
@@ -184,6 +191,7 @@ impl IsolationEvidence {
                         .is_some_and(|value| !value.is_empty())
                     && !self.provider_id.is_empty()
                     && !self.controls.is_empty()
+                    && self.host_authority.is_none()
             }
         }
     }
@@ -227,6 +235,28 @@ pub struct IsolatedProcessOutcome {
 
 pub trait IsolationProvider: Send + Sync {
     fn capabilities(&self) -> IsolationProviderCapabilities;
+
+    fn authorize_host_managed(
+        &self,
+        _policy: &IsolationPolicy,
+        _request: &IsolationRequest,
+        _binding: &HostExecutionBinding,
+        _cancellation: &dyn Cancellation,
+    ) -> Result<HostExecutionGrant, String> {
+        Err("Isolation provider does not issue authenticated host execution grants.".to_owned())
+    }
+
+    fn execute_host_managed(
+        &self,
+        _grant: HostExecutionGrant,
+        _policy: &IsolationPolicy,
+        _request: &IsolationRequest,
+        _binding: &HostExecutionBinding,
+        _process: &IsolatedProcessSpec,
+        _cancellation: &dyn Cancellation,
+    ) -> Result<IsolatedProcessOutcome, String> {
+        Err("Isolation provider does not consume authenticated host execution grants.".to_owned())
+    }
 
     fn execute(
         &self,
@@ -289,6 +319,7 @@ impl IsolationProvider for BaselineIsolationProvider {
                 boundary_id: None,
                 forge_enforced: false,
                 controls: Vec::new(),
+                host_authority: None,
                 limitations: vec![
                     "The process runs with the Forge process's operating-system permissions."
                         .to_owned(),
@@ -610,6 +641,14 @@ pub fn validate_isolation_provider_request(
             capabilities.provider_id, request.profile
         ));
     }
+    if request.profile == IsolationProfile::HostManaged
+        && request.host_provider_id.as_deref() != Some(capabilities.provider_id.as_str())
+    {
+        return Err(format!(
+            "Requested host provider does not match executing provider {}.",
+            capabilities.provider_id
+        ));
+    }
     if request.profile == IsolationProfile::Restricted
         && !policy
             .required_controls
@@ -648,6 +687,32 @@ pub fn validate_isolation_evidence(
     {
         return Err("Isolation evidence requires bounded explicit limitations.".to_owned());
     }
+    if request.profile == IsolationProfile::HostManaged {
+        if !policy
+            .required_controls
+            .iter()
+            .all(|control| evidence.controls.contains(control))
+        {
+            return Err(
+                "Host-attested isolation evidence omits a policy-required control.".to_owned(),
+            );
+        }
+        let authority = evidence.host_authority.as_ref().ok_or_else(|| {
+            "Host-attested isolation evidence omits authenticated authority.".to_owned()
+        })?;
+        if authority.challenge.required_controls.len() != policy.required_controls.len()
+            || !policy
+                .required_controls
+                .iter()
+                .all(|control| authority.challenge.required_controls.contains(control))
+            || authority.challenge.capability_digest.len() != 64
+            || authority.challenge.policy_digest.len() != 64
+        {
+            return Err(
+                "Authenticated host evidence does not preserve exact policy bindings.".to_owned(),
+            );
+        }
+    }
     if request.profile == IsolationProfile::Restricted {
         if !policy
             .required_controls
@@ -684,54 +749,23 @@ fn validate_policy_request(
     }
     match request.profile {
         IsolationProfile::Trusted | IsolationProfile::Restricted => {
-            if request.host_attestation.is_some() {
+            if request.host_provider_id.is_some() {
                 return Err(
-                    "Host isolation attestation is valid only for host-managed execution."
+                    "Host isolation provider selection is valid only for host-managed execution."
                         .to_owned(),
                 );
             }
         }
         IsolationProfile::HostManaged => {
-            let attestation = request.host_attestation.as_ref().ok_or_else(|| {
-                "Host-managed execution requires an explicit host isolation attestation.".to_owned()
+            let provider_id = request.host_provider_id.as_ref().ok_or_else(|| {
+                "Host-managed execution requires an explicit host isolation provider.".to_owned()
             })?;
-            validate_identifier("Host isolation provider ID", &attestation.provider_id)?;
-            validate_identifier("Host isolation boundary ID", &attestation.boundary_id)?;
-            if !attestation.process_boundary_inherited {
-                return Err(
-                    "The host did not attest that child processes inherit its isolation boundary."
-                        .to_owned(),
-                );
-            }
-            if attestation.attested_controls.is_empty()
-                || attestation.attested_controls.len() > MAX_ATTESTED_CONTROLS
-                || attestation
-                    .attested_controls
-                    .iter()
-                    .collect::<HashSet<_>>()
-                    .len()
-                    != attestation.attested_controls.len()
-            {
-                return Err("Host-attested isolation controls are empty or invalid.".to_owned());
-            }
-            if !policy
-                .required_controls
-                .iter()
-                .all(|control| attestation.attested_controls.contains(control))
-            {
-                return Err(
-                    "Host isolation attestation does not satisfy every policy-required control."
-                        .to_owned(),
-                );
-            }
+            validate_identifier("Host isolation provider ID", provider_id)?;
             if policy.allowed_host_provider_ids.is_empty()
-                || !policy
-                    .allowed_host_provider_ids
-                    .contains(&attestation.provider_id)
+                || !policy.allowed_host_provider_ids.contains(provider_id)
             {
                 return Err(format!(
-                    "Host isolation provider {} is not allowed by policy.",
-                    attestation.provider_id
+                    "Host isolation provider {provider_id} is not allowed by policy."
                 ));
             }
         }

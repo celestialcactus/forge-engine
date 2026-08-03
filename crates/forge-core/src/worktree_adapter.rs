@@ -9,14 +9,16 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::{
     ApplicationChange, AppliedChangeEvidence, ApplyEvidence, BaselineIsolationProvider,
     BoundaryEvidence, BoundedTextEvidence, Cancellation, CandidateLeaseChange,
     CandidateLeaseRegistration, CandidateRetentionEvidence, ChangeApplicationManifest,
-    ChangeTransactionAdapter, FileCandidateLeaseStore, IsolationPolicy, IsolationProvider,
-    VerificationEvidence, VerificationRunner, VerificationSelection,
+    ChangeTransactionAdapter, ChangeTransactionRequest, FileCandidateLeaseStore,
+    HostExecutionAuthorizationEvidence, IsolationPolicy, IsolationProvider, VerificationEvidence,
+    VerificationRunner, VerificationSelection,
 };
 
 const MAX_GIT_OUTPUT: usize = 32 * 1_048_576;
@@ -26,7 +28,7 @@ const MAX_DIFF: usize = 1_000_000;
 
 const IGNORED_DIRECTORIES: [&str; 5] = [".git", ".forge", "dist", "node_modules", "target"];
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct VerificationCheck {
     pub check_id: String,
     pub executable: PathBuf,
@@ -474,6 +476,15 @@ impl ChangeTransactionAdapter for CleanRevisionWorktreeAdapter {
         })
     }
 
+    fn authorize_verification(
+        &mut self,
+        request: &ChangeTransactionRequest,
+        cancellation: &dyn Cancellation,
+    ) -> Result<Option<HostExecutionAuthorizationEvidence>, String> {
+        self.verification
+            .authorize_transaction(request, cancellation)
+    }
+
     fn apply(
         &mut self,
         boundary: &BoundaryEvidence,
@@ -581,6 +592,7 @@ impl ChangeTransactionAdapter for CleanRevisionWorktreeAdapter {
     }
 
     fn recover(&mut self, boundary: &BoundaryEvidence, _cause: &str) -> Result<String, String> {
+        self.verification.discard_host_authorization();
         let prepared = self.matching_boundary(boundary)?;
         let message = self.cleanup_boundary(&prepared)?;
         if let Some(candidate_id) = self.retained_candidate_id.as_deref() {
