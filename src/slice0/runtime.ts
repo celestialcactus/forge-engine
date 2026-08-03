@@ -13,21 +13,26 @@ import type {
   TaskPlanner,
 } from './contracts.js';
 
-export interface Slice0RuntimeOptions {
+export interface TypeScriptConformanceRuntimeOptions {
   readonly planner: TaskPlanner;
   readonly approvalPolicy: ApprovalPolicy;
   readonly capabilities: readonly Capability[];
   readonly onEvent?: (event: RunEvent) => void;
 }
 
-/** The smallest host-neutral run coordinator. */
-export class Slice0Runtime {
+/**
+ * TypeScript conformance oracle for protocol fixtures.
+ *
+ * Product CLI and MCP execution must use the Rust kernel. This implementation is
+ * deliberately retained only to test cross-language trace equivalence.
+ */
+export class TypeScriptConformanceRuntime {
   readonly #planner: TaskPlanner;
   readonly #approvalPolicy: ApprovalPolicy;
   readonly #capabilities: ReadonlyMap<string, Capability>;
   readonly #onEvent: ((event: RunEvent) => void) | undefined;
 
-  constructor(options: Slice0RuntimeOptions) {
+  constructor(options: TypeScriptConformanceRuntimeOptions) {
     this.#planner = options.planner;
     this.#approvalPolicy = options.approvalPolicy;
     this.#capabilities = new Map(options.capabilities.map((capability) => [capability.id, capability]));

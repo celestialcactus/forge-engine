@@ -65,8 +65,19 @@ jobs:
           FORGE_KERNEL_BINARY: ${{ github.workspace }}/target/debug/forge-kernel${{ matrix.binary-suffix }}
         run: npm run test:hybrid
 
+      - name: Exercise product CLI with automatic kernel discovery
+        run: npm run smoke
+
       - name: Build optimized kernel
         run: npm run rust:build:release
+
+      - name: Retain optimized kernel for exact-host validation
+        uses: actions/upload-artifact@v7
+        with:
+          name: forge-kernel-${{ runner.os }}-${{ runner.arch }}
+          path: target/release/forge-kernel${{ matrix.binary-suffix }}
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Enforce process-bridge latency ceiling
         env:

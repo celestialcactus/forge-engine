@@ -20,7 +20,7 @@ const structuredPayload = <T>(result: unknown): T =>
 test('official MCP client discovers and invokes the compact Forge repository-intelligence tether', async () => {
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [resolve('node_modules/tsx/dist/cli.mjs'), resolve('src/cli.ts'), 'mcp', '--workspace', fixtureRoot],
+    args: [resolve('node_modules/tsx/dist/cli.mjs'), resolve('tests/support/mcp-conformance-server.ts'), fixtureRoot],
   });
   const client = new Client({ name: 'forge-conformance-test', version: '0.1.0' });
   await client.connect(transport);
@@ -167,7 +167,7 @@ test('read replay cache preserves path case and invalidates stale file evidence'
 
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [resolve('node_modules/tsx/dist/cli.mjs'), resolve('src/cli.ts'), 'mcp', '--workspace', workspace],
+    args: [resolve('node_modules/tsx/dist/cli.mjs'), resolve('tests/support/mcp-conformance-server.ts'), workspace],
   });
   const client = new Client({ name: 'forge-cache-conformance-test', version: '0.1.0' });
   await client.connect(transport);

@@ -10,7 +10,7 @@ import type {
   TaskPlanner,
   WorkspaceSnapshot,
 } from '../slice0/contracts.js';
-import { Slice0Runtime } from '../slice0/runtime.js';
+import { TypeScriptConformanceRuntime } from '../slice0/runtime.js';
 import { RustKernelRuntime, type ApprovalFactsProvider } from '../hybrid/rust-kernel-runtime.js';
 import {
   createChangeProposalCapability,
@@ -107,30 +107,51 @@ export interface RustKernelServiceOptions {
   readonly environment?: Readonly<NodeJS.ProcessEnv>;
 }
 
+export type ForgeWorkspaceRuntimeConfiguration =
+  | { readonly kind: 'rust_kernel'; readonly kernel: RustKernelServiceOptions }
+  | { readonly kind: 'typescript_conformance_fixture' };
+
+export const typeScriptConformanceFixture = {
+  kind: 'typescript_conformance_fixture',
+} as const satisfies ForgeWorkspaceRuntimeConfiguration;
+
+const validateRuntimeConfiguration = (
+  runtime: ForgeWorkspaceRuntimeConfiguration | undefined,
+): ForgeWorkspaceRuntimeConfiguration => {
+  if (runtime === undefined) {
+    throw new Error('ForgeWorkspaceService requires an explicit runtime authority. Product execution must select the Rust kernel.');
+  }
+  if (runtime.kind === 'rust_kernel' && runtime.kernel.binaryPath.trim().length === 0) {
+    throw new Error('Rust kernel runtime requires a non-empty binary path.');
+  }
+  return runtime;
+};
+
 export interface ForgeWorkspaceServiceOptions {
   readonly snapshotProvider?: WorkspaceSnapshotProvider;
   readonly snapshotObserver?: WorkspaceChangeObserver;
   readonly snapshotMaxReuseMs?: number;
   readonly runIdFactory?: () => string;
-  readonly kernel?: RustKernelServiceOptions;
+  readonly runtime: ForgeWorkspaceRuntimeConfiguration;
 }
 
 export class ForgeWorkspaceService {
   readonly #snapshots: WorkspaceSnapshotCache;
   readonly #runIdFactory: () => string;
-  readonly #kernel: RustKernelServiceOptions | undefined;
+  readonly #runtime: ForgeWorkspaceRuntimeConfiguration;
 
   constructor(
     private readonly workspaceRoot: string,
-    options: ForgeWorkspaceServiceOptions = {},
+    options: ForgeWorkspaceServiceOptions,
   ) {
+    const runtime = validateRuntimeConfiguration(options?.runtime);
     this.#snapshots = new WorkspaceSnapshotCache(workspaceRoot, {
       provider: options.snapshotProvider ?? createWorkspaceSnapshot,
       ...(options.snapshotObserver === undefined ? {} : { observer: options.snapshotObserver }),
       ...(options.snapshotMaxReuseMs === undefined ? {} : { maxReuseMs: options.snapshotMaxReuseMs }),
     });
     this.#runIdFactory = options.runIdFactory ?? (() => `run:${randomUUID()}`);
-    this.#kernel = options.kernel;
+    this.#runtime = runtime;
   }
 
   async run(task: string, maxFiles = 200, signal?: AbortSignal): Promise<RunArtifact> {
@@ -211,15 +232,15 @@ export class ForgeWorkspaceService {
     const call: CapabilityCall = { id: 'call-1', capabilityId: capability.id, input };
     const planner = new SingleCapabilityPlanner(call);
     const capabilities = [capability];
-    const runtime = this.#kernel === undefined
-      ? new Slice0Runtime({ planner, approvalPolicy: readOnlyPolicy, capabilities })
+    const runtime = this.#runtime.kind === 'typescript_conformance_fixture'
+      ? new TypeScriptConformanceRuntime({ planner, approvalPolicy: readOnlyPolicy, capabilities })
       : new RustKernelRuntime({
           planner,
           approvalFacts: readOnlyApprovalFactsProvider,
           capabilities,
-          kernelPath: this.#kernel.binaryPath,
-          ...(this.#kernel.arguments === undefined ? {} : { kernelArguments: this.#kernel.arguments }),
-          ...(this.#kernel.environment === undefined ? {} : { environment: this.#kernel.environment }),
+          kernelPath: this.#runtime.kernel.binaryPath,
+          ...(this.#runtime.kernel.arguments === undefined ? {} : { kernelArguments: this.#runtime.kernel.arguments }),
+          ...(this.#runtime.kernel.environment === undefined ? {} : { environment: this.#runtime.kernel.environment }),
         });
     return runtime.run({
       runId: this.#runIdFactory(),

@@ -1,9 +1,10 @@
 # Slice 2F-2b: authenticated host provider and bridge
 
-- **Status:** Local implementation and VS Code tether accepted; hosted/native acceptance pending
+- **Status:** Accepted on protected `develop`
 - **Opened:** 2026-07-30
 - **Branch:** `feature/slice-2f2b-host-provider-bridge`
-- **Base:** protected `develop` at `aa73e0e`
+- **Base:** protected develop at `aa73e0e`
+- **Accepted merge:** `6bc2bfb` (pull request #14)
 - **Tier-1 platforms:** Windows and macOS
 - **Compatibility platform:** Ubuntu
 
@@ -108,9 +109,11 @@ not mutate the worktree. It returned run
 `workspace:8bd7b47cfdf4b512`, 267 total files, `truncated: true`, and the canonical
 six-event sequence from `run.started` through `run.completed`.
 
-Core completion remains 94% until those external gates pass. Consumed host records
-remain bounded and durable; retention/export/rotation is an explicit later policy
-problem and Forge does not silently delete audit evidence.
+Hosted Windows/macOS Node conformance and Windows/macOS/Ubuntu hybrid conformance
+passed before merge, and the exact post-merge `develop` workflows passed again.
+The slice is accepted. Consumed host records remain bounded and durable;
+retention/export/rotation is an explicit later policy problem and Forge does not
+silently delete audit evidence.
 
 ## Explicitly deferred
 

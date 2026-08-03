@@ -1,8 +1,8 @@
 # ADR-0001: runtime foundation
 
-- **Status:** accepted; consolidated at Slice 1 closure
+- **Status:** accepted for Slice 1 history; product authority superseded by ADR-0017
 - **Date:** 2026-07-10
-- **Amended:** 2026-07-22
+- **Amended:** 2026-07-22 and 2026-08-03
 
 ## Decision
 
@@ -10,10 +10,11 @@ Use strict TypeScript on Node.js 22 in one package. The authoritative V1 kernel 
 the host-neutral run protocol implemented by `src/slice0/contracts.ts`,
 `src/slice0/context.ts`, and `src/slice0/runtime.ts`.
 
-The package exports that implementation as both `ForgeRuntime` and
-`Slice0Runtime`; these names refer to the same class. CLI, MCP, embedded callers,
-and later provider adapters must adapt this kernel rather than introduce a second
-session, event, capability, or policy model.
+At Slice 1 closure the package exported that implementation as both `ForgeRuntime`
+and `Slice0Runtime`; those names referred to the same class. ADR-0017 later made the
+Rust kernel the product authority and retained the TypeScript coordinator only as
+`TypeScriptConformanceRuntime`. The one-session/event/capability/policy-model intent
+is unchanged.
 
 ## Closure amendment
 

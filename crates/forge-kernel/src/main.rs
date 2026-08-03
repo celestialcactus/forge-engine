@@ -18,8 +18,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::protocol::{
-    MAX_HOST_FRAME_BYTES, MAX_START_FRAME_BYTES, RUN_PROTOCOL_VERSION, StartDiscriminator,
-    read_bounded_frame, send_json, send_protocol_error,
+    MAX_HOST_FRAME_BYTES, MAX_START_FRAME_BYTES, PROBE_PROTOCOL_VERSION, RUN_PROTOCOL_VERSION,
+    StartDiscriminator, read_bounded_frame, send_json, send_protocol_error,
 };
 
 #[derive(Debug, Deserialize)]
@@ -380,6 +380,28 @@ fn main() {
             std::process::exit(2);
         }
     };
+
+    if discriminator.message_type == "probe.start"
+        && discriminator.protocol_version == PROBE_PROTOCOL_VERSION
+    {
+        if send_json(
+            &mut writer,
+            &json!({
+                "type": "probe.result",
+                "protocolVersion": PROBE_PROTOCOL_VERSION,
+                "kernelVersion": env!("CARGO_PKG_VERSION"),
+                "runProtocolVersion": RUN_PROTOCOL_VERSION,
+                "transactionProtocolVersion": protocol::TRANSACTION_PROTOCOL_VERSION,
+                "candidateProtocolVersion": protocol::CANDIDATE_PROTOCOL_VERSION,
+                "sovereignChangeProtocolVersion": protocol::SOVEREIGN_CHANGE_PROTOCOL_VERSION,
+            }),
+        )
+        .is_err()
+        {
+            std::process::exit(3);
+        }
+        return;
+    }
 
     if discriminator.message_type == "run.start"
         && discriminator.protocol_version == RUN_PROTOCOL_VERSION

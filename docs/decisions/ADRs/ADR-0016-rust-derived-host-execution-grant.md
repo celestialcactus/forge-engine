@@ -3,8 +3,8 @@
 - **Status:** accepted for Slice 2F-2b implementation
 - **Date:** 2026-07-30
 - **Owners:** ForgeEngine project
-- **Implementation:** pending
-- **Checkpoint:** 2026-07-30-43
+- **Implementation:** `48c8988`, accepted on `develop` at merge `6bc2bfb`
+- **Checkpoint:** 2026-07-30-43 through 2026-08-02-45
 - **Refines:** ADR-0014 and ADR-0015
 - **Supersedes:** caller-supplied `HostIsolationAttestation` requests
 

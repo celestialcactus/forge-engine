@@ -1,11 +1,56 @@
-# 2026-08-02
+# Architecture Changelog
+
+## 2026-08-03 - Kernel convergence hosted and VS Code gate
+
+- Accepted kernel convergence on feature branch `feature/cli-kernel-convergence`
+  at implementation head `ca9809f`; PR #15 remains open and unmerged.
+- Hosted Node run `30839933843` passed Windows and macOS. Hosted hybrid run
+  `30839933999` passed Windows, macOS, and Ubuntu, including native release builds,
+  product smoke, and retained kernel artifacts.
+- The exact hosted Windows artifact passed local `doctor` and product smoke. The
+  controlled VS Code gate then discovered exactly seven Forge tools and completed
+  one bounded workspace-summary call in three seconds without built-ins or
+  mutation.
+- Kernel convergence does not add model inference, a live multi-turn loop,
+  packaging, or Forge-enforced OS containment. `restricted` remains fail-closed.
+- Recorded [Checkpoint 48](checkpoints/2026-08-03-48-kernel-convergence-hosted-and-vscode-gate.md)
+  and updated [ADR-0017](ADRs/ADR-0017-product-runtime-authority-and-restricted-sequencing.md).
+
+## 2026-08-03 - Kernel convergence local gate
+
+- Removed the implicit TypeScript product fallback: CLI and MCP now require the Rust
+  kernel, while Node-only protocol tests select an explicitly named conformance
+  fixture.
+- Added deterministic kernel discovery and a bounded protocol/version probe used by
+  `forge doctor`.
+- Local `npm run check` passes 44/44 tests plus production build; Rust formatting
+  passes. Native Windows compilation remains hosted-only because this workstation
+  lacks the MSVC linker.
+- Recorded [Checkpoint 47](checkpoints/2026-08-03-47-kernel-convergence-local-gate.md).
+  Hosted Windows/macOS/Ubuntu and controlled VS Code gates remain open, so this
+  increment is not yet accepted.
+
+## 2026-08-03 - Kernel convergence and CLI ship lane opened
+
+- Confirmed Slice 2F-2b is accepted on protected `develop` at merge `6bc2bfb`;
+  pre-merge and post-merge Windows/macOS/Ubuntu gates are green.
+- Accepted [ADR-0017](ADRs/ADR-0017-product-runtime-authority-and-restricted-sequencing.md):
+  Rust becomes the unconditional product run authority, while the TypeScript
+  coordinator remains an explicitly named conformance fixture.
+- Opened [CLI ship lane 1](../tasks/SLICE-CLI1-kernel-convergence.md) and recorded
+  [Checkpoint 46](checkpoints/2026-08-03-46-kernel-convergence-start.md).
+- Retained native Windows/macOS restricted execution as separately proven
+  hardening. `restricted` remains fail-closed; trusted alpha limitations stay
+  visible.
+- Added the exploratory [Project Sybil working specification](../architecture/project-sybil-working-spec.md).
+
+## 2026-08-02 - Slice 2F-2b VS Code gate
 
 - Passed the controlled Slice 2F-2b VS Code tether gate from the exact feature
   worktree with only seven Forge tools enabled. One bounded workspace-summary call
   completed without retry, fallback, externalization, or mutation and preserved
-  the canonical six-event lifecycle. Hosted native acceptance remains open; core
-  completion stays at 94%. See Checkpoint 45 and the Slice 2F-2b task.
-# Architecture Changelog
+  the canonical six-event lifecycle. Hosted native acceptance subsequently passed
+  before pull request #14 merged. See Checkpoint 45 and the Slice 2F-2b task.
 
 ## 2026-07-30 - Slice 2F-2b local implementation audit
 
@@ -20,7 +65,7 @@
   macOS/Ubuntu and controlled VS Code gates remain mandatory.
 - Recorded
   [Checkpoint 44](checkpoints/2026-07-30-44-host-provider-bridge-local-audit.md).
-  Core completion remains 94% until external acceptance closes.
+  At that local-only checkpoint core completion remained 94% until external acceptance closed.
 
 ## 2026-07-30 - Slice 2F-2b host provider/bridge opened
 

@@ -13,7 +13,7 @@ import {
   slice0Workspace,
   workspaceInventory,
 } from '../../src/slice0/fixtures.js';
-import { Slice0Runtime, type Slice0RuntimeOptions } from '../../src/slice0/runtime.js';
+import { TypeScriptConformanceRuntime, type TypeScriptConformanceRuntimeOptions } from '../../src/slice0/runtime.js';
 
 const kernelBinary = process.env.FORGE_KERNEL_BINARY
   ?? resolve('target', 'debug', process.platform === 'win32' ? 'forge-kernel.exe' : 'forge-kernel');
@@ -27,7 +27,7 @@ const baseRequest = (runId: string): RunRequest => ({
   maxTurns: 2,
 });
 
-const successfulOptions = (): Slice0RuntimeOptions => ({
+const successfulOptions = (): TypeScriptConformanceRuntimeOptions => ({
   planner: new ScriptedPlanner([
     { kind: 'call', call: inspectCall },
     { kind: 'complete', output: 'Workspace inspected.' },
@@ -38,7 +38,7 @@ const successfulOptions = (): Slice0RuntimeOptions => ({
 
 const approvalFactsForDecision = (
   call: CapabilityCall,
-  decision: Awaited<ReturnType<Slice0RuntimeOptions['approvalPolicy']['decide']>>,
+  decision: Awaited<ReturnType<TypeScriptConformanceRuntimeOptions['approvalPolicy']['decide']>>,
 ): ApprovalFacts => decision.facts ?? ({
   schemaVersion: 1,
   callId: call.id,
@@ -55,7 +55,7 @@ const approvalFactsForDecision = (
   },
 });
 
-const approvalFactsFromPolicy = (policy: Slice0RuntimeOptions['approvalPolicy']): ApprovalFactsProvider => ({
+const approvalFactsFromPolicy = (policy: TypeScriptConformanceRuntimeOptions['approvalPolicy']): ApprovalFactsProvider => ({
   async collect(call, signal) {
     signal.throwIfAborted();
     const decision = await policy.decide(call);
@@ -63,20 +63,20 @@ const approvalFactsFromPolicy = (policy: Slice0RuntimeOptions['approvalPolicy'])
   },
 });
 
-const toRustOptions = (options: Slice0RuntimeOptions) => {
+const toRustOptions = (options: TypeScriptConformanceRuntimeOptions) => {
   const { approvalPolicy, ...integrations } = options;
   return { ...integrations, approvalFacts: approvalFactsFromPolicy(approvalPolicy) };
 };
 
 const assertParity = async (
-  optionsFactory: () => Slice0RuntimeOptions,
+  optionsFactory: () => TypeScriptConformanceRuntimeOptions,
   requestFactory: () => RunRequest,
 ): Promise<void> => {
   const typescriptEvents: string[] = [];
   const rustEvents: string[] = [];
   const typescriptOptions = optionsFactory();
   const rustOptions = optionsFactory();
-  const typescriptArtifact = await new Slice0Runtime({
+  const typescriptArtifact = await new TypeScriptConformanceRuntime({
     ...typescriptOptions,
     approvalPolicy: {
       async decide(call) {

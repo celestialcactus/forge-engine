@@ -3,14 +3,19 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { artifactPayload, ForgeWorkspaceService } from '../src/v1/service.js';
+import {
+  artifactPayload,
+  ForgeWorkspaceService,
+  type ForgeWorkspaceServiceOptions,
+  typeScriptConformanceFixture,
+} from '../src/v1/service.js';
 import { createWorkspaceSearchCapability } from '../src/v1/workspace.js';
 
 const slice1Fixture = resolve('tests/fixtures/slice1-workspace');
 const diagnosticsFixture = resolve('tests/fixtures/diagnostics-workspace');
 
 test('reads only a bounded line range from a snapshotted workspace file', async () => {
-  const artifact = await new ForgeWorkspaceService(slice1Fixture).read('README.md', { startLine: 2, maxLines: 1 });
+  const artifact = await new ForgeWorkspaceService(slice1Fixture, { runtime: typeScriptConformanceFixture }).read('README.md', { startLine: 2, maxLines: 1 });
   const evidence = artifactPayload(artifact).evidence;
   assert.equal(artifact.capabilityResults.at(-1)?.success, true);
   assert.deepEqual(evidence, {
@@ -27,7 +32,7 @@ test('reads only a bounded line range from a snapshotted workspace file', async 
 });
 
 test('records path traversal as a failed capability without reading outside the snapshot', async () => {
-  const artifact = await new ForgeWorkspaceService(slice1Fixture).read('../package.json');
+  const artifact = await new ForgeWorkspaceService(slice1Fixture, { runtime: typeScriptConformanceFixture }).read('../package.json');
   assert.equal(artifact.capabilityResults.at(-1)?.success, false);
   assert.match(String(artifactPayload(artifact).evidence), /traversal/iu);
 });
@@ -54,6 +59,7 @@ test('skips non-UTF-8 content instead of decoding corrupt evidence', async (cont
   context.after(async () => { await rm(workspace, { recursive: true, force: true }); });
   await writeFile(join(workspace, 'binary.dat'), Buffer.from([0xc3, 0x28]));
   const service = new ForgeWorkspaceService(workspace, {
+    runtime: typeScriptConformanceFixture,
     snapshotObserver: () => ({ close() {} }),
   });
   try {
@@ -70,7 +76,7 @@ test('skips non-UTF-8 content instead of decoding corrupt evidence', async (cont
 });
 
 test('extracts bounded declarations from TypeScript syntax trees', async () => {
-  const artifact = await new ForgeWorkspaceService(slice1Fixture).symbols({ query: 'fixtureMessage', maxSymbols: 10 });
+  const artifact = await new ForgeWorkspaceService(slice1Fixture, { runtime: typeScriptConformanceFixture }).symbols({ query: 'fixtureMessage', maxSymbols: 10 });
   const evidence = artifactPayload(artifact).evidence as {
     symbols: Array<{ name: string; kind: string; path: string; line: number; column: number }>;
   };
@@ -80,7 +86,7 @@ test('extracts bounded declarations from TypeScript syntax trees', async () => {
 });
 
 test('collects no-emit TypeScript configuration diagnostics as structured evidence', async () => {
-  const artifact = await new ForgeWorkspaceService(diagnosticsFixture).diagnostics({ maxDiagnostics: 10 });
+  const artifact = await new ForgeWorkspaceService(diagnosticsFixture, { runtime: typeScriptConformanceFixture }).diagnostics({ maxDiagnostics: 10 });
   const evidence = artifactPayload(artifact).evidence as {
     diagnosticCount: number;
     diagnostics: Array<{ code: number; message: string }>;
@@ -93,7 +99,7 @@ test('collects no-emit TypeScript configuration diagnostics as structured eviden
 });
 
 test('collects read-only Git status and bounded diff evidence for the opened repository', async () => {
-  const service = new ForgeWorkspaceService(process.cwd());
+  const service = new ForgeWorkspaceService(process.cwd(), { runtime: typeScriptConformanceFixture });
   try {
     const statusArtifact = await service.gitStatus();
     const status = artifactPayload(statusArtifact).evidence as { branch: string | null; changeCount: number; changes: string[] };
@@ -109,4 +115,11 @@ test('collects read-only Git status and bounded diff evidence for the opened rep
   } finally {
     service.close();
   }
+});
+
+test('workspace service requires an explicit runtime authority', () => {
+  assert.throws(
+    () => new ForgeWorkspaceService(slice1Fixture, {} as ForgeWorkspaceServiceOptions),
+    /requires an explicit runtime authority/u,
+  );
 });

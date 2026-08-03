@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { test } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
@@ -7,6 +9,7 @@ import {
   StdioClientTransport,
 } from '@modelcontextprotocol/sdk/client/stdio.js';
 
+const execFileAsync = promisify(execFile);
 const fixtureRoot = resolve('tests/fixtures/slice1-workspace');
 const kernelBinary = process.env.FORGE_KERNEL_BINARY
   ?? resolve('target', 'debug', process.platform === 'win32' ? 'forge-kernel.exe' : 'forge-kernel');
@@ -82,4 +85,52 @@ test('official MCP client preserves the seven-tool compact contract over the Rus
   } finally {
     await client.close();
   }
+});
+test('product CLI auto-discovers the Rust kernel and preserves the supplied task', async () => {
+  const environment = { ...process.env };
+  delete environment.FORGE_KERNEL_BINARY;
+  const task = 'Explain the fixture workspace deterministically.';
+  const { stdout } = await execFileAsync(process.execPath, [
+    resolve('node_modules/tsx/dist/cli.mjs'),
+    resolve('src/cli.ts'),
+    'run',
+    task,
+    '--workspace',
+    fixtureRoot,
+    '--json',
+  ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment });
+  const payload = JSON.parse(stdout) as {
+    readonly status: string;
+    readonly events: Array<{ readonly type: string; readonly task?: string }>;
+  };
+  assert.equal(payload.status, 'completed');
+  assert.equal(payload.events.find((event) => event.type === 'run.started')?.task, task);
+
+  const doctor = await execFileAsync(process.execPath, [
+    resolve('node_modules/tsx/dist/cli.mjs'),
+    resolve('src/cli.ts'),
+    'doctor',
+    '--workspace',
+    fixtureRoot,
+    '--json',
+  ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment });
+  const report = JSON.parse(doctor.stdout) as {
+    readonly ok: boolean;
+    readonly runtime: string;
+    readonly kernel: {
+      readonly ready: boolean;
+      readonly source: string;
+      readonly path: string;
+      readonly version: string;
+      readonly protocols: { readonly run: string; readonly sovereignChange: string };
+    };
+  };
+  assert.equal(report.ok, true);
+  assert.equal(report.runtime, 'rust-kernel-typescript-adapter');
+  assert.equal(report.kernel.ready, true);
+  assert.match(report.kernel.source, /^source-(debug|release)$/u);
+  assert.match(report.kernel.path, /forge-kernel(?:\.exe)?$/u);
+  assert.equal(report.kernel.version, '0.1.0');
+  assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v2');
+  assert.equal(report.kernel.protocols.sovereignChange, 'forge.kernel.changeset.v2');
 });

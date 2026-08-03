@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { RustKernelRuntime } from '../src/hybrid/rust-kernel-runtime.js';
 import type { ApprovalFacts, CapabilityCall } from '../src/slice0/contracts.js';
 import { allowAll, ScriptedPlanner, slice0Workspace, workspaceInventory } from '../src/slice0/fixtures.js';
-import { Slice0Runtime, type Slice0RuntimeOptions } from '../src/slice0/runtime.js';
+import { TypeScriptConformanceRuntime, type TypeScriptConformanceRuntimeOptions } from '../src/slice0/runtime.js';
 
 const samples = Number(process.env.FORGE_BENCHMARK_SAMPLES ?? '30');
 if (!Number.isInteger(samples) || samples < 5 || samples > 500) {
@@ -36,7 +36,7 @@ const benchmarkApprovalFacts = {
   },
 };
 
-const runtimeOptions = (): Slice0RuntimeOptions => ({
+const runtimeOptions = (): TypeScriptConformanceRuntimeOptions => ({
   planner: new ScriptedPlanner([
     { kind: 'call', call: inspectCall },
     { kind: 'complete', output: 'Workspace inspected.' },
@@ -78,7 +78,7 @@ await new RustKernelRuntime({ ...runtimeOptions(), approvalFacts: benchmarkAppro
 
 for (let index = 0; index < samples; index += 1) {
   typescriptDurations.push(await measure(async () =>
-    new Slice0Runtime(runtimeOptions()).run(request(index))));
+    new TypeScriptConformanceRuntime(runtimeOptions()).run(request(index))));
   rustDurations.push(await measure(async () =>
     new RustKernelRuntime({ ...runtimeOptions(), approvalFacts: benchmarkApprovalFacts, kernelPath: kernelBinary }).run(request(index))));
 }

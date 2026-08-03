@@ -81,7 +81,7 @@ class ForgeMcpServer extends McpServer {
 
 export function createForgeMcpServer(
   workspaceRoot: string,
-  serviceOptions: ForgeWorkspaceServiceOptions = {},
+  serviceOptions: ForgeWorkspaceServiceOptions,
 ): McpServer {
   const service = new ForgeWorkspaceService(workspaceRoot, serviceOptions);
   const server = new ForgeMcpServer(() => service.close());
@@ -266,11 +266,11 @@ export function createForgeMcpServer(
   return server;
 }
 
-export async function startForgeMcpServer(workspaceRoot: string): Promise<void> {
-  const configuredKernel = process.env.FORGE_KERNEL_BINARY?.trim();
-  const server = createForgeMcpServer(workspaceRoot, configuredKernel === undefined || configuredKernel.length === 0
-    ? {}
-    : { kernel: { binaryPath: configuredKernel } });
+export async function startForgeMcpServer(
+  workspaceRoot: string,
+  serviceOptions: ForgeWorkspaceServiceOptions,
+): Promise<void> {
+  const server = createForgeMcpServer(workspaceRoot, serviceOptions);
   const transport = new StdioServerTransport();
   process.once('SIGINT', () => {
     void server.close().finally(() => process.exit(0));
