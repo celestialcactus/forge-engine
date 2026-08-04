@@ -1,12 +1,14 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
+use std::rc::Rc;
 
 use forge_core::{
     ApprovalDecision, ApprovalOutcome, ApprovalPolicy, Cancellation, CapabilityAdapter,
-    CapabilityCall, CapabilityResult, InferenceCost, InferenceCostStatus, InferenceEvidence,
-    InferenceFinishReason, InferenceLocality, InferenceRouting, InferenceUsage, NoCancellation,
-    NoopEventSink, OutcomeContract, OutcomeRequirement, OutcomeStatus, PlannerRequest, PlannerTurn,
-    RunRequest, RunStatus, RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceFile,
-    WorkspaceSnapshot,
+    CapabilityCall, CapabilityContext, CapabilityEvidence, CapabilityResult, InferenceCost,
+    InferenceCostStatus, InferenceEvidence, InferenceFinishReason, InferenceLocality,
+    InferenceRouting, InferenceUsage, NoCancellation, NoopEventSink, OutcomeContract,
+    OutcomeRequirement, OutcomeStatus, PlannerRequest, PlannerTurn, RunRequest, RunStatus,
+    RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceFile, WorkspaceSnapshot,
 };
 use serde_json::json;
 
@@ -99,7 +101,11 @@ impl TaskPlanner for ScriptedPlanner {
 struct FixedPolicy(ApprovalDecision);
 
 impl ApprovalPolicy for FixedPolicy {
-    fn decide(&mut self, _call: &CapabilityCall) -> Result<ApprovalDecision, RuntimeSignal> {
+    fn decide(
+        &mut self,
+        _call: &CapabilityCall,
+        _context: &CapabilityContext,
+    ) -> Result<ApprovalDecision, RuntimeSignal> {
         Ok(self.0.clone())
     }
 }
@@ -125,6 +131,7 @@ impl CapabilityAdapter for FixtureCapabilities {
         &mut self,
         call: &CapabilityCall,
         snapshot: &WorkspaceSnapshot,
+        _context: &CapabilityContext,
     ) -> Result<CapabilityResult, RuntimeSignal> {
         if let Some(message) = self.failures.get(&call.capability_id) {
             return Err(RuntimeSignal::Failed(message.clone()));
@@ -140,6 +147,7 @@ impl CapabilityAdapter for FixtureCapabilities {
             success: true,
             content: serde_json::to_string(&json!({ "snapshotId": snapshot.id, "files": paths }))
                 .expect("fixture evidence should serialize"),
+            evidence: None,
         })
     }
 }
@@ -155,11 +163,107 @@ impl CapabilityAdapter for MismatchedCapabilities {
         &mut self,
         _call: &CapabilityCall,
         _snapshot: &WorkspaceSnapshot,
+        _context: &CapabilityContext,
     ) -> Result<CapabilityResult, RuntimeSignal> {
         Ok(CapabilityResult {
             call_id: "call-other".to_owned(),
             success: true,
             content: "Mismatched fixture result.".to_owned(),
+            evidence: None,
+        })
+    }
+}
+
+struct ContextPolicy {
+    contexts: Rc<RefCell<Vec<CapabilityContext>>>,
+}
+
+impl ApprovalPolicy for ContextPolicy {
+    fn decide(
+        &mut self,
+        _call: &CapabilityCall,
+        context: &CapabilityContext,
+    ) -> Result<ApprovalDecision, RuntimeSignal> {
+        self.contexts.borrow_mut().push(context.clone());
+        Ok(ApprovalDecision {
+            outcome: ApprovalOutcome::Allow,
+            reason: "Fixture permits context inspection.".to_owned(),
+            facts: None,
+        })
+    }
+}
+
+struct ContextCapabilities {
+    contexts: Rc<RefCell<Vec<CapabilityContext>>>,
+}
+
+impl CapabilityAdapter for ContextCapabilities {
+    fn supports(&self, capability_id: &str) -> bool {
+        capability_id == "fixture.context"
+    }
+
+    fn invoke(
+        &mut self,
+        call: &CapabilityCall,
+        _snapshot: &WorkspaceSnapshot,
+        context: &CapabilityContext,
+    ) -> Result<CapabilityResult, RuntimeSignal> {
+        self.contexts.borrow_mut().push(context.clone());
+        Ok(CapabilityResult {
+            call_id: call.id.clone(),
+            success: true,
+            content: format!("completed:{}", call.id),
+            evidence: Some(CapabilityEvidence {
+                schema_version: 1,
+                kind: "fixture.context.v1".to_owned(),
+                data: json!({ "callId": call.id }),
+            }),
+        })
+    }
+}
+
+struct InvalidEvidenceCapabilities {
+    evidence: CapabilityEvidence,
+}
+
+impl CapabilityAdapter for InvalidEvidenceCapabilities {
+    fn supports(&self, capability_id: &str) -> bool {
+        capability_id == "workspace.inventory"
+    }
+
+    fn invoke(
+        &mut self,
+        call: &CapabilityCall,
+        _snapshot: &WorkspaceSnapshot,
+        _context: &CapabilityContext,
+    ) -> Result<CapabilityResult, RuntimeSignal> {
+        Ok(CapabilityResult {
+            call_id: call.id.clone(),
+            success: true,
+            content: "Untrusted result.".to_owned(),
+            evidence: Some(self.evidence.clone()),
+        })
+    }
+}
+
+struct LargeContextCapabilities;
+
+impl CapabilityAdapter for LargeContextCapabilities {
+    fn supports(&self, capability_id: &str) -> bool {
+        capability_id == "fixture.large-context"
+    }
+
+    fn invoke(
+        &mut self,
+        call: &CapabilityCall,
+        _snapshot: &WorkspaceSnapshot,
+        _context: &CapabilityContext,
+    ) -> Result<CapabilityResult, RuntimeSignal> {
+        Ok(CapabilityResult {
+            call_id: call.id.clone(),
+            success: true,
+            content: "x".repeat((4 * 1_048_576) + 1),
+            evidence: None,
         })
     }
 }
@@ -199,7 +303,7 @@ fn produces_the_slice_zero_golden_trace() {
         &mut FixtureCapabilities::inventory(),
         &NoCancellation,
     );
-    assert_eq!(artifact.schema_version, 2);
+    assert_eq!(artifact.schema_version, 3);
     assert_eq!(artifact.status, RunStatus::Completed);
     assert_eq!(artifact.outcome.status, OutcomeStatus::NotEvaluated);
     assert_eq!(artifact.output.as_deref(), Some("Workspace inspected."));
@@ -246,6 +350,205 @@ fn produces_the_slice_zero_golden_trace() {
             "workspace://src/greeting.ts",
         ]
     );
+}
+
+#[test]
+fn binds_approval_and_invocation_to_the_same_ordered_prior_context() {
+    let policy_contexts = Rc::new(RefCell::new(Vec::new()));
+    let invocation_contexts = Rc::new(RefCell::new(Vec::new()));
+    let first_call = CapabilityCall {
+        id: "call-context-1".to_owned(),
+        capability_id: "fixture.context".to_owned(),
+        input: json!({ "order": 1 }),
+    };
+    let second_call = CapabilityCall {
+        id: "call-context-2".to_owned(),
+        capability_id: "fixture.context".to_owned(),
+        input: json!({ "order": 2 }),
+    };
+    let mut context_request = request("context-bound-run");
+    context_request.max_turns = 3;
+    let artifact = run(
+        context_request,
+        &mut ScriptedPlanner {
+            turns: VecDeque::from([
+                PlannerTurn::Call {
+                    call: first_call,
+                    inference: None,
+                },
+                PlannerTurn::Call {
+                    call: second_call,
+                    inference: None,
+                },
+                PlannerTurn::Complete {
+                    output: "Context inspected.".to_owned(),
+                    inference: None,
+                },
+            ]),
+        },
+        &mut ContextPolicy {
+            contexts: Rc::clone(&policy_contexts),
+        },
+        &mut ContextCapabilities {
+            contexts: Rc::clone(&invocation_contexts),
+        },
+        &NoCancellation,
+    );
+
+    assert_eq!(artifact.status, RunStatus::Completed);
+    let policy_contexts = policy_contexts.borrow();
+    let invocation_contexts = invocation_contexts.borrow();
+    assert_eq!(*policy_contexts, *invocation_contexts);
+    assert!(policy_contexts[0].prior_observations.is_empty());
+    let second = &policy_contexts[1];
+    assert_eq!(second.basis.prior_call_ids, vec!["call-context-1"]);
+    assert_eq!(second.prior_observations[0].call.id, "call-context-1");
+    assert!(
+        second
+            .prior_observations
+            .iter()
+            .all(|observation| observation.call.id != "call-context-2")
+    );
+    let expected_digest = forge_core::sha256(
+        &serde_json::to_vec(
+            &serde_json::to_value(&second.prior_observations)
+                .expect("prior observations should canonicalize"),
+        )
+        .expect("prior observations should serialize"),
+    );
+    assert_eq!(second.basis.prior_observations_sha256, expected_digest);
+    let basis = artifact
+        .events
+        .iter()
+        .find_map(|event| match &event.data {
+            forge_core::RunEventData::ApprovalDecided { call_id, basis, .. }
+                if call_id == "call-context-2" =>
+            {
+                Some(basis)
+            }
+            _ => None,
+        })
+        .expect("second approval basis");
+    assert_eq!(basis, &second.basis);
+    assert_eq!(
+        artifact.capability_results[1]
+            .evidence
+            .as_ref()
+            .map(|evidence| evidence.kind.as_str()),
+        Some("fixture.context.v1")
+    );
+}
+
+#[test]
+fn fails_closed_on_invalid_capability_evidence_and_duplicate_call_ids() {
+    let invalid = run(
+        request("invalid-evidence-run"),
+        &mut ScriptedPlanner::successful(),
+        &mut allow(),
+        &mut InvalidEvidenceCapabilities {
+            evidence: CapabilityEvidence {
+                schema_version: 2,
+                kind: "INVALID KIND".to_owned(),
+                data: json!({}),
+            },
+        },
+        &NoCancellation,
+    );
+    assert!(!invalid.capability_results[0].success);
+    assert!(invalid.capability_results[0].evidence.is_none());
+    assert_eq!(
+        invalid.capability_results[0].content,
+        "Capability evidence schemaVersion must be 1."
+    );
+
+    let oversized = run(
+        request("oversized-evidence-run"),
+        &mut ScriptedPlanner::successful(),
+        &mut allow(),
+        &mut InvalidEvidenceCapabilities {
+            evidence: CapabilityEvidence {
+                schema_version: 1,
+                kind: "fixture.oversized.v1".to_owned(),
+                data: json!("x".repeat(4 * 1_048_576)),
+            },
+        },
+        &NoCancellation,
+    );
+    assert!(!oversized.capability_results[0].success);
+    assert!(oversized.capability_results[0].evidence.is_none());
+    assert_eq!(
+        oversized.capability_results[0].content,
+        "Capability evidence exceeds the 4 MiB limit."
+    );
+
+    let mut duplicate_request = request("duplicate-call-run");
+    duplicate_request.max_turns = 2;
+    let duplicate = run(
+        duplicate_request,
+        &mut ScriptedPlanner {
+            turns: VecDeque::from([
+                PlannerTurn::Call {
+                    call: inspect_call(),
+                    inference: None,
+                },
+                PlannerTurn::Call {
+                    call: inspect_call(),
+                    inference: None,
+                },
+            ]),
+        },
+        &mut allow(),
+        &mut FixtureCapabilities::inventory(),
+        &NoCancellation,
+    );
+    assert_eq!(duplicate.status, RunStatus::Failed);
+    assert!(matches!(
+        duplicate.events.last().map(|event| &event.data),
+        Some(forge_core::RunEventData::RunFailed { code, message })
+            if code == "invalid_capability_call" && message.contains("already used")
+    ));
+}
+
+#[test]
+fn fails_closed_before_approval_when_prior_capability_context_exceeds_four_mib() {
+    let call = |id: &str| CapabilityCall {
+        id: id.to_owned(),
+        capability_id: "fixture.large-context".to_owned(),
+        input: json!({}),
+    };
+    let artifact = run(
+        request("large-context-run"),
+        &mut ScriptedPlanner {
+            turns: VecDeque::from([
+                PlannerTurn::Call {
+                    call: call("large-context-1"),
+                    inference: None,
+                },
+                PlannerTurn::Call {
+                    call: call("large-context-2"),
+                    inference: None,
+                },
+            ]),
+        },
+        &mut allow(),
+        &mut LargeContextCapabilities,
+        &NoCancellation,
+    );
+    assert_eq!(artifact.status, RunStatus::Failed);
+    assert_eq!(artifact.capability_results.len(), 1);
+    assert_eq!(
+        artifact
+            .events
+            .iter()
+            .filter(|event| matches!(event.data, forge_core::RunEventData::ApprovalDecided { .. }))
+            .count(),
+        1
+    );
+    assert!(matches!(
+        artifact.events.last().map(|event| &event.data),
+        Some(forge_core::RunEventData::RunFailed { code, message })
+            if code == "runtime_error" && message == "Prior capability context exceeds the 4 MiB limit."
+    ));
 }
 
 #[test]

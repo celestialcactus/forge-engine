@@ -56,9 +56,9 @@ const approvalFactsForDecision = (
 });
 
 const approvalFactsFromPolicy = (policy: TypeScriptConformanceRuntimeOptions['approvalPolicy']): ApprovalFactsProvider => ({
-  async collect(call, signal) {
+  async collect(call, signal, context) {
     signal.throwIfAborted();
-    const decision = await policy.decide(call);
+    const decision = await policy.decide(call, context);
     return approvalFactsForDecision(call, decision);
   },
 });
@@ -79,8 +79,8 @@ const assertParity = async (
   const typescriptArtifact = await new TypeScriptConformanceRuntime({
     ...typescriptOptions,
     approvalPolicy: {
-      async decide(call) {
-        const decision = await typescriptOptions.approvalPolicy.decide(call);
+      async decide(call, context) {
+        const decision = await typescriptOptions.approvalPolicy.decide(call, context);
         return { ...decision, facts: approvalFactsForDecision(call, decision) };
       },
     },

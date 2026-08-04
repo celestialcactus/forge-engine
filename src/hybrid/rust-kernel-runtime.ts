@@ -9,6 +9,7 @@ import type {
   ApprovalFacts,
   Capability,
   CapabilityCall,
+  CapabilityContext,
   CapabilityResult,
   PlannerRequest,
   PlannerTurn,
@@ -18,11 +19,11 @@ import type {
   WorkspaceSnapshot,
 } from '../slice0/contracts.js';
 
-export const rustKernelProtocolVersion = 'forge.kernel.bridge.v4';
+export const rustKernelProtocolVersion = 'forge.kernel.bridge.v5';
 
 
 export interface ApprovalFactsProvider {
-  collect(call: CapabilityCall, signal: AbortSignal): Promise<ApprovalFacts>;
+  collect(call: CapabilityCall, signal: AbortSignal, context: CapabilityContext): Promise<ApprovalFacts>;
 }
 
 export interface RustKernelRuntimeOptions {
@@ -89,7 +90,7 @@ const validateArtifact = (
   streamedEvents: readonly RunEvent[],
 ): RunArtifact => {
   if (!isObject(candidate)
-    || candidate.schemaVersion !== 2
+    || candidate.schemaVersion !== 3
     || candidate.runId !== request.runId
     || !Array.isArray(candidate.events)
     || !Array.isArray(candidate.capabilityResults)
@@ -241,7 +242,11 @@ export class RustKernelRuntime {
       }
 
       if (message.type === 'approval.facts.request') {
-        const operation = this.#approvalFacts.collect(message.call as CapabilityCall, signal);
+        const operation = this.#approvalFacts.collect(
+          message.call as CapabilityCall,
+          signal,
+          message.context as CapabilityContext,
+        );
         try {
           const facts = await raceWithCancellation(operation, signal);
           if (facts === cancelled) return;
@@ -278,7 +283,10 @@ export class RustKernelRuntime {
         }
         let result: CapabilityResult;
         try {
-          const invoked = await raceWithCancellation(capability.invoke(call, snapshot, signal), signal);
+          const invoked = await raceWithCancellation(
+            capability.invoke(call, snapshot, signal, message.context as CapabilityContext),
+            signal,
+          );
           if (invoked === cancelled) return;
           result = invoked;
         } catch (error) {

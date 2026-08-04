@@ -1,3 +1,48 @@
+# 2026-08-04 - Governed edit enters the Rust lifecycle
+
+- Accepted the 4B-3a contract at exact implementation `4ac3346`: Node passed on
+  Windows/macOS in Actions run `30938191923`, and the real
+  Rust-kernel/TypeScript product passed Windows/macOS/Ubuntu in run
+  `30938194060`.
+- Removed the interactive product's post-`run.completed` mutation handoff. A
+  policy-enabled CLI now exposes one CLI-only `workspace.change.execute`
+  capability that reuses complete-read proof, bounded plan evidence, ChangeSet v2,
+  visible candidate approval, verification, and accept/discard/retain before the
+  canonical Rust run terminates.
+- Added bounded `forge.workspace.change.execution.v1` evidence without duplicating
+  replacement bodies, plus a matched 4 MiB Rust/TypeScript ceiling for prior
+  capability context.
+- MCP and VS Code remain exactly seven read-only tools. No raw write, shell, public
+  mutation, or TypeScript aggregate runtime was added.
+- Accepted 4B-3b at exact implementation `1cc1e3f`: Node Windows/macOS passed in
+  Actions run `30955324195`, and the real Rust-kernel/TypeScript product passed
+  Windows/macOS/Ubuntu in run `30955324364`.
+- A disposable exact-commit Qwen 7B run completed one governed promotion in 30.5
+  seconds and changed source only after Rust reported `promoted`. Qwen corrected
+  one malformed read before succeeding, so functional transaction acceptance does
+  not claim perfect low-model tool-call efficiency.
+- A trusted fresh VS Code chat selected exactly seven read-only Forge tools and
+  completed one bounded summary call in roughly five seconds with full provenance,
+  outcome, lifecycle, and ordered event metadata; no built-in or mutation tool was
+  used. See [Checkpoint 66](checkpoints/2026-08-04-66-governed-edit-lifecycle-local-gate.md).
+
+# 2026-08-04 - Rust-owned lifecycle convergence begins
+
+- Merged accepted interactive edit composition through PR #19; remote `develop`
+  now points at `1f0d792`.
+- Accepted [ADR-0025](ADRs/ADR-0025-rust-owned-capability-context-and-lifecycle.md):
+  RunArtifact v3 and bridge v5 will carry a Rust-authored, digest-bound prior
+  capability context through approval and invocation plus bounded structured
+  capability evidence.
+- Increment 4B-3 will move the existing governed ChangeSet v2 edit flow inside the
+  active Rust run. It must not add a TypeScript wrapper runtime or an MCP mutation
+  tool.
+- Crash-resumable inference replay remains explicitly deferred to the Recovery
+  state ship lane; this increment closes the active-run evidence seam only.
+- [Checkpoint 65](checkpoints/2026-08-04-65-rust-owned-capability-context-local-gate.md)
+  records the green 78-test/build and Rust-format local gate, the unavailable
+  Windows linker, and the still-required exact-head hosted Rust gate.
+
 # Architecture Changelog
 
 ## 2026-08-04 - Interactive edit composition accepted

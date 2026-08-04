@@ -51,6 +51,19 @@ test('revalidates canonical paths before search reads snapshot evidence', async 
       files: [{ path: '../../../package.json', bytes: 1 }],
     },
     new AbortController().signal,
+    {
+      schemaVersion: 1,
+      task: 'Direct capability fixture.',
+      basis: {
+        schemaVersion: 1,
+        runId: 'run:direct-fixture',
+        snapshotId: 'forged-snapshot',
+        contextPlanId: 'context:direct-fixture',
+        priorCallIds: [],
+        priorObservationsSha256: '0'.repeat(64),
+      },
+      priorObservations: [],
+    },
   ), /escapes the workspace boundary/u);
 });
 

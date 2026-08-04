@@ -102,7 +102,7 @@ test('streams human text while presenting canonical run status and a terminal ev
   const outcomeEvent = runEvents[3];
   if (outcomeEvent?.type !== 'outcome.assessed') throw new Error('Outcome event fixture is missing.');
   const artifact: RunArtifact = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     runId: 'run:live',
     task: 'Inspect.',
     snapshot: { id: 'workspace:live', rootLabel: 'fixture', files: [] },

@@ -1,11 +1,12 @@
 use crate::context::{compile_context, required_context_bytes};
 use crate::contracts::{
-    ApprovalDecision, ApprovalFacts, ApprovalOutcome, CapabilityCall, CapabilityResult,
-    ContextItemKind, ContextPlan, HostPolicyPosture, InferenceCostStatus, InferenceEvidence,
-    InferenceFinishReason, InferenceLocality, OutcomeAssessment, OutcomeCapabilityAttempt,
-    OutcomeCheck, OutcomeContract, OutcomeRequirement, OutcomeRequirementKind, OutcomeStatus,
-    PlannerRequest, PlannerTurn, RunArtifact, RunEvent, RunEventData, RunRequest, RunStatus,
-    UserConsentStatus, WorkspaceSnapshot,
+    ApprovalDecision, ApprovalFacts, ApprovalOutcome, CapabilityCall, CapabilityContext,
+    CapabilityContextBasis, CapabilityObservation, CapabilityResult, ContextItemKind, ContextPlan,
+    HostPolicyPosture, InferenceCostStatus, InferenceEvidence, InferenceFinishReason,
+    InferenceLocality, OutcomeAssessment, OutcomeCapabilityAttempt, OutcomeCheck, OutcomeContract,
+    OutcomeRequirement, OutcomeRequirementKind, OutcomeStatus, PlannerRequest, PlannerTurn,
+    RunArtifact, RunEvent, RunEventData, RunRequest, RunStatus, UserConsentStatus,
+    WorkspaceSnapshot,
 };
 
 fn valid_usd_amount(amount: &str) -> bool {
@@ -249,6 +250,29 @@ pub fn assess_outcome(
     }
 }
 
+const MAX_CAPABILITY_EVIDENCE_BYTES: usize = 4 * 1_048_576;
+const MAX_CAPABILITY_CONTEXT_BYTES: usize = 4 * 1_048_576;
+
+fn capability_evidence_validation_error(result: &CapabilityResult) -> Option<String> {
+    let evidence = result.evidence.as_ref()?;
+    if evidence.schema_version != 1 {
+        return Some("Capability evidence schemaVersion must be 1.".to_owned());
+    }
+    if evidence.kind.is_empty()
+        || evidence.kind.len() > 100
+        || !evidence.kind.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
+        })
+    {
+        return Some("Capability evidence kind is invalid.".to_owned());
+    }
+    match serde_json::to_vec(evidence) {
+        Ok(encoded) if encoded.len() <= MAX_CAPABILITY_EVIDENCE_BYTES => None,
+        Ok(_) => Some("Capability evidence exceeds the 4 MiB limit.".to_owned()),
+        Err(_) => Some("Capability evidence could not be serialized.".to_owned()),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeSignal {
     Failed(String),
@@ -266,11 +290,16 @@ pub trait CapabilityAdapter {
         &mut self,
         call: &CapabilityCall,
         snapshot: &WorkspaceSnapshot,
+        context: &CapabilityContext,
     ) -> Result<CapabilityResult, RuntimeSignal>;
 }
 
 pub trait ApprovalPolicy {
-    fn decide(&mut self, call: &CapabilityCall) -> Result<ApprovalDecision, RuntimeSignal>;
+    fn decide(
+        &mut self,
+        call: &CapabilityCall,
+        context: &CapabilityContext,
+    ) -> Result<ApprovalDecision, RuntimeSignal>;
 }
 
 pub fn resolve_approval(facts: &ApprovalFacts) -> Result<ApprovalDecision, String> {
@@ -368,6 +397,7 @@ struct RunState {
     status: RunStatus,
     context_plan: Option<ContextPlan>,
     capability_results: Vec<CapabilityResult>,
+    capability_observations: Vec<CapabilityObservation>,
     capability_attempts: Vec<OutcomeCapabilityAttempt>,
     inference_evidence: Vec<InferenceEvidence>,
     outcome: OutcomeAssessment,
@@ -383,6 +413,7 @@ impl RunState {
             status: RunStatus::Running,
             context_plan: None,
             capability_results: Vec::new(),
+            capability_observations: Vec::new(),
             capability_attempts: Vec::new(),
             inference_evidence: Vec::new(),
             outcome: not_evaluated_outcome(
@@ -405,9 +436,41 @@ impl RunState {
         sink.on_event(&event);
     }
 
+    fn capability_context(&self) -> Result<CapabilityContext, String> {
+        let context_plan = self
+            .context_plan
+            .as_ref()
+            .ok_or_else(|| "Capability context requires a compiled context plan.".to_owned())?;
+        let canonical = serde_json::to_value(&self.capability_observations)
+            .map_err(|_| "Unable to canonicalize prior capability observations.".to_owned())?;
+        let encoded = serde_json::to_vec(&canonical)
+            .map_err(|_| "Unable to encode prior capability observations.".to_owned())?;
+        if encoded.len() > MAX_CAPABILITY_CONTEXT_BYTES {
+            return Err("Prior capability context exceeds the 4 MiB limit.".to_owned());
+        }
+        let prior_call_ids = self
+            .capability_observations
+            .iter()
+            .map(|observation| observation.call.id.clone())
+            .collect();
+        Ok(CapabilityContext {
+            schema_version: 1,
+            task: self.request.task.clone(),
+            basis: CapabilityContextBasis {
+                schema_version: 1,
+                run_id: self.request.run_id.clone(),
+                snapshot_id: self.request.snapshot.id.clone(),
+                context_plan_id: context_plan.id.clone(),
+                prior_call_ids,
+                prior_observations_sha256: crate::change_set_v2::sha256(&encoded),
+            },
+            prior_observations: self.capability_observations.clone(),
+        })
+    }
+
     fn artifact(&self) -> RunArtifact {
         RunArtifact {
-            schema_version: 2,
+            schema_version: 3,
             run_id: self.request.run_id.clone(),
             task: self.request.task.clone(),
             snapshot: self.request.snapshot.clone(),
@@ -556,11 +619,37 @@ impl Slice0Runtime<'_> {
     }
 
     fn execute(&mut self, state: &mut RunState, call: CapabilityCall) -> Option<RunArtifact> {
+        if call.id.trim().is_empty() || call.capability_id.trim().is_empty() {
+            return Some(self.fail(
+                state,
+                "invalid_capability_call",
+                "Capability call ID and capability ID must not be empty.".to_owned(),
+            ));
+        }
+        if state
+            .capability_observations
+            .iter()
+            .any(|observation| observation.call.id == call.id)
+        {
+            return Some(self.fail(
+                state,
+                "invalid_capability_call",
+                format!(
+                    "Capability call ID {} was already used in this run.",
+                    call.id
+                ),
+            ));
+        }
+
         state.emit(
             RunEventData::CapabilityRequested { call: call.clone() },
             self.event_sink,
         );
-        let decision = match self.approval_policy.decide(&call) {
+        let context = match state.capability_context() {
+            Ok(context) => context,
+            Err(message) => return Some(self.fail(state, "runtime_error", message)),
+        };
+        let decision = match self.approval_policy.decide(&call, &context) {
             Ok(decision) => decision,
             Err(RuntimeSignal::Cancelled(reason)) => return Some(self.cancel(state, reason)),
             Err(RuntimeSignal::Failed(message)) => {
@@ -572,6 +661,7 @@ impl Slice0Runtime<'_> {
                 call_id: call.id.clone(),
                 outcome: decision.outcome.clone(),
                 reason: decision.reason.clone(),
+                basis: context.basis.clone(),
                 facts: decision.facts.clone(),
             },
             self.event_sink,
@@ -584,13 +674,18 @@ impl Slice0Runtime<'_> {
                 ApprovalOutcome::Deny => "deny",
             };
             let result = CapabilityResult {
-                call_id: call.id,
+                call_id: call.id.clone(),
                 success: false,
                 content: format!("{outcome}: {}", decision.reason),
+                evidence: None,
             };
             state.capability_attempts.push(OutcomeCapabilityAttempt {
-                capability_id: call.capability_id,
+                capability_id: call.capability_id.clone(),
                 success: result.success,
+            });
+            state.capability_observations.push(CapabilityObservation {
+                call,
+                result: result.clone(),
             });
             state.capability_results.push(result.clone());
             state.emit(
@@ -605,21 +700,24 @@ impl Slice0Runtime<'_> {
                 call_id: call.id.clone(),
                 success: false,
                 content: format!("Unknown capability: {}", call.capability_id),
+                evidence: None,
             }
         } else {
-            match self.capabilities.invoke(&call, &state.request.snapshot) {
+            match self
+                .capabilities
+                .invoke(&call, &state.request.snapshot, &context)
+            {
                 Ok(result) => result,
                 Err(RuntimeSignal::Cancelled(reason)) => return Some(self.cancel(state, reason)),
                 Err(RuntimeSignal::Failed(message)) => CapabilityResult {
                     call_id: call.id.clone(),
                     success: false,
                     content: message,
+                    evidence: None,
                 },
             }
         };
-        let result = if result.call_id == call.id {
-            result
-        } else {
+        let result = if result.call_id != call.id {
             CapabilityResult {
                 call_id: call.id.clone(),
                 success: false,
@@ -627,11 +725,25 @@ impl Slice0Runtime<'_> {
                     "Capability result call ID {} does not match {}.",
                     result.call_id, call.id
                 ),
+                evidence: None,
             }
+        } else if let Some(message) = capability_evidence_validation_error(&result) {
+            CapabilityResult {
+                call_id: call.id.clone(),
+                success: false,
+                content: message,
+                evidence: None,
+            }
+        } else {
+            result
         };
         state.capability_attempts.push(OutcomeCapabilityAttempt {
-            capability_id: call.capability_id,
+            capability_id: call.capability_id.clone(),
             success: result.success,
+        });
+        state.capability_observations.push(CapabilityObservation {
+            call,
+            result: result.clone(),
         });
         state.capability_results.push(result.clone());
         state.emit(

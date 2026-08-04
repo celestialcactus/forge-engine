@@ -15,6 +15,10 @@ import type {
 import { TypeScriptConformanceRuntime } from '../slice0/runtime.js';
 import { RustKernelRuntime, type ApprovalFactsProvider } from '../hybrid/rust-kernel-runtime.js';
 import {
+  createGovernedChangeCapability,
+  type GovernedChangeCapabilityOptions,
+} from '../governed-change.js';
+import {
   createChangeProposalCapability,
   type ChangeProposalOptions,
   type TextChangeRequest,
@@ -73,6 +77,56 @@ const nonMutatingApprovalFactsProvider: ApprovalFactsProvider = {
     signal.throwIfAborted();
     return nonMutatingApprovalFacts(call);
   },
+};
+
+const guardedChangeApprovalFacts = (call: CapabilityCall) => call.capabilityId === 'workspace.change.execute'
+  ? {
+      schemaVersion: 1 as const,
+      callId: call.id,
+      capabilityId: call.capabilityId,
+      hostPolicy: {
+        posture: 'allow' as const,
+        source: 'forge.cli.guarded-change-entry',
+        reason: 'The CLI may enter the registered guarded change workflow; exact mutation and promotion require visible developer decisions.',
+      },
+      userConsent: {
+        status: 'notRequired' as const,
+        source: 'forge.cli.guarded-change-entry',
+        reason: 'Entry does not itself authorize a mutation; the digest-bound ChangeSet asks before candidate execution and promotion.',
+      },
+    }
+  : nonMutatingApprovalFacts(call);
+
+const guardedChangePolicy: ApprovalPolicy = {
+  async decide(call) {
+    return {
+      outcome: 'allow',
+      reason: guardedChangeApprovalFacts(call).hostPolicy.reason,
+      facts: guardedChangeApprovalFacts(call),
+    };
+  },
+};
+
+const guardedChangeApprovalFactsProvider: ApprovalFactsProvider = {
+  async collect(call, signal) {
+    signal.throwIfAborted();
+    return guardedChangeApprovalFacts(call);
+  },
+};
+
+interface RuntimeApprovalBoundary {
+  readonly policy: ApprovalPolicy;
+  readonly facts: ApprovalFactsProvider;
+}
+
+const nonMutatingApprovalBoundary: RuntimeApprovalBoundary = {
+  policy: nonMutatingPolicy,
+  facts: nonMutatingApprovalFactsProvider,
+};
+
+const guardedChangeApprovalBoundary: RuntimeApprovalBoundary = {
+  policy: guardedChangePolicy,
+  facts: guardedChangeApprovalFactsProvider,
 };
 
 export interface SearchWorkspaceOptions {
@@ -189,18 +243,20 @@ export class ForgeWorkspaceService {
     );
   }
 
-  async executeChangePlanningTask(
+  async executeGovernedChangeTask(
     task: string,
     planner: TaskPlanner,
+    capabilityOptions: GovernedChangeCapabilityOptions,
     options: ExecuteTaskOptions = {},
     signal?: AbortSignal,
   ): Promise<RunArtifact> {
     return this.#executeTaskWithCapabilities(
       task,
       planner,
-      [...this.#evidenceCapabilities.values(), createChangeProposalCapability(this.workspaceRoot, { modelInput: true })],
+      [...this.#evidenceCapabilities.values(), createGovernedChangeCapability(this.workspaceRoot, capabilityOptions)],
       options,
       signal,
+      guardedChangeApprovalBoundary,
     );
   }
 
@@ -272,6 +328,7 @@ export class ForgeWorkspaceService {
     capabilities: readonly Capability[],
     options: ExecuteTaskOptions,
     signal?: AbortSignal,
+    approvalBoundary: RuntimeApprovalBoundary = nonMutatingApprovalBoundary,
   ): Promise<RunArtifact> {
     if (task.trim().length === 0) throw new Error('A Forge task must not be empty.');
     const contextBudgetBytes = options.contextBudgetBytes ?? 65_536;
@@ -291,6 +348,7 @@ export class ForgeWorkspaceService {
       options.outcomeContract,
       signal,
       options.onEvent,
+      approvalBoundary,
     );
   }
 
@@ -321,6 +379,7 @@ export class ForgeWorkspaceService {
     outcomeContract?: OutcomeContract,
     signal?: AbortSignal,
     onEvent?: (event: RunEvent) => void,
+    approvalBoundary: RuntimeApprovalBoundary = nonMutatingApprovalBoundary,
   ): Promise<RunArtifact> {
     signal?.throwIfAborted();
     const snapshot = await this.#workspaceSnapshot();
@@ -328,13 +387,13 @@ export class ForgeWorkspaceService {
     const runtime = this.#runtime.kind === 'typescript_conformance_fixture'
       ? new TypeScriptConformanceRuntime({
           planner,
-          approvalPolicy: nonMutatingPolicy,
+          approvalPolicy: approvalBoundary.policy,
           capabilities,
           ...(onEvent === undefined ? {} : { onEvent }),
         })
       : new RustKernelRuntime({
           planner,
-          approvalFacts: nonMutatingApprovalFactsProvider,
+          approvalFacts: approvalBoundary.facts,
           capabilities,
           ...(onEvent === undefined ? {} : { onEvent }),
           kernelPath: this.#runtime.kernel.binaryPath,

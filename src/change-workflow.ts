@@ -1,6 +1,15 @@
 import { createHash } from 'node:crypto';
-import type { RunArtifact } from './slice0/contracts.js';
-import type { ChangeProposalArtifact, TextChangeRequest } from './v1/change-proposal.js';
+import type {
+  CapabilityCall,
+  CapabilityObservation,
+  CapabilityResult,
+  RunArtifact,
+} from './slice0/contracts.js';
+import {
+  changeProposalEvidenceKind,
+  type ChangeProposalArtifact,
+  type TextChangeRequest,
+} from './v1/change-proposal.js';
 import type {
   SovereignChangeProposal,
   SovereignPreparedArtifact,
@@ -32,14 +41,11 @@ const asRecord = (value: unknown): JsonRecord | undefined =>
 const sha256 = (value: string): string =>
   createHash('sha256').update(Buffer.from(value, 'utf8')).digest('hex');
 
-const parsePlanEvidence = (content: string): ChangeProposalArtifact => {
-  let decoded: unknown;
-  try {
-    decoded = JSON.parse(content) as unknown;
-  } catch {
-    throw new Error('Forge change-plan evidence is not valid JSON.');
+const parsePlanEvidence = (result: CapabilityResult): ChangeProposalArtifact => {
+  if (result.evidence?.schemaVersion !== 1 || result.evidence.kind !== changeProposalEvidenceKind) {
+    throw new Error('Forge change-plan result is missing typed proposal evidence.');
   }
-  const candidate = asRecord(decoded);
+  const candidate = asRecord(result.evidence.data);
   if (candidate?.schemaVersion !== 1
     || typeof candidate.proposalId !== 'string'
     || typeof candidate.snapshotId !== 'string'
@@ -113,25 +119,16 @@ const parseReadRange = (content: string): ReadRangeEvidence | undefined => {
 };
 
 const assertCompletePriorRead = (
-  artifact: RunArtifact,
-  planSequence: number,
+  priorObservations: readonly CapabilityObservation[],
+  snapshotId: string,
   change: PlannedReplacement,
 ): void => {
-  const priorReadCallIds = new Set(artifact.events.flatMap((event) =>
-    event.sequence < planSequence
-      && event.type === 'capability.requested'
-      && event.call.capabilityId === 'workspace.read'
-      ? [event.call.id]
-      : []));
-  const ranges = artifact.events.flatMap((event): readonly ReadRangeEvidence[] => {
-    if (event.sequence >= planSequence
-      || event.type !== 'capability.completed'
-      || !event.result.success
-      || !priorReadCallIds.has(event.result.callId)) return [];
-    const range = parseReadRange(event.result.content);
+  const ranges = priorObservations.flatMap((observation): readonly ReadRangeEvidence[] => {
+    if (observation.call.capabilityId !== 'workspace.read' || !observation.result.success) return [];
+    const range = parseReadRange(observation.result.content);
     return range === undefined
       || range.path !== change.path
-      || range.snapshotId !== artifact.snapshot.id
+      || range.snapshotId !== snapshotId
       || range.sha256 !== change.beforeSha256
       ? []
       : [range];
@@ -147,30 +144,25 @@ const assertCompletePriorRead = (
   }
 };
 
-export const extractInteractiveChangePlan = (artifact: RunArtifact): InteractiveChangePlan | undefined => {
-  const requests = artifact.events.filter((event) =>
-    event.type === 'capability.requested'
-      && event.call.capabilityId === 'workspace.change.plan');
-  if (requests.length === 0) return undefined;
-  if (requests.length !== 1) {
-    throw new Error('Interactive Forge accepts exactly one change plan per prompt.');
-  }
-  if (artifact.status !== 'completed') {
-    throw new Error('Forge will not execute a change plan from an incomplete planning run.');
-  }
-  const requested = requests[0];
-  if (requested?.type !== 'capability.requested') {
-    throw new Error('Forge change-plan event correlation failed.');
-  }
-  const result = artifact.capabilityResults.find((candidate) => candidate.callId === requested.call.id);
-  if (result === undefined || !result.success) {
+export interface InteractiveChangePlanSource {
+  readonly runId: string;
+  readonly snapshotId: string;
+  readonly call: CapabilityCall;
+  readonly result: CapabilityResult;
+  readonly priorObservations: readonly CapabilityObservation[];
+}
+
+export const buildInteractiveChangePlan = (
+  source: InteractiveChangePlanSource,
+): InteractiveChangePlan => {
+  if (!source.result.success) {
     throw new Error('Forge change planning did not produce successful evidence.');
   }
-  const evidence = parsePlanEvidence(result.content);
-  if (evidence.snapshotId !== artifact.snapshot.id) {
+  const evidence = parsePlanEvidence(source.result);
+  if (evidence.snapshotId !== source.snapshotId) {
     throw new Error('Forge change-plan evidence does not match the planning workspace snapshot.');
   }
-  const inputs = parseRequests(requested.call.input);
+  const inputs = parseRequests(source.call.input);
   const changes = evidence.changes.map((change): PlannedReplacement => {
     if (change.truncated) {
       throw new Error(`Forge refuses approval because the review diff is truncated: ${change.path}`);
@@ -190,12 +182,12 @@ export const extractInteractiveChangePlan = (artifact: RunArtifact): Interactive
       afterBytes: change.afterBytes,
       diff: change.diff,
     };
-    assertCompletePriorRead(artifact, requested.sequence, planned);
+    assertCompletePriorRead(source.priorObservations, source.snapshotId, planned);
     return planned;
   });
   if (changes.length === 0) throw new Error('Forge change plan contains no effective changes.');
   return {
-    planningRunId: artifact.runId,
+    planningRunId: source.runId,
     proposalId: evidence.proposalId,
     snapshotId: evidence.snapshotId,
     changes,
@@ -208,6 +200,43 @@ export const extractInteractiveChangePlan = (artifact: RunArtifact): Interactive
       })),
     },
   };
+};
+
+export const extractInteractiveChangePlan = (artifact: RunArtifact): InteractiveChangePlan | undefined => {
+  const requests = artifact.events.filter((event) =>
+    event.type === 'capability.requested'
+      && event.call.capabilityId === 'workspace.change.plan');
+  if (requests.length === 0) return undefined;
+  if (requests.length !== 1) {
+    throw new Error('Interactive Forge accepts exactly one change plan per prompt.');
+  }
+  if (artifact.status !== 'completed') {
+    throw new Error('Forge will not execute a change plan from an incomplete planning run.');
+  }
+  const requested = requests[0];
+  if (requested?.type !== 'capability.requested') {
+    throw new Error('Forge change-plan event correlation failed.');
+  }
+  const result = artifact.capabilityResults.find((candidate) => candidate.callId === requested.call.id);
+  if (result === undefined) {
+    throw new Error('Forge change planning did not produce successful evidence.');
+  }
+  const requestedCalls = new Map(artifact.events.flatMap((event) =>
+    event.sequence < requested.sequence && event.type === 'capability.requested'
+      ? [[event.call.id, event.call] as const]
+      : []));
+  const priorObservations = artifact.events.flatMap((event): readonly CapabilityObservation[] => {
+    if (event.sequence >= requested.sequence || event.type !== 'capability.completed') return [];
+    const call = requestedCalls.get(event.result.callId);
+    return call === undefined ? [] : [{ call, result: event.result }];
+  });
+  return buildInteractiveChangePlan({
+    runId: artifact.runId,
+    snapshotId: artifact.snapshot.id,
+    call: requested.call,
+    result,
+    priorObservations,
+  });
 };
 
 export const validatePreparedChangePlan = (

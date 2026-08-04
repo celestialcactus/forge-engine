@@ -32,7 +32,7 @@ test('marks an unmet outcome as an MCP error even when the adapter call succeede
     }],
   };
   const artifact: RunArtifact = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     runId: 'run:unmet-mcp',
     task: 'Return output.',
     snapshot: { id: 'workspace:unmet-mcp', rootLabel: 'fixture', files: [] },

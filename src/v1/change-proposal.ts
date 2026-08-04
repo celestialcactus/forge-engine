@@ -8,6 +8,8 @@ const maximumTextBytes = 1_048_576;
 const maximumChanges = 20;
 const digestPattern = /^[0-9a-f]{64}$/u;
 
+export const changeProposalEvidenceKind = 'forge.workspace.change.plan.v1';
+
 export interface TextChangeRequest {
   readonly path: string;
   readonly expectedSha256: string;
@@ -283,7 +285,16 @@ export function createChangeProposalCapability(
         changes,
         conflicts,
       };
-      return { callId: call.id, success: status !== 'conflicted', content: JSON.stringify(artifact) };
+      return {
+        callId: call.id,
+        success: status !== 'conflicted',
+        content: JSON.stringify(artifact),
+        evidence: {
+          schemaVersion: 1,
+          kind: changeProposalEvidenceKind,
+          data: artifact,
+        },
+      };
     },
   };
 }
