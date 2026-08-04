@@ -48,6 +48,20 @@ test('does not expose superseded candidate commands or fake task execution', () 
   assert.equal(help.status, 0);
   assert.doesNotMatch(help.stdout, /forge candidate/u);
 
+  const optionHelp = spawnSync(process.execPath, [...cli, '--help'], {
+    encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment,
+  });
+  assert.equal(optionHelp.status, 0);
+  assert.match(optionHelp.stdout, /With no route flags, Forge auto-discovers/u);
+
+  const interactive = spawnSync(process.execPath, cli, {
+    encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment,
+  });
+  assert.notEqual(interactive.status, 0);
+  assert.match(interactive.stderr, /^\[forge\] .*kernel path is not an executable file/mu);
+  assert.doesNotMatch(interactive.stderr, /\n\s+at /u);
+  assert.doesNotMatch(interactive.stdout, /Core change flow/u);
+
   const candidate = spawnSync(process.execPath, [...cli, 'candidate', 'inspect', 'legacy-id'], {
     encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment,
   });

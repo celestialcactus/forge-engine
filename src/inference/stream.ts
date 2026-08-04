@@ -3,6 +3,7 @@ import type {
   InferenceProvider,
   InferenceRoute,
   InferenceToolCall,
+  NormalizedInferenceEvent,
   JsonObject,
   ProviderInferenceRequest,
 } from './contracts.js';
@@ -25,6 +26,7 @@ export interface CollectedInference {
 
 export interface CollectInferenceOptions {
   readonly now?: () => number;
+  readonly onEvent?: (event: NormalizedInferenceEvent) => void;
 }
 
 const nonNegativeInteger = (value: number | undefined, label: string): number | undefined => {
@@ -114,6 +116,7 @@ export async function collectProviderInference(
     if (event.type === 'text.delta') {
       text += event.text;
       if (text.length > maximumTextCharacters) throw new Error(`Inference text exceeds ${maximumTextCharacters} characters.`);
+      options.onEvent?.(event);
     } else if (event.type === 'tool_call.delta') {
       if (!Number.isSafeInteger(event.index) || event.index < 0) throw new Error('Tool-call index must be a non-negative safe integer.');
       if (event.index !== 0 || (tools.size === 1 && !tools.has(event.index))) {
@@ -129,11 +132,14 @@ export async function collectProviderInference(
         throw new Error(`Tool arguments exceed ${maximumToolArgumentCharacters} characters.`);
       }
       tools.set(event.index, current);
+      options.onEvent?.(event);
     } else if (event.type === 'usage') {
       inputTokens = nonNegativeInteger(event.inputTokens, 'inputTokens') ?? inputTokens;
       outputTokens = nonNegativeInteger(event.outputTokens, 'outputTokens') ?? outputTokens;
+      options.onEvent?.(event);
     } else {
       finishReason = event.finishReason;
+      options.onEvent?.(event);
     }
   }
   signal.throwIfAborted();

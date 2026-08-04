@@ -8,6 +8,13 @@ import type { ApprovalFacts, CapabilityCall, RunArtifact } from './slice0/contra
 import { developerEvidenceTools } from './inference/developer-tools.js';
 import { ProviderTaskPlanner } from './inference/planner.js';
 import { createInferenceProvider, resolveInferenceRoute } from './inference/routing.js';
+import {
+  createNodeInteractiveIo,
+  resolveInteractiveRoute,
+  runInteractiveSession,
+} from './interactive-cli.js';
+import type { InferenceRoute } from './inference/contracts.js';
+import { createRunCancellation, LiveCliPresenter } from './live-cli.js';
 import { startForgeMcpServer } from './mcp/server.js';
 import {
   probeForgeKernelBinary,
@@ -45,10 +52,11 @@ const { positionals, values } = parseArgs({
     model: { type: 'string' },
     'engine-root': { type: 'string' },
     approve: { type: 'boolean', default: false },
+    help: { type: 'boolean', short: 'h', default: false },
   },
 });
 
-const command = positionals[0] ?? 'help';
+const command = values.help ? 'help' : positionals[0] ?? 'interactive';
 const workspaceRoot = resolve(values.workspace ?? process.cwd());
 const kernelResolution = resolveForgeKernelBinary();
 const kernelProbe = command === 'doctor' ? await probeForgeKernelBinary(kernelResolution) : undefined;
@@ -61,6 +69,44 @@ let service: ForgeWorkspaceService | undefined;
 const workspaceService = (): ForgeWorkspaceService => {
   service ??= new ForgeWorkspaceService(workspaceRoot, productServiceOptions());
   return service;
+};
+
+const executeProviderTask = async (
+  task: string,
+  route: InferenceRoute,
+  maxTurns: number,
+  timeoutMs: number,
+  presenter?: LiveCliPresenter,
+): Promise<{
+  readonly artifact: RunArtifact;
+  readonly cancellationSource: ReturnType<typeof createRunCancellation>['source'];
+}> => {
+  if (timeoutMs < 1 || timeoutMs > 900_000) {
+    throw new Error('--timeout-ms must be from 1 to 900000.');
+  }
+  const cancellation = createRunCancellation(timeoutMs);
+  try {
+    const planner = new ProviderTaskPlanner({
+      provider: createInferenceProvider(route),
+      route,
+      tools: developerEvidenceTools,
+      ...(presenter === undefined
+        ? {}
+        : { onInferenceEvent: (observation) => presenter.onInferenceEvent(observation) }),
+    });
+    const artifact = await workspaceService().executeTask(
+      task,
+      planner,
+      {
+        maxTurns,
+        ...(presenter === undefined ? {} : { onEvent: (event) => presenter.onRunEvent(event) }),
+      },
+      cancellation.signal,
+    );
+    return { artifact, cancellationSource: cancellation.source };
+  } finally {
+    cancellation.dispose();
+  }
 };
 
 const engineRoot = (): string => resolve(
@@ -301,25 +347,61 @@ try {
       }
     }
 
+  } else if (command === 'interactive') {
+    if (values.json) throw new Error('Interactive Forge does not support --json; use forge run for machine output.');
+    requireKernel();
+    const selection = await resolveInteractiveRoute({
+      ...(values.provider === undefined ? {} : { provider: values.provider }),
+      ...(values.model === undefined ? {} : { model: values.model }),
+    });
+    createInferenceProvider(selection.route);
+    const maxTurns = integerOption(values['max-turns'], 8, '--max-turns');
+    const timeoutMs = integerOption(values['timeout-ms'], 120_000, '--timeout-ms');
+    await runInteractiveSession({
+      workspaceRoot,
+      initialRoute: selection,
+      io: createNodeInteractiveIo(),
+      validateRoute: (route) => { createInferenceProvider(route); },
+      runTask: async (task, route) => {
+        const presenter = new LiveCliPresenter();
+        const { artifact } = await executeProviderTask(task, route, maxTurns, timeoutMs, presenter);
+        presenter.printSummary(artifact);
+        return { runId: artifact.runId, status: artifact.status };
+      },
+    });
   } else if (command === 'run') {
     const task = positionals.slice(1).join(' ').trim();
     if (task.length === 0) throw new Error('Usage: forge run <task> --provider <ollama|openai> --model <model> [--workspace <path>] [--json]');
     const route = resolveInferenceRoute(values.provider, values.model);
-    const timeoutMs = integerOption(values['timeout-ms'], 120_000, '--timeout-ms');
-    if (timeoutMs < 1 || timeoutMs > 900_000) throw new Error('--timeout-ms must be from 1 to 900000.');
-    const planner = new ProviderTaskPlanner({
-      provider: createInferenceProvider(route),
+    const presenter = values.json ? undefined : new LiveCliPresenter();
+    const { artifact, cancellationSource } = await executeProviderTask(
+      task,
       route,
-      tools: developerEvidenceTools,
-    });
-    printArtifact(await workspaceService().executeTask(task, planner, {
-      maxTurns: integerOption(values['max-turns'], 8, '--max-turns'),
-    }, AbortSignal.timeout(timeoutMs)));
+      integerOption(values['max-turns'], 8, '--max-turns'),
+      integerOption(values['timeout-ms'], 120_000, '--timeout-ms'),
+      presenter,
+    );
+    if (presenter === undefined) printArtifact(artifact);
+    else presenter.printSummary(artifact);
+    if (artifact.status !== 'completed') {
+      process.exitCode = artifact.status === 'cancelled'
+        ? cancellationSource === 'sigint'
+          ? 130
+          : cancellationSource === 'timeout'
+            ? 124
+            : 1
+        : 1;
+    }
   } else if (command === 'mcp') {
     await startForgeMcpServer(workspaceRoot, productServiceOptions());
   } else if (command === 'help') {
     console.log([
       'ForgeEngine V1 — sovereign evidence runtime',
+      '',
+      'Interactive:',
+      '  forge [--provider <ollama|openai> --model <model>] [--workspace <path>]',
+      '    With no route flags, Forge auto-discovers an installed local Ollama model.',
+      '    Slash controls: /help, /status, /model, /clear, /exit.',
       '',
       'Core change flow:',
       '  forge change propose <proposal.json> --policy <policy.json> --approve [--check <id,id>] [--json]',
@@ -337,14 +419,22 @@ try {
       '  forge git-status [--json]',
       '  forge git-diff [--staged] [--json] [--max-bytes <count>]',
       '  forge run <task> --provider <ollama|openai> --model <model> [--max-turns <count>] [--timeout-ms <ms>] [--json]',
+      '    Human mode streams validated assistant text and canonical run status; --json emits one terminal artifact.',
       '  forge mcp [--workspace <path>]',
       '',
-      'Product commands require the Rust kernel. Source builds discover target/release or target/debug; FORGE_KERNEL_BINARY overrides discovery. State defaults to ~/.forge and can be overridden with --engine-root or FORGE_ENGINE_ROOT.',
+      'Product commands require the Rust kernel. Source builds discover target/release or target/debug; FORGE_KERNEL_BINARY overrides discovery. Interactive route defaults can use FORGE_DEFAULT_PROVIDER and FORGE_DEFAULT_MODEL. State defaults to ~/.forge and can be overridden with --engine-root or FORGE_ENGINE_ROOT.',
       'Verification is currently trusted local execution; Forge owns process cleanup but does not yet enforce an OS sandbox.',
     ].join('\n'));
   } else {
     throw new Error(`Unknown Forge command: ${command}`);
   }
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('[forge] ' + message);
+  if (process.env.FORGE_DEBUG === '1' && error instanceof Error && error.stack !== undefined) {
+    console.error(error.stack);
+  }
+  process.exitCode = 1;
 } finally {
   service?.close();
 }

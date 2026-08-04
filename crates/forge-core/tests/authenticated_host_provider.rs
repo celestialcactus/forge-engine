@@ -49,6 +49,21 @@ fn fixture_root(label: &str) -> PathBuf {
     root
 }
 
+fn only_consumed_record(root: &Path) -> PathBuf {
+    let mut entries =
+        fs::read_dir(root.join("ledger").join("consumed")).expect("consumed ledger directory");
+    let record = entries
+        .next()
+        .expect("one consumed record")
+        .expect("consumed record entry")
+        .path();
+    assert!(
+        entries.next().is_none(),
+        "expected exactly one consumed record"
+    );
+    record
+}
+
 fn manifest() -> ChangeApplicationManifest {
     let mut manifest = ChangeApplicationManifest {
         schema_version: 1,
@@ -309,12 +324,7 @@ fn authenticated_provider_consumes_one_bound_grant_and_exports_full_evidence() {
         binding.capability_digest()
     );
     assert_eq!(authority.challenge.policy_digest, binding.policy_digest());
-    assert!(
-        root.join("ledger")
-            .join("consumed")
-            .join(format!("{challenge_id}.json"))
-            .is_file()
-    );
+    assert!(only_consumed_record(&root).is_file());
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -333,14 +343,7 @@ fn tampered_consumed_evidence_fails_before_verifier_launch() {
             &NoCancellation,
         )
         .unwrap();
-    let challenge_id = grant.evidence().authority.challenge.challenge_id.clone();
-    fs::write(
-        root.join("ledger")
-            .join("consumed")
-            .join(format!("{challenge_id}.json")),
-        b"{}",
-    )
-    .unwrap();
+    fs::write(only_consumed_record(&root), b"{}").unwrap();
 
     let error = provider
         .execute_host_managed(

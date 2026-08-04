@@ -30,11 +30,11 @@ The public CLI and MCP server require the Rust kernel. A source checkout discove
 kernel path is invalid. The TypeScript coordinator is retained only as an explicitly
 selected conformance fixture.
 
-`forge run <task>` requires an explicit `--provider <ollama|openai>` and `--model`.
-Provider streams are normalized in TypeScript, while Rust retains turn budgets,
-capability approval, ordered events, and terminal inference evidence. The current
-command returns the final artifact as JSON or text; the next ship-lane increment is
-the interactive streaming CLI lifecycle rather than a second orchestration runtime.
+Plain `forge` starts an interactive local-first prompt shell and auto-discovers an
+installed Ollama model when no route is supplied. Each prompt creates a separate
+Rust-authoritative run; tool continuation is preserved within the run, but
+cross-prompt conversation context is not yet retained. `forge run <task>` remains
+the explicit non-interactive and JSON automation surface.
 
 ## Honest limitations
 
@@ -46,8 +46,8 @@ the interactive streaming CLI lifecycle rather than a second orchestration runti
 - `restricted` execution remains unavailable and fails closed until native platform
   providers pass adversarial gates.
 - There is no public MCP mutation tool, generic shell, unrestricted write tool,
-  interactive streaming/resumable CLI session, durable session projection, skills,
-  memory, compression, connector, or automation surface yet.
+  cross-prompt conversational memory, durable/resumable session projection,
+  skills, compression, connector, or automation surface yet.
 - OpenAI transport conformance is tested, but a live cloud acceptance run requires
   the user's own `OPENAI_API_KEY`; Forge does not accept credentials as CLI flags or
   write them into run evidence.
@@ -74,6 +74,7 @@ limitation.
 Useful commands after the product build:
 
 ```powershell
+node dist/src/cli.js --workspace C:\path\to\repo
 node dist/src/cli.js doctor --json
 node dist/src/cli.js inspect --workspace C:\path\to\repo --json
 node dist/src/cli.js search "literal text" --workspace C:\path\to\repo --json
@@ -82,9 +83,13 @@ node dist/src/cli.js change propose proposal.json --policy verification-policy.j
 ```
 
 The Ollama route expects a locally running Ollama API and an installed model.
-`FORGE_OLLAMA_URL` can select a non-default endpoint. The OpenAI route reads
+`FORGE_OLLAMA_URL` can select a non-default endpoint. Ollama defaults to an 8K
+context window; `FORGE_OLLAMA_CONTEXT_TOKENS` accepts an explicit value from 2048
+through 262144. The OpenAI route reads
 `OPENAI_API_KEY`; `FORGE_OPENAI_BASE_URL` can select a compatible direct endpoint.
-Neither route silently falls back to the other.
+`FORGE_DEFAULT_PROVIDER` and `FORGE_DEFAULT_MODEL` may set a complete interactive
+default pair. Neither route silently falls back to the other, and interactive
+discovery never selects cloud inference.
 
 VS Code uses the workspace-local `.vscode/mcp.json` after a product build. See
 `docs/testing/vscode-developer-test-milestone-a.md` for the controlled prompts.

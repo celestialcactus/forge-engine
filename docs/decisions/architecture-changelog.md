@@ -1,5 +1,142 @@
 # Architecture Changelog
 
+## 2026-08-03 - Credentialed OpenAI multi-turn gate
+
+- A conservative synthetic text call proved the persisted project key and direct
+  Responses endpoint without sending Forge repository data.
+- One-read passed, but dependent search-to-read stopped early. The audit found that
+  the `store: false` adapter did not replay exact OpenAI output items and that
+  "one tool in this turn" was ambiguous to GPT-5.6 Sol.
+- The adapter now replays bounded provider-private output items, including encrypted
+  reasoning state, alongside the next function result. That state remains outside
+  the canonical artifact and event contract.
+- Planner wording now says one tool per provider response and explicitly permits a
+  new tool after Forge returns a result. The runtime one-call-per-response invariant
+  is unchanged.
+- Full local validation passed typecheck, 58/58 tests, and build. Final synthetic
+  search-to-read passed on both GPT-5.6 Sol and Qwen 7B with three inference turns,
+  two successful capabilities, and 12 canonical events.
+- Earlier terminal responses were mechanically `completed` while failing the
+  requested outcome. This is retained as the concrete gate for increment 4's
+  explicit outcome-verification state.
+- Exact implementation `5b8d226` passed all five hosted jobs: Node on
+  Windows/macOS in Actions run `30867433664` and the real Rust-kernel/TypeScript
+  product on Windows/macOS/Ubuntu in run `30867433674`.
+- Recorded [Checkpoint 58](checkpoints/2026-08-03-58-openai-live-multiturn-gate.md).
+  Increment 3 is accepted and ready to merge through draft PR #17.
+
+## 2026-08-03 - Deterministic host-authority replay under concurrency
+
+- A macOS hybrid rerun exposed a time-of-check/time-of-use race in host challenge
+  consumption: the losing consumer could see the pending record disappear before
+  it observed the winner's consumed evidence.
+- A defensive recheck and 32-race regression then exposed the deeper mechanism on
+  hosted Ubuntu and macOS: `create_new` made the final filename visible before its
+  JSON was fully written.
+- Ledger records now synchronize in private same-filesystem staging files and publish
+  complete immutable content atomically with no-overwrite hard links. Consumed
+  evidence is still cryptographically revalidated; missing or corrupt evidence
+  remains fail-closed.
+- The atomic boundary passed macOS and Ubuntu, while Windows revealed that copying
+  the public colon-bearing challenge ID into a filename had used NTFS alternate data
+  streams. Private filenames now encode `:` as `%3A` without changing public IDs.
+- The regression requires exactly one success and one exact replay rejection in all
+  32 races. The next macOS/Ubuntu core run passed; two integration fixtures that
+  hardcoded the retired private path were corrected to locate the ledger record by
+  behavior. Local formatting and the 57-test TypeScript gate pass; the next hosted
+  Rust/product validation is the acceptance authority.
+- Exact implementation `86daa83` passed hosted Node on Windows/macOS and the full
+  Rust-kernel/TypeScript product on Windows/macOS/Ubuntu. The bounded correction is
+  accepted.
+- Recorded [Checkpoint 57](checkpoints/2026-08-03-57-host-authority-replay-race.md).
+
+## 2026-08-03 - Low-compute model floor and provider-context correction
+
+- Exercised qwen2.5-coder 0.5B, 1.5B, 3B, and 7B against bounded text, read,
+  semantic, and search-to-read tasks instead of validating only the strongest
+  local model.
+- Found that provider prompts exposed selected workspace locators without their
+  contents. Small models treated that pseudo-context as evidence and selected an
+  unrelated file.
+- Replaced locator-only provider context with selected/omitted counts plus an
+  explicit instruction to obtain workspace facts through Forge tools. Internal
+  ContextPlan and RunArtifact contracts are unchanged.
+- Measured task floors were 0.5B text-only, 1.5B literal one-read extraction, 3B
+  one-read semantic interpretation, and 7B search-to-read composition. These are
+  prompt-specific results, not automatic-routing guarantees.
+- The corrected 7B one-read task stayed 3/3 grounded while provider input fell
+  from 3,785 to 2,670 tokens, about 29.5%.
+- The full local gate passed typecheck, 57/57 tests, and build. A controlled VS
+  Code Agent run then used exactly one Forge summary call and returned the
+  canonical six-event order without recovery calls.
+- VS Code's extension host did not inherit a terminal-only kernel override. Forge
+  failed closed until the accepted kernel was installed at its normal discovery
+  path; the machine cannot rebuild it locally until the MSVC linker is installed.
+- Draft PR 17 then passed all five hosted jobs at `5326122`: Node on Windows and
+  macOS, plus the real Rust-kernel/TypeScript product on Windows, macOS, and Ubuntu.
+- Updated [ADR-0020](ADRs/ADR-0020-explicit-local-context-and-provider-evidence-projection.md)
+  and recorded [Checkpoint 56](checkpoints/2026-08-03-56-low-compute-model-floor.md).
+
+## 2026-08-03 - Interactive CLI local gate
+
+- Added a thin plain-forge prompt shell over independent canonical Rust runs.
+- Added deterministic local Ollama model discovery, visible effective route and
+  workspace state, slash controls, --help, and concise default errors.
+- Consolidated one-shot and interactive execution through one provider-task helper;
+  no session runtime, policy path, or event contract was added.
+- A piped-input smoke exposed lost buffered readline lines. A queued input adapter
+  fixed TTY and scripted input through the same path.
+- Full validation passed: typecheck, 57 tests, build, one live interactive read
+  task, and a two-prompt same-process Qwen session.
+- Recorded [ADR-0021](ADRs/ADR-0021-ephemeral-interactive-shell.md) and
+  [Checkpoint 55](checkpoints/2026-08-03-55-interactive-cli-local-gate.md).
+
+## 2026-08-03 - Qwen context and outcome hardening
+
+- Declared an 8K Ollama context window, temperature-zero agent turns, and a
+  validated FORGE_OLLAMA_CONTEXT_TOKENS override.
+- Projected duplicate workspace.read evidence into compact citation-ready provider
+  context without changing the internal capability result or RunArtifact.
+- Rejected printed tool-protocol envelopes instead of falsely accepting them as
+  terminal answers.
+- Full validation passed: typecheck, 54 tests, build, live Qwen text and repeated
+  one-read runs, JSON isolation, and timeout cleanup.
+- A stronger two-tool experiment still exposed early stopping and hallucination.
+  Runtime completion is therefore not documented as grounded outcome acceptance;
+  an explicit outcome-verification contract remains required.
+- Recorded [ADR-0020](ADRs/ADR-0020-explicit-local-context-and-provider-evidence-projection.md)
+  and [Checkpoint 54](checkpoints/2026-08-03-54-qwen-context-and-outcome-hardening.md).
+
+## 2026-08-03 - Live CLI local gate
+
+- Implemented ephemeral validated provider streaming and canonical runtime status
+  presentation without introducing a second runtime or event log.
+- Preserved `--json` as one terminal artifact and unified first-SIGINT/deadline
+  cancellation through the existing Rust bridge abort path.
+- Passed typecheck, 52 tests, build, exact-kernel probe, live Qwen text,
+  one-tool continuation, JSON isolation, and live timeout cleanup locally.
+- Draft PR #17 at `d5ac3d7` passed Node on Windows/macOS and the full Rust product
+  matrix on Windows/macOS/Ubuntu. Controlled VS Code remains pending because the
+  fresh worktree requires a developer-owned Workspace Trust decision; live OpenAI
+  remains deliberately paused for credential setup.
+- Recorded [Checkpoint 53](checkpoints/2026-08-03-53-live-cli-local-gate.md) and
+  updated [CLI ship lane 3](../tasks/SLICE-CLI3-live-loop.md).
+
+## 2026-08-03 - Live CLI presentation boundary opened
+
+- Merged real inference through PR #16 as `e865de5` and opened CLI ship lane 3 on
+  `feature/cli-live-loop` from that exact `develop` head.
+- Accepted [ADR-0019](ADRs/ADR-0019-ephemeral-live-cli-presentation.md): validated
+  provider deltas are ephemeral human presentation, while Rust-streamed run events
+  and the terminal artifact remain authoritative.
+- Kept `--json` as one terminal JSON document; live human output may stream, but it
+  cannot create a second event log, session runtime, or policy path.
+- OpenAI live acceptance is deliberately paused until the developer configures a
+  project-scoped `OPENAI_API_KEY`; Ollama/Qwen remains the development baseline.
+- Recorded [Checkpoint 52](checkpoints/2026-08-03-52-live-cli-start.md) and opened
+  [CLI ship lane 3](../tasks/SLICE-CLI3-live-loop.md).
+
+
 ## 2026-08-03 - Real inference hosted, product, and VS Code gate
 
 - Accepted CLI ship lane 2 on `feature/cli-real-inference` at implementation head

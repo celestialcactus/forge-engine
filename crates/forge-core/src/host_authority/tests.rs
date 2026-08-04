@@ -69,6 +69,15 @@ fn issues_verifies_persists_and_rejects_restart_replay() {
         challenge.challenge_id,
         "host-challenge:15df218011a72c63d997484bd87643a32aa6d33513f0444b714ce53e49f596b2"
     );
+    assert_eq!(
+        ledger
+            .pending_path(&challenge.challenge_id)
+            .file_name()
+            .and_then(|name| name.to_str()),
+        Some(
+            "host-challenge%3A15df218011a72c63d997484bd87643a32aa6d33513f0444b714ce53e49f596b2.json"
+        )
+    );
     let response = signed(&challenge, "boundary.fixture");
     let evidence = ledger
         .verify_and_consume_at(&response, 2_000)
@@ -173,36 +182,49 @@ fn challenge_identity_binds_capability_policy_provider_and_controls() {
 
 #[test]
 fn concurrent_consumers_allow_exactly_one_success() {
-    let root = fixture_root("race");
-    let issuer = HostChallengeLedger::new(root.clone(), trust()).expect("ledger");
-    let challenge = issuer
-        .issue_at(request(), 100, [8_u8; NONCE_BYTES])
-        .expect("challenge");
-    let response = Arc::new(signed(&challenge, "boundary.race"));
-    let barrier = Arc::new(Barrier::new(2));
-    let mut handles = Vec::new();
-    for _ in 0..2 {
-        let ledger = HostChallengeLedger::new(root.clone(), trust()).expect("consumer");
-        let response = Arc::clone(&response);
-        let barrier = Arc::clone(&barrier);
-        handles.push(thread::spawn(move || {
-            barrier.wait();
-            ledger.verify_and_consume_at(&response, 101)
-        }));
-    }
-    let results: Vec<_> = handles
-        .into_iter()
-        .map(|handle| handle.join().expect("consumer join"))
-        .collect();
-    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
-    assert_eq!(results.iter().filter(|result| result.is_err()).count(), 1);
-    assert!(
-        results
+    for iteration in 0..32 {
+        let root = fixture_root(&format!("race-{iteration}"));
+        let issuer = HostChallengeLedger::new(root.clone(), trust()).expect("ledger");
+        let challenge = issuer
+            .issue_at(request(), 100, [8_u8; NONCE_BYTES])
+            .expect("challenge");
+        let response = Arc::new(signed(&challenge, "boundary.race"));
+        let barrier = Arc::new(Barrier::new(2));
+        let mut handles = Vec::new();
+        for _ in 0..2 {
+            let ledger = HostChallengeLedger::new(root.clone(), trust()).expect("consumer");
+            let response = Arc::clone(&response);
+            let barrier = Arc::clone(&barrier);
+            handles.push(thread::spawn(move || {
+                barrier.wait();
+                ledger.verify_and_consume_at(&response, 101)
+            }));
+        }
+        let results: Vec<_> = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("consumer join"))
+            .collect();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        let errors: Vec<_> = results
             .iter()
             .filter_map(|result| result.as_ref().err())
-            .any(|error| error.contains("replay"))
-    );
-    fs::remove_dir_all(root).expect("cleanup");
+            .collect();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0], "Host challenge replay was rejected.");
+        let mut root_entries: Vec<_> = fs::read_dir(&root)
+            .expect("ledger root")
+            .map(|entry| {
+                entry
+                    .expect("ledger entry")
+                    .file_name()
+                    .into_string()
+                    .expect("UTF-8 ledger entry")
+            })
+            .collect();
+        root_entries.sort();
+        assert_eq!(root_entries, ["consumed".to_owned(), "pending".to_owned()]);
+        fs::remove_dir_all(root).expect("cleanup");
+    }
 }
 
 #[test]

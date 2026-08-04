@@ -5,6 +5,7 @@ import type { InferenceEvidence, TaskPlanner } from '../src/slice0/contracts.js'
 import type {
   InferenceProvider,
   NormalizedInferenceEvent,
+  ProviderInferenceObservation,
   ProviderInferenceRequest,
 } from '../src/inference/contracts.js';
 import { developerEvidenceTools } from '../src/inference/developer-tools.js';
@@ -13,6 +14,7 @@ import { OpenAiResponsesProvider } from '../src/inference/openai.js';
 import { ProviderTaskPlanner } from '../src/inference/planner.js';
 import { createInferenceProvider, resolveInferenceRoute } from '../src/inference/routing.js';
 import { collectProviderInference } from '../src/inference/stream.js';
+import { providerToolResultContent } from '../src/inference/tool-evidence.js';
 import { ForgeWorkspaceService, typeScriptConformanceFixture } from '../src/v1/service.js';
 
 const route = { provider: 'ollama', model: 'fixture-model' } as const;
@@ -42,8 +44,10 @@ test('normalizes an Ollama text stream into bounded terminal evidence', async ()
       ].join('\n'), { status: 200 });
     },
   });
+  const normalizedEvents: NormalizedInferenceEvent[] = [];
   const result = await collectProviderInference(provider, route, request, new AbortController().signal, {
     now: fixedNow(10, 35),
+    onEvent: (event) => normalizedEvents.push(event),
   });
   assert.equal(result.text, 'Forge ready');
   assert.equal(result.finishReason, 'stop');
@@ -68,8 +72,15 @@ test('normalizes an Ollama text stream into bounded terminal evidence', async ()
       fallbackUsed: false,
     },
   });
+  assert.deepEqual(normalizedEvents.map((event) => event.type), [
+    'text.delta',
+    'text.delta',
+    'usage',
+    'response.completed',
+  ]);
   assert.deepEqual(posted, {
     model: 'fixture-model',
+    options: { num_ctx: 8_192, temperature: 0 },
     messages: [{ role: 'user', content: 'Inspect the workspace.' }],
     tools: [],
     stream: true,
@@ -124,6 +135,123 @@ test('normalizes Ollama and OpenAI tool streams to the same semantic call', asyn
   assert.equal((openAiBody as { parallel_tool_calls?: unknown }).parallel_tool_calls, false);
   assert.equal((openAiBody as { store?: unknown }).store, false);
 });
+test('replays complete OpenAI output items across store:false tool turns', async () => {
+  const bodies: Array<{ readonly input?: unknown; readonly store?: unknown }> = [];
+  let turn = 0;
+  const reasoningItem = {
+    type: 'reasoning',
+    id: 'reasoning-1',
+    encrypted_content: 'sealed-reasoning-fixture',
+    summary: [],
+  };
+  const functionArguments = JSON.stringify({ path: 'README.md', maxLines: 5 });
+  const functionItem = {
+    type: 'function_call',
+    id: 'function-1',
+    call_id: 'provider-call-1',
+    name: 'forge_workspace_read',
+    arguments: functionArguments,
+  };
+  const stream = (...events: readonly Record<string, unknown>[]): string =>
+    events.map((event) => 'data: ' + JSON.stringify(event)).join('\n\n') + '\n\n';
+  const provider = new OpenAiResponsesProvider({
+    apiKey: 'fixture-secret',
+    fetch: async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as { readonly input?: unknown; readonly store?: unknown });
+      turn++;
+      if (turn === 1) {
+        return new Response(stream(
+          { type: 'response.output_item.done', output_index: 0, item: reasoningItem },
+          {
+            type: 'response.output_item.added',
+            output_index: 1,
+            item: {
+              type: 'function_call',
+              id: 'function-1',
+              call_id: 'provider-call-1',
+              name: 'forge_workspace_read',
+              arguments: '',
+            },
+          },
+          { type: 'response.function_call_arguments.delta', output_index: 1, delta: functionArguments },
+          { type: 'response.output_item.done', output_index: 1, item: functionItem },
+          { type: 'response.completed', response: { usage: { input_tokens: 20, output_tokens: 4 } } },
+        ), { status: 200 });
+      }
+      return new Response(stream(
+        { type: 'response.output_text.delta', delta: 'done' },
+        {
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: {
+            type: 'message',
+            id: 'message-2',
+            role: 'assistant',
+            status: 'completed',
+            content: [{ type: 'output_text', text: 'done', annotations: [] }],
+          },
+        },
+        { type: 'response.completed', response: { usage: { input_tokens: 30, output_tokens: 2 } } },
+      ), { status: 200 });
+    },
+  });
+  const tool = developerEvidenceTools.find((candidate) => candidate.name === 'forge_workspace_read');
+  if (tool === undefined) throw new Error('Read tool fixture is missing.');
+  const firstRequest: ProviderInferenceRequest = {
+    requestId: 'inference:openai-one',
+    model: 'fixture-model',
+    messages: [{ role: 'user', content: 'Inspect the workspace.' }],
+    tools: [tool],
+  };
+  const first = await collectProviderInference(
+    provider,
+    { provider: 'openai', model: 'fixture-model' },
+    firstRequest,
+    new AbortController().signal,
+    { now: fixedNow(0, 1) },
+  );
+  const providerCall = first.toolCalls[0];
+  if (providerCall === undefined) throw new Error('OpenAI tool call fixture was not normalized.');
+  const second = await collectProviderInference(
+    provider,
+    { provider: 'openai', model: 'fixture-model' },
+    {
+      requestId: 'inference:openai-two',
+      model: 'fixture-model',
+      messages: [
+        ...firstRequest.messages,
+        { role: 'assistant', content: first.text, toolCalls: first.toolCalls },
+        {
+          role: 'tool',
+          toolCallId: providerCall.id,
+          name: providerCall.name,
+          content: '{"ok":true}',
+        },
+      ],
+      tools: [tool],
+    },
+    new AbortController().signal,
+    { now: fixedNow(2, 3) },
+  );
+  assert.equal(second.text, 'done');
+  assert.equal(bodies.length, 2);
+  assert.equal(bodies[1]?.store, false);
+  assert.deepEqual(bodies[1]?.input, [
+    { role: 'user', content: 'Inspect the workspace.' },
+    reasoningItem,
+    functionItem,
+    {
+      type: 'function_call_output',
+      call_id: 'provider-call-1',
+      output: '{"ok":true}',
+    },
+  ]);
+  const secondInput = bodies[1]?.input;
+  assert.ok(Array.isArray(secondInput));
+  assert.equal(secondInput.filter((item) =>
+    typeof item === 'object' && item !== null && (item as { type?: unknown }).type === 'function_call').length, 1);
+});
+
 
 test('runs a provider tool call and final response through the canonical Forge runtime', async () => {
   const observed: ProviderInferenceRequest[] = [];
@@ -150,24 +278,42 @@ test('runs a provider tool call and final response through the canonical Forge r
     },
   };
   const ids = ['inference:one', 'inference:two'];
+  const observations: ProviderInferenceObservation[] = [];
   const planner = new ProviderTaskPlanner({
     provider,
     route,
     tools: developerEvidenceTools,
     requestIdFactory: () => ids.shift() ?? 'exhausted',
     now: fixedNow(0, 5, 10, 17),
+    onInferenceEvent: (observation) => observations.push(observation),
   });
   const service = new ForgeWorkspaceService(resolve('tests/fixtures/slice1-workspace'), {
     runtime: typeScriptConformanceFixture,
     runIdFactory: () => 'run:provider-fixture',
   });
-  const artifact = await service.executeTask('Read the fixture README.', planner, { maxTurns: 2 });
+  const streamedRunEvents: string[] = [];
+  const artifact = await service.executeTask('Read the fixture README.', planner, {
+    maxTurns: 2,
+    onEvent: (event) => streamedRunEvents.push(event.type),
+  });
   service.close();
   assert.equal(artifact.status, 'completed');
   assert.equal(artifact.output, 'The README evidence was returned by Forge.');
   assert.equal(artifact.capabilityResults.length, 1);
   assert.equal(artifact.capabilityResults[0]?.success, true);
   assert.equal(artifact.inferenceEvidence?.length, 2);
+  assert.deepEqual(streamedRunEvents, artifact.events.map((event) => event.type));
+  assert.deepEqual(observations.map((observation) => ({
+    requestId: observation.requestId,
+    provider: observation.provider,
+    model: observation.model,
+    type: observation.event.type,
+  })), [
+    { requestId: 'inference:one', provider: 'ollama', model: 'fixture-model', type: 'tool_call.delta' },
+    { requestId: 'inference:one', provider: 'ollama', model: 'fixture-model', type: 'response.completed' },
+    { requestId: 'inference:two', provider: 'ollama', model: 'fixture-model', type: 'text.delta' },
+    { requestId: 'inference:two', provider: 'ollama', model: 'fixture-model', type: 'response.completed' },
+  ]);
   assert.deepEqual(artifact.events.map((event) => event.type), [
     'run.started',
     'context.planned',
@@ -180,7 +326,77 @@ test('runs a provider tool call and final response through the canonical Forge r
   ]);
   const toolResult = observed[1]?.messages.find((message) => message.role === 'tool');
   assert.equal(toolResult?.role, 'tool');
-  assert.match(toolResult?.content ?? '', /"path":"README.md"/u);
+  assert.match(toolResult?.content ?? '', /Forge capability evidence: workspace\.read/u);
+  assert.match(toolResult?.content ?? '', /path: README\.md/u);
+  assert.match(toolResult?.content ?? '', /1: # Slice 1 fixture/u);
+  assert.doesNotMatch(toolResult?.content ?? '', /"text":/u);
+  const system = observed[0]?.messages.find((message) => message.role === 'system');
+  assert.match(system?.content ?? '', /Final answers must directly answer the developer in plain text/u);
+  const developerContext = observed[0]?.messages.find((message) => message.role === 'user');
+  assert.match(developerContext?.content ?? '', /Manifest counts are not file contents or source evidence/u);
+  assert.match(developerContext?.content ?? '', /new planning turn begins and you may call one additional tool/u);
+  assert.doesNotMatch(developerContext?.content ?? '', /workspace:\/\//u);
+});
+
+test('fails closed when a provider prints a tool envelope as terminal text', async () => {
+  const provider: InferenceProvider = {
+    id: 'ollama',
+    locality: 'local',
+    async *stream(): AsyncGenerator<NormalizedInferenceEvent> {
+      yield {
+        type: 'text.delta',
+        text: '<tool_response>{"path":"src/live-cli.ts","startLine":130}</tool_response>',
+      };
+      yield { type: 'response.completed', finishReason: 'stop' };
+    },
+  };
+  const planner = new ProviderTaskPlanner({
+    provider,
+    route,
+    tools: developerEvidenceTools,
+    now: fixedNow(0, 1),
+  });
+  const service = new ForgeWorkspaceService(resolve('tests/fixtures/slice1-workspace'), {
+    runtime: typeScriptConformanceFixture,
+    runIdFactory: () => 'run:leaked-tool-envelope',
+  });
+  const artifact = await service.executeTask('Read source evidence.', planner);
+  service.close();
+  assert.equal(artifact.status, 'failed');
+  assert.equal(artifact.output, undefined);
+  assert.equal(artifact.capabilityResults.length, 0);
+  const terminal = artifact.events.at(-1);
+  assert.equal(terminal?.type, 'run.failed');
+  assert.equal(terminal?.type === 'run.failed' ? terminal.code : undefined, 'runtime_error');
+  assert.match(
+    terminal?.type === 'run.failed' ? terminal.message : '',
+    /tool-protocol envelope as terminal text/u,
+  );
+});
+
+test('compacts duplicate read evidence before returning it to a provider', () => {
+  const lines = Array.from({ length: 80 }, (_, index) => ({
+    line: index + 1,
+    text: 'const fixture' + index + ' = "bounded evidence";',
+  }));
+  const raw = JSON.stringify({
+    snapshotId: 'workspace:fixture',
+    path: 'src/example.ts',
+    sha256: 'a'.repeat(64),
+    startLine: 1,
+    endLine: 80,
+    totalLines: 100,
+    text: lines.map((line) => line.text).join('\n'),
+    lines,
+    truncated: true,
+  });
+  const compact = providerToolResultContent('workspace.read', raw);
+  assert.ok(compact.length < raw.length * 0.7);
+  assert.match(compact, /snapshot: workspace:fixture/u);
+  assert.match(compact, /range: 1-80 of 100/u);
+  assert.match(compact, /80: const fixture79/u);
+  assert.doesNotMatch(compact, /"text":/u);
+  assert.equal(providerToolResultContent('git.status', raw), raw);
 });
 
 test('fails explicit routing and multiple-tool violations without fallback', async () => {
@@ -189,6 +405,13 @@ test('fails explicit routing and multiple-tool violations without fallback', asy
   assert.throws(
     () => createInferenceProvider({ provider: 'openai', model: 'fixture' }, { environment: {} }),
     /OPENAI_API_KEY/u,
+  );
+  assert.throws(
+    () => createInferenceProvider(
+      { provider: 'ollama', model: 'fixture' },
+      { environment: { FORGE_OLLAMA_CONTEXT_TOKENS: '1024' } },
+    ),
+    /FORGE_OLLAMA_CONTEXT_TOKENS/u,
   );
   const invalidProvider: InferenceProvider = {
     id: 'ollama',
