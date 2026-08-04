@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { ApprovalFacts, CapabilityCall, RunArtifact } from './slice0/contracts.js';
-import { developerEvidenceTools } from './inference/developer-tools.js';
+import { developerChangePlanningTools, developerEvidenceTools } from './inference/developer-tools.js';
 import { ProviderTaskPlanner } from './inference/planner.js';
 import { createInferenceProvider, resolveInferenceRoute } from './inference/routing.js';
 import {
@@ -15,6 +15,8 @@ import {
 } from './interactive-cli.js';
 import type { InferenceRoute } from './inference/contracts.js';
 import { createRunCancellation, LiveCliPresenter } from './live-cli.js';
+import { extractInteractiveChangePlan } from './change-workflow.js';
+import { executeInteractiveChangePlan } from './interactive-change.js';
 import { startForgeMcpServer } from './mcp/server.js';
 import {
   probeForgeKernelBinary,
@@ -28,6 +30,7 @@ import {
   type SovereignChangeProposal,
 } from './hybrid/rust-sovereign-change-runtime.js';
 import { artifactPayload, ForgeWorkspaceService, type ForgeWorkspaceServiceOptions } from './v1/service.js';
+import { parseTrustedVerificationPolicy, selectVerificationCheckIds } from './verification-policy.js';
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -77,6 +80,7 @@ const executeProviderTask = async (
   maxTurns: number,
   timeoutMs: number,
   presenter?: LiveCliPresenter,
+  changePlanning = false,
 ): Promise<{
   readonly artifact: RunArtifact;
   readonly cancellationSource: ReturnType<typeof createRunCancellation>['source'];
@@ -89,20 +93,30 @@ const executeProviderTask = async (
     const planner = new ProviderTaskPlanner({
       provider: createInferenceProvider(route),
       route,
-      tools: developerEvidenceTools,
-      ...(presenter === undefined
+      tools: changePlanning ? developerChangePlanningTools : developerEvidenceTools,
+      ...(presenter === undefined || changePlanning
         ? {}
         : { onInferenceEvent: (observation) => presenter.onInferenceEvent(observation) }),
     });
-    const artifact = await workspaceService().executeTask(
-      task,
-      planner,
-      {
-        maxTurns,
-        ...(presenter === undefined ? {} : { onEvent: (event) => presenter.onRunEvent(event) }),
-      },
-      cancellation.signal,
-    );
+    const taskOptions = {
+      maxTurns,
+      ...(presenter === undefined
+        ? {}
+        : { onEvent: (event: RunArtifact['events'][number]) => presenter.onRunEvent(event) }),
+    };
+    const artifact = changePlanning
+      ? await workspaceService().executeChangePlanningTask(
+        task,
+        planner,
+        taskOptions,
+        cancellation.signal,
+      )
+      : await workspaceService().executeTask(
+        task,
+        planner,
+        taskOptions,
+        cancellation.signal,
+      );
     return { artifact, cancellationSource: cancellation.source };
   } finally {
     cancellation.dispose();
@@ -156,20 +170,13 @@ const loadProposal = async (path: string): Promise<SovereignChangeProposal> => {
 const loadVerificationPolicy = async (
   path: string,
 ): Promise<readonly TrustedVerificationCheckConfiguration[]> => {
-  const candidate = asRecord(await readJson(path, 'verification policy'));
-  if (candidate?.schemaVersion !== 1 || !Array.isArray(candidate.checks) || candidate.checks.length === 0) {
-    throw new Error('Verification policy JSON requires schemaVersion 1 and a non-empty checks array.');
-  }
-  return candidate.checks as unknown as readonly TrustedVerificationCheckConfiguration[];
+  return parseTrustedVerificationPolicy(await readJson(path, 'verification policy'));
 };
 
 const selectedChecks = (
   checks: readonly TrustedVerificationCheckConfiguration[],
 ): readonly string[] => {
-  const explicit = values.check?.split(',').map((value) => value.trim()).filter(Boolean);
-  return explicit === undefined || explicit.length === 0
-    ? checks.map((check) => check.checkId)
-    : explicit;
+  return selectVerificationCheckIds(checks, values.check);
 };
 
 const mutationApproval = (
@@ -219,6 +226,8 @@ const printChangeArtifact = (artifact: unknown): void => {
   if (typeof transaction?.changeSetId === 'string') console.log(`ChangeSet: ${transaction.changeSetId}`);
   if (typeof transaction?.candidateRetained === 'boolean') console.log(`Candidate retained: ${transaction.candidateRetained}`);
   if (Array.isArray(transaction?.verification)) console.log(`Verification checks: ${transaction.verification.length}`);
+  const outcome = asRecord(value?.outcome);
+  if (typeof outcome?.status === 'string') console.log(`Outcome: ${outcome.status}`);
   if (typeof value?.failure === 'string') console.log(`Failure: ${value.failure}`);
   if (typeof transaction?.failure === 'string') console.log(`Failure: ${transaction.failure}`);
 };
@@ -266,7 +275,7 @@ try {
       workspaceRoot,
       engineRoot: engineRoot(),
       readOnlyFeatures: ['summary', 'search', 'read', 'symbols', 'typescript-diagnostics', 'git-status', 'git-diff'],
-      changeFlow: kernelProbe?.ready === true ? 'forge.kernel.changeset.v2' : 'unavailable',
+      changeFlow: kernelProbe?.ready === true ? 'forge.kernel.changeset.v3' : 'unavailable',
       isolation: 'trusted verification; process lifecycle owned; no Forge-enforced OS sandbox',
     };
     if (!report.ok) process.exitCode = 1;
@@ -311,7 +320,6 @@ try {
   } else if (command === 'change') {
     const action = positionals[1];
     if (action === 'propose') {
-      requireConsent('forge change propose');
       const proposalPath = positionals[2];
       if (proposalPath === undefined || values.policy === undefined) {
         throw new Error('Usage: forge change propose <proposal.json> --policy <verification-policy.json> --approve [--check <id,id>]');
@@ -319,10 +327,18 @@ try {
       const proposal = await loadProposal(proposalPath);
       const checks = await loadVerificationPolicy(values.policy);
       const checkIds = selectedChecks(checks);
-      const input = { proposalSchemaVersion: proposal.schemaVersion, selectedCheckIds: checkIds };
+      const runtime = sovereignChangeRuntime(checks);
+      const prepared = await runtime.prepare(proposal);
+      if (!values.approve) {
+        throw new Error(
+          `forge change propose prepared ${prepared.changeSetId}; rerun with --approve only after reviewing this exact proposal.`,
+        );
+      }
+      const input = { changeSetId: prepared.changeSetId, selectedCheckIds: checkIds };
       const exact = mutationApproval('workspace.change.propose', input);
-      printChangeArtifact(await sovereignChangeRuntime(checks).propose(
+      printChangeArtifact(await runtime.propose(
         proposal,
+        prepared.changeSetId,
         checkIds,
         exact.call,
         exact.approvalFacts,
@@ -357,15 +373,53 @@ try {
     createInferenceProvider(selection.route);
     const maxTurns = integerOption(values['max-turns'], 8, '--max-turns');
     const timeoutMs = integerOption(values['timeout-ms'], 120_000, '--timeout-ms');
+    const verificationPolicyPath = values.policy ?? process.env.FORGE_VERIFICATION_POLICY;
+    if (values.check !== undefined && verificationPolicyPath === undefined) {
+      throw new Error('--check requires --policy or FORGE_VERIFICATION_POLICY in interactive mode.');
+    }
+    const verificationChecks = verificationPolicyPath === undefined
+      ? []
+      : await loadVerificationPolicy(verificationPolicyPath);
+    const checkIds = verificationChecks.length === 0 ? [] : selectedChecks(verificationChecks);
+    const changePlanning = verificationChecks.length > 0;
+    const io = createNodeInteractiveIo();
     await runInteractiveSession({
       workspaceRoot,
       initialRoute: selection,
-      io: createNodeInteractiveIo(),
+      io,
+      notices: [changePlanning
+        ? `changes: enabled with explicit approval; verification=${checkIds.join(', ')}`
+        : 'changes: disabled; start with --policy <file> or set FORGE_VERIFICATION_POLICY to enable verified edits'],
       validateRoute: (route) => { createInferenceProvider(route); },
       runTask: async (task, route) => {
         const presenter = new LiveCliPresenter();
-        const { artifact } = await executeProviderTask(task, route, maxTurns, timeoutMs, presenter);
+        const { artifact } = await executeProviderTask(
+          task,
+          route,
+          maxTurns,
+          timeoutMs,
+          presenter,
+          changePlanning,
+        );
+        const plan = extractInteractiveChangePlan(artifact);
+        if (plan === undefined && artifact.output !== undefined) {
+          presenter.printAssistantOutput(artifact.output);
+        }
         presenter.printSummary(artifact);
+        if (plan !== undefined) {
+          const cancellation = createRunCancellation(timeoutMs);
+          try {
+            await executeInteractiveChangePlan({
+              plan,
+              checkIds,
+              runtime: sovereignChangeRuntime(verificationChecks),
+              io,
+              signal: cancellation.signal,
+            });
+          } finally {
+            cancellation.dispose();
+          }
+        }
         return { runId: artifact.runId, status: artifact.status, outcome: artifact.outcome.status };
       },
     });
@@ -401,6 +455,7 @@ try {
       'Interactive:',
       '  forge [--provider <ollama|openai> --model <model>] [--workspace <path>]',
       '    With no route flags, Forge auto-discovers an installed local Ollama model.',
+      '    Add --policy <verification-policy.json> (or FORGE_VERIFICATION_POLICY) to enable reviewed, verified edits.',
       '    Slash controls: /help, /status, /model, /clear, /exit.',
       '',
       'Core change flow:',

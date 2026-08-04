@@ -127,6 +127,7 @@ export interface InteractiveSessionOptions {
   readonly io: InteractiveSessionIo;
   readonly runTask: (task: string, route: InferenceRoute) => Promise<InteractiveRunSummary>;
   readonly validateRoute?: (route: InferenceRoute) => void | Promise<void>;
+  readonly notices?: readonly string[];
 }
 
 const sessionHelp = [
@@ -182,6 +183,7 @@ export async function runInteractiveSession(options: InteractiveSessionOptions):
   options.io.write('ForgeEngine alpha');
   options.io.write('workspace: ' + options.workspaceRoot);
   options.io.write('route: ' + routeLabel(selection));
+  for (const notice of options.notices ?? []) options.io.write(notice);
   options.io.write('Each prompt creates a new evidence run. Type /help for controls.');
 
   try {

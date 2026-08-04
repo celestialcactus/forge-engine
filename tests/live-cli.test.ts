@@ -127,6 +127,37 @@ test('streams human text while presenting canonical run status and a terminal ev
   assert.equal(stderr.includes('Forge ready'), false);
 });
 
+test('prints a buffered assistant answer when the caller withheld live deltas', () => {
+  let stdout = '';
+  const presenter = new LiveCliPresenter({
+    stdout: (chunk) => { stdout += chunk; },
+    stderr: () => {},
+  });
+  presenter.printAssistantOutput('Evidence-backed answer.');
+  assert.equal(stdout, 'assistant> Evidence-backed answer.\n');
+});
+
+test('shows a bounded single-line capability failure reason', () => {
+  let stderr = '';
+  const presenter = new LiveCliPresenter({
+    stdout: () => {},
+    stderr: (chunk) => { stderr += chunk; },
+  });
+  presenter.onRunEvent({
+    runId: 'run:failure',
+    sequence: 1,
+    type: 'capability.completed',
+    result: {
+      callId: 'call:failure',
+      success: false,
+      content: 'invalid input\n' + 'x'.repeat(500),
+    },
+  });
+  assert.match(stderr, /capability failed: call:failure - invalid input x+/u);
+  assert.equal(stderr.includes('\nxxxxxxxx'), false);
+  assert.ok(stderr.length < 400);
+});
+
 test('turns the first SIGINT into a cancellable run signal and removes the listener', () => {
   const interrupts = new EventEmitter();
   const cancellation = createRunCancellation(10_000, interrupts);

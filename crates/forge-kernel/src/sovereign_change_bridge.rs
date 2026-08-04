@@ -7,7 +7,8 @@ use std::{
 };
 
 use forge_core::{
-    ApprovalFacts, ApprovalOutcome, Cancellation, CapabilityCall, IsolationPolicy,
+    ApprovalDecision, ApprovalFacts, ApprovalOutcome, Cancellation, CapabilityCall,
+    IsolationPolicy, SOVEREIGN_CHANGE_PROPOSE_CAPABILITY_ID, SovereignChangeApproval,
     SovereignChangeConfig, SovereignChangeProposal, SovereignChangeService, VerificationCheck,
     resolve_approval,
 };
@@ -21,9 +22,32 @@ use crate::protocol::{
 
 const MAX_REQUEST_ID_BYTES: usize = 128;
 const MAX_CANCELLATION_REASON_BYTES: usize = 512;
-const CHANGE_PROPOSE_CAPABILITY_ID: &str = "workspace.change.propose";
+
 const CHANGE_ACCEPT_CAPABILITY_ID: &str = "workspace.change.accept";
 const CHANGE_DISCARD_CAPABILITY_ID: &str = "workspace.change.discard";
+
+fn project_prepare_artifact(mut artifact: Value) -> Value {
+    let Some(operations) = artifact.get_mut("operations").and_then(Value::as_array_mut) else {
+        return artifact;
+    };
+    for operation in operations {
+        let Some(fields) = operation.as_object_mut() else {
+            continue;
+        };
+        for (wire_name, host_name) in [
+            ("before_sha256", "beforeSha256"),
+            ("before_mode", "beforeMode"),
+            ("after_mode", "afterMode"),
+            ("from_path", "fromPath"),
+            ("to_path", "toPath"),
+        ] {
+            if let Some(value) = fields.remove(wire_name) {
+                fields.insert(host_name.to_owned(), value);
+            }
+        }
+    }
+    artifact
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -79,8 +103,12 @@ struct EnvironmentEntry {
     deny_unknown_fields
 )]
 enum SovereignChangeOperation {
+    Prepare {
+        proposal: SovereignChangeProposal,
+    },
     Propose {
         proposal: SovereignChangeProposal,
+        expected_change_set_id: String,
         selected_check_ids: Vec<String>,
         call: CapabilityCall,
         approval_facts: ApprovalFacts,
@@ -176,7 +204,7 @@ fn validate_approval(
     facts: &ApprovalFacts,
     expected_capability: &str,
     expected_input: Value,
-) -> Result<(), SovereignChangeFailure> {
+) -> Result<ApprovalDecision, SovereignChangeFailure> {
     if call.capability_id != expected_capability
         || call.input != expected_input
         || facts.call_id != call.id
@@ -200,7 +228,7 @@ fn validate_approval(
             message: decision.reason,
         });
     }
-    Ok(())
+    Ok(decision)
 }
 
 fn build_service(
@@ -299,6 +327,20 @@ pub fn execute(
     let service = build_service(&start.config, &request_id)?;
     let cancellation = Arc::new(CancellationState::default());
     let (operation, artifact) = match start.operation {
+        SovereignChangeOperation::Prepare { proposal } => {
+            let artifact =
+                service
+                    .prepare(&proposal)
+                    .map_err(|message| SovereignChangeFailure {
+                        request_id: Some(request_id.clone()),
+                        code: "change_prepare_failed",
+                        message,
+                    })?;
+            (
+                "prepare",
+                serde_json::to_value(artifact).map(project_prepare_artifact),
+            )
+        }
         SovereignChangeOperation::Inspect { transaction_id } => {
             let artifact =
                 service
@@ -312,17 +354,18 @@ pub fn execute(
         }
         SovereignChangeOperation::Propose {
             proposal,
+            expected_change_set_id,
             selected_check_ids,
             call,
             approval_facts,
             initial_cancellation_reason,
         } => {
-            validate_approval(
+            let approval_decision = validate_approval(
                 &call,
                 &approval_facts,
-                CHANGE_PROPOSE_CAPABILITY_ID,
+                SOVEREIGN_CHANGE_PROPOSE_CAPABILITY_ID,
                 json!({
-                    "proposalSchemaVersion": proposal.schema_version,
+                    "changeSetId": expected_change_set_id,
                     "selectedCheckIds": selected_check_ids,
                 }),
             )?;
@@ -337,10 +380,17 @@ pub fn execute(
             thread::spawn(move || {
                 cancellation_reader(reader, reader_request_id, reader_cancellation)
             });
+            let approval = SovereignChangeApproval {
+                expected_change_set_id,
+                selected_check_ids,
+                call,
+                facts: approval_facts,
+                decision: approval_decision,
+            };
             let artifact = service.propose(
                 &proposal,
+                &approval,
                 verification_checks(&start.config),
-                &selected_check_ids,
                 cancellation.as_ref(),
             );
             ("propose", serde_json::to_value(artifact))
@@ -456,19 +506,20 @@ mod tests {
             "operation": {
                 "kind": "propose",
                 "proposal": proposal,
+                "expectedChangeSetId": "changeset:test",
                 "selectedCheckIds": ["test"],
                 "call": {
                     "id": "call:test",
-                    "capabilityId": CHANGE_PROPOSE_CAPABILITY_ID,
+                    "capabilityId": SOVEREIGN_CHANGE_PROPOSE_CAPABILITY_ID,
                     "input": {
-                        "proposalSchemaVersion": 1,
+                        "changeSetId": "changeset:test",
                         "selectedCheckIds": ["test"]
                     }
                 },
                 "approvalFacts": {
                     "schemaVersion": 1,
                     "callId": "call:test",
-                    "capabilityId": CHANGE_PROPOSE_CAPABILITY_ID,
+                    "capabilityId": SOVEREIGN_CHANGE_PROPOSE_CAPABILITY_ID,
                     "hostPolicy": {
                         "posture": "ask",
                         "source": "test",
@@ -500,6 +551,27 @@ mod tests {
             parsed.operation,
             SovereignChangeOperation::Propose { .. }
         ));
+    }
+
+    #[test]
+    fn projects_prepared_operation_fields_to_the_camel_case_host_contract() {
+        let projected = project_prepare_artifact(json!({
+            "schemaVersion": 2,
+            "operations": [{
+                "kind": "move",
+                "from_path": "before.txt",
+                "to_path": "after.txt",
+                "before_sha256": "digest",
+                "before_mode": "regular",
+                "after_mode": "regular"
+            }]
+        }));
+        assert_eq!(projected["operations"][0]["fromPath"], "before.txt");
+        assert_eq!(projected["operations"][0]["toPath"], "after.txt");
+        assert_eq!(projected["operations"][0]["beforeSha256"], "digest");
+        assert_eq!(projected["operations"][0]["beforeMode"], "regular");
+        assert_eq!(projected["operations"][0]["afterMode"], "regular");
+        assert!(projected["operations"][0].get("before_sha256").is_none());
     }
 
     #[test]

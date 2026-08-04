@@ -1,5 +1,84 @@
 # Architecture Changelog
 
+## 2026-08-04 - Interactive edit composition accepted
+
+- Accepted CLI ship lane increment 4B-2 at implementation `bbf119e`. Local
+  typecheck, all 76 tests, and production build pass; Node passed on Windows/macOS
+  in Actions run `30933939503`; the real Rust-kernel/TypeScript product passed on
+  Windows/macOS/Ubuntu in Actions run `30933939342`.
+- A disposable Qwen 7B flow completed one read, one plan, exact diff review,
+  explicit candidate approval, successful verification, and explicit promotion.
+  The workspace changed only after Rust reported `promoted`, and governed provider
+  prose remained hidden before the decision UI.
+- A fresh trusted VS Code Agent chat exposed exactly seven read-only Forge tools and
+  completed one workspace-summary call in four seconds with no built-ins, retries,
+  or mutation surface. See [Checkpoint 64](checkpoints/2026-08-04-64-interactive-edit-accepted.md).
+- Increment 4B-3 remains open: planning currently completes before the Rust
+  transaction begins, so one Rust-owned continuable lifecycle is not yet proven.
+## 2026-08-04 - Interactive edit presentation truthfulness
+
+- Stopped streaming provider prose directly during a policy-enabled change-planning
+  turn. A no-plan turn still prints the completed buffered answer, while a valid
+  plan is presented only through Forge's diff, approval, verification, and Rust
+  transaction-state UI.
+- This is a presentation-boundary correction, not a new source of authority. A live
+  Qwen 7B acceptance flow had correctly waited for approval and Rust promotion but
+  its prose prematurely said that the replacement had occurred.
+- Typecheck, all 76 tests, and the production build pass locally. Exact-head hosted
+  and controlled VS Code acceptance remain pending.
+
+## 2026-08-04 - Interactive edit composition local gate
+
+- Implemented CLI-only, policy-enabled change planning over the accepted Rust
+  ChangeSet v2 transaction authority. Ordinary CLI, one-shot inference, and MCP
+  remain seven-tool read-only surfaces.
+- Moved opaque digest and diff-budget bookkeeping out of the model schema. Forge now
+  requires complete prior read coverage at the same digest, cross-checks retained
+  content/diff against Rust preparation, and keeps both execution and promotion
+  behind visible developer decisions.
+- Added strict trusted-only policy parsing, bounded capability failure reasons, and
+  fail-closed detection for registered tool calls printed as terminal JSON.
+- Low-compute Qwen tests found an honest model floor: 0.5B/1.5B did not sequence the
+  read, 3B leaked/malformed calls, and 7B produced one complete read plus one valid
+  plan for a clear replacement.
+- That 7B test exposed snake_case operation fields in the prepared Rust artifact.
+  The v3 bridge now projects them to the camelCase host contract without changing
+  durable/core ChangeSet serialization. No candidate or source mutation occurred.
+- Recorded [ADR-0024](ADRs/ADR-0024-model-plan-and-rust-change-composition.md) and
+  [Checkpoint 63](checkpoints/2026-08-04-63-interactive-edit-local-gate.md). Hosted
+  native/product, exact-kernel full edit, VS Code, and aggregate RunArtifact gates
+  remain open.
+
+## 2026-08-04 - Prepared ChangeSet approval binding accepted
+
+- Accepted CLI ship lane increment 4B-1 at exact implementation `3262e3b` after
+  Node passed on Windows/macOS (Actions run `30925912676`) and the real
+  Rust-kernel/TypeScript product passed on Windows/macOS/Ubuntu (Actions run
+  `30925913647`).
+- Downloaded exact Windows artifact `8899186885`; doctor, 41/41 hybrid tests, and
+  product smoke pass locally with sovereign change protocol v3.
+- The initial full local hybrid attempt exposed only an artifact-location assumption:
+  auto-discovery intentionally ignores the environment override. Placing the exact
+  unchanged binary in ignored `target/release` closed it without a source fix.
+- Recorded [Checkpoint 62](checkpoints/2026-08-04-62-prepared-changeset-accepted.md).
+  Increment 4B-2 interactive provider edit/diff/approval/accept-discard composition
+  is next; MCP remains read-only.
+## 2026-08-04 - Prepared ChangeSet approval binding opened
+
+- Opened CLI ship lane increment 4B from merged `develop` at `742b8c8` on
+  `feature/cli-edit-verification-composition`.
+- The pre-implementation audit found that the expert change command approved only a
+  proposal schema version and verifier list; the actual ChangeSet was constructed
+  afterward and approval attribution was not retained in its artifact.
+- Added the bounded design in
+  [ADR-0023](ADRs/ADR-0023-prepared-changeset-approval-binding.md): Rust prepares an
+  exact non-mutating ChangeSet, approved execution recomputes it, stale identity
+  fails before candidate creation, and the artifact retains the exact approved call,
+  facts, Rust decision, contract, and outcome.
+- Local typecheck, 63/63 ordinary tests, build, Rust formatting, all-target compile,
+  and strict clippy pass. Hosted native/hybrid and interactive composition gates
+  remain open; no MCP mutation tool was added. See
+  [Checkpoint 61](checkpoints/2026-08-04-61-prepared-changeset-local-gate.md).
 ## 2026-08-04 - Rust-authoritative outcome contract accepted
 
 - Accepted CLI ship lane increment 4A at `be2069a` after Node 22 passed on Windows

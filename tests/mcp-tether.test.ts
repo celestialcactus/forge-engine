@@ -28,7 +28,7 @@ test('marks an unmet outcome as an MCP error even when the adapter call succeede
       id: 'output',
       kind: 'output_non_empty' as const,
       satisfied: false,
-      explanation: 'Planner output contained 0 characters and did not include non-whitespace content.',
+      explanation: 'Observed outcome value contained 0 characters and did not include non-whitespace content.',
     }],
   };
   const artifact: RunArtifact = {

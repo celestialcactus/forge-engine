@@ -1,8 +1,8 @@
 # CLI ship lane 4: developer capability pack
 
-**Status:** active; increment 4A accepted, increment 4B next
-**Branch:** `feature/cli-outcome-verification`
-**Base:** merged live CLI `develop` at `0441d865` (PR #17)
+**Status:** active; increments 4A, 4B-1, and 4B-2 accepted; 4B-3 lifecycle convergence next
+**Branch:** `feature/cli-edit-verification-composition`
+**Base:** merged outcome-contract `develop` at `742b8c8` (PR #18)
 
 ## Objective
 
@@ -69,6 +69,47 @@ Reuse accepted machinery instead of adding generic powers:
 6. present diff, verification evidence, outcome, and accept/discard choices through
    the CLI;
 7. keep MCP mutation disabled until the local CLI flow is accepted.
+
+### Increment 4B-1: prepared identity and approval binding
+
+[ADR-0023](../decisions/ADRs/ADR-0023-prepared-changeset-approval-binding.md)
+requires Rust to prepare the exact ChangeSet before consent, bind approval to that
+identity and the selected verifier set, reject a changed identity before candidate
+mutation, and retain the approved call, attributable facts, final decision, outcome
+contract, and assessment. Protocol v3 and artifact schema 2 implement that bounded
+primitive. [Checkpoint 61](../decisions/checkpoints/2026-08-04-61-prepared-changeset-local-gate.md)
+records the local gate. [Checkpoint 62](../decisions/checkpoints/2026-08-04-62-prepared-changeset-accepted.md)
+records exact-head hosted Windows/macOS/Ubuntu, 41/41 exact Windows-kernel hybrid,
+and product-smoke acceptance.
+
+This is machinery, not the finished developer UX. The following increment must
+compose the existing TypeScript digest-bound plan/diff, a visible interactive
+approval callback, Rust candidate verification, and explicit accept/discard without
+adding a second runtime or an MCP mutation tool.
+
+### Increment 4B-2: interactive edit composition
+
+[ADR-0024](../decisions/ADRs/ADR-0024-model-plan-and-rust-change-composition.md)
+keeps the model on a CLI-only, non-mutating `{path, content}` adapter while Forge
+owns complete-read coverage, digest/diff bounds, and exact TypeScript/Rust identity
+comparison. The first prompt authorizes only the prepared ChangeSet plus verifier
+IDs; Rust owns candidate execution and outcome; a second prompt accepts, discards,
+or retains the verified transaction. Policy parsing is strict and trusted-only, and
+MCP remains seven read-only tools.
+
+[Checkpoint 63](../decisions/checkpoints/2026-08-04-63-interactive-edit-local-gate.md)
+records the local implementation and low-model failure evidence. [Checkpoint 64](../decisions/checkpoints/2026-08-04-64-interactive-edit-accepted.md)
+records exact-head hosted Windows/macOS/Ubuntu, a full promoted Qwen flow, and the
+controlled one-call VS Code acceptance gate. The planning RunArtifact and Rust
+transaction artifact are still not one durable continuable lifecycle record.
+
+### Increment 4B-3: Rust-owned lifecycle convergence
+
+Do not add a TypeScript aggregate that merely points at two completed artifacts.
+The runtime must retain the evidence-selected plan, exact approval, candidate
+verification, and terminal promotion/discard/retain state under one Rust-owned,
+continuable task lifecycle. The design must preserve the accepted seven-tool MCP
+surface and reuse the ChangeSet v2 transaction authority.
 
 ### 4B exit gate
 

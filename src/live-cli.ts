@@ -27,6 +27,11 @@ const tokenTotal = (
   return values.length === 0 ? undefined : values.reduce((total, value) => total + value, 0);
 };
 
+const failurePreview = (content: string): string => {
+  const singleLine = content.replace(/[\u0000-\u001f\u007f]+/gu, ' ').replace(/\s+/gu, ' ').trim();
+  return singleLine.length <= 320 ? singleLine : singleLine.slice(0, 317) + '...';
+};
+
 export class LiveCliPresenter {
   readonly #sink: LiveCliSink;
   #textOpen = false;
@@ -80,9 +85,11 @@ export class LiveCliPresenter {
     } else if (event.type === 'approval.decided') {
       this.#status('approval ' + event.outcome + ': ' + event.callId);
     } else if (event.type === 'capability.completed') {
+      const detail = event.result.success ? '' : failurePreview(event.result.content);
       this.#status(
         'capability ' + (event.result.success ? 'completed' : 'failed')
-        + ': ' + event.result.callId,
+        + ': ' + event.result.callId
+        + (detail.length === 0 ? '' : ' - ' + detail),
       );
     } else if (event.type === 'run.failed') {
       this.#status('run failed: ' + event.code + ' - ' + event.message);
@@ -94,6 +101,11 @@ export class LiveCliPresenter {
         + ' budget=' + event.plan.budgetBytes,
       );
     }
+  }
+
+  printAssistantOutput(output: string): void {
+    this.#closeText();
+    this.#sink.stdout('assistant> ' + output + (output.endsWith('\n') ? '' : '\n'));
   }
 
   printSummary(artifact: RunArtifact): void {

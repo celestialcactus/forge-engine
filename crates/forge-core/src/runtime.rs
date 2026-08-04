@@ -2,10 +2,10 @@ use crate::context::{compile_context, required_context_bytes};
 use crate::contracts::{
     ApprovalDecision, ApprovalFacts, ApprovalOutcome, CapabilityCall, CapabilityResult,
     ContextItemKind, ContextPlan, HostPolicyPosture, InferenceCostStatus, InferenceEvidence,
-    InferenceFinishReason, InferenceLocality, OutcomeAssessment, OutcomeCheck, OutcomeContract,
-    OutcomeRequirement, OutcomeRequirementKind, OutcomeStatus, PlannerRequest, PlannerTurn,
-    RunArtifact, RunEvent, RunEventData, RunRequest, RunStatus, UserConsentStatus,
-    WorkspaceSnapshot,
+    InferenceFinishReason, InferenceLocality, OutcomeAssessment, OutcomeCapabilityAttempt,
+    OutcomeCheck, OutcomeContract, OutcomeRequirement, OutcomeRequirementKind, OutcomeStatus,
+    PlannerRequest, PlannerTurn, RunArtifact, RunEvent, RunEventData, RunRequest, RunStatus,
+    UserConsentStatus, WorkspaceSnapshot,
 };
 
 fn valid_usd_amount(amount: &str) -> bool {
@@ -169,16 +169,10 @@ fn outcome_contract_error(contract: &OutcomeContract) -> Option<String> {
     None
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct CapabilityAttempt {
-    capability_id: String,
-    success: bool,
-}
-
-fn assess_outcome(
+pub fn assess_outcome(
     contract: Option<&OutcomeContract>,
     output: &str,
-    attempts: &[CapabilityAttempt],
+    attempts: &[OutcomeCapabilityAttempt],
 ) -> OutcomeAssessment {
     let Some(contract) = contract else {
         return not_evaluated_outcome(
@@ -197,7 +191,7 @@ fn assess_outcome(
                     kind: OutcomeRequirementKind::OutputNonEmpty,
                     satisfied,
                     explanation: format!(
-                        "Planner output contained {characters} characters and {} non-whitespace content.",
+                        "Observed outcome value contained {characters} characters and {} non-whitespace content.",
                         if satisfied { "included" } else { "did not include" }
                     ),
                 }
@@ -209,9 +203,9 @@ fn assess_outcome(
                     kind: OutcomeRequirementKind::OutputEquals,
                     satisfied,
                     explanation: if satisfied {
-                        "Planner output matched the caller-authored expected value.".to_owned()
+                        "Observed outcome value matched the caller-authored expected value.".to_owned()
                     } else {
-                        "Planner output did not match the caller-authored expected value.".to_owned()
+                        "Observed outcome value did not match the caller-authored expected value.".to_owned()
                     },
                 }
             }
@@ -374,7 +368,7 @@ struct RunState {
     status: RunStatus,
     context_plan: Option<ContextPlan>,
     capability_results: Vec<CapabilityResult>,
-    capability_attempts: Vec<CapabilityAttempt>,
+    capability_attempts: Vec<OutcomeCapabilityAttempt>,
     inference_evidence: Vec<InferenceEvidence>,
     outcome: OutcomeAssessment,
     output: Option<String>,
@@ -594,7 +588,7 @@ impl Slice0Runtime<'_> {
                 success: false,
                 content: format!("{outcome}: {}", decision.reason),
             };
-            state.capability_attempts.push(CapabilityAttempt {
+            state.capability_attempts.push(OutcomeCapabilityAttempt {
                 capability_id: call.capability_id,
                 success: result.success,
             });
@@ -635,7 +629,7 @@ impl Slice0Runtime<'_> {
                 ),
             }
         };
-        state.capability_attempts.push(CapabilityAttempt {
+        state.capability_attempts.push(OutcomeCapabilityAttempt {
             capability_id: call.capability_id,
             success: result.success,
         });

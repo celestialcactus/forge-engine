@@ -67,6 +67,12 @@ pub struct OutcomeAssessment {
     pub checks: Vec<OutcomeCheck>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutcomeCapabilityAttempt {
+    pub capability_id: String,
+    pub success: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ApprovalOutcome {
