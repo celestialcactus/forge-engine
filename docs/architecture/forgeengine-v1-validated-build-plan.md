@@ -115,11 +115,12 @@ broader V1 slices remain authoritative capability goals.
    direct OpenAI Responses transport use normalized text/tool/usage/finish evidence
    with explicit routing and no fallback. The canonical `TaskPlanner` bridge is
    retained; the fake inventory-backed `forge run` and superseded public candidate
-   surface are removed. OpenAI is transport-conformant, not live-accepted, because
-   no cloud credential was present. **Exit achieved:** hosted Windows/macOS/Ubuntu,
+   surface are removed. OpenAI was transport-conformant rather than live-accepted
+   at that merge because no cloud credential was present; credentialed live
+   acceptance is recorded under increment 3. **Exit achieved:** hosted Windows/macOS/Ubuntu,
    exact-kernel product, live local text/tool, cancellation/error conformance, and
    controlled VS Code gates pass.
-3. **Live CLI loop - local machinery, Qwen reliability, and interactive DX gates implemented on feature/cli-live-loop; not yet accepted.**
+3. **Live CLI loop - local and live-provider gates complete on `feature/cli-live-loop`; exact-head hosted revalidation pending.**
    Validated provider text streams in human mode, canonical Rust lifecycle status
    remains authoritative, --json stays terminal-only, and Ctrl+C/deadline
    cancellation share one abort path. Ollama now declares an 8K context, uses
@@ -127,18 +128,21 @@ broader V1 slices remain authoritative capability goals.
    printed tool-protocol envelopes. Plain forge auto-discovers local Ollama, shows
    effective state, and accepts repeated independent prompts and slash controls.
    Live Qwen text, repeated one-tool continuation, JSON isolation, timeout cleanup,
-   typecheck, 57 tests, and build pass locally. A measured 0.5B/1.5B/3B/7B ladder
+   typecheck, 58 tests, and build pass locally. A measured 0.5B/1.5B/3B/7B ladder
    also removed locator-only pseudo-context, reduced the 7B one-read input about
    29.5%, and established task-specific floors without adding automatic routing.
-   A two-tool Qwen stress case still stopped early and hallucinated; runtime
-   completion is not outcome verification. **Exit:** a developer launches plain
+   An earlier two-tool Qwen stress case stopped early and hallucinated. The
+   corrected synthetic two-tool flow now passes through both Qwen 7B and OpenAI,
+   but runtime completion is still not outcome verification. **Exit:** a developer launches plain
    forge, sees effective provider/model/workspace state, completes an
    evidence-backed repository task interactively without reconstructing flags, and
    the hosted plus controlled VS Code gates pass. **Controlled VS Code achieved:**
    one summary call returned the canonical evidence/event projection without a
    retry loop. **Hosted achieved:** Node passed on Windows/macOS and the real
    Rust-kernel/TypeScript product passed on Windows/macOS/Ubuntu at `5326122`.
-   The developer-controlled live OpenAI credential gate remains open.
+   Credentialed synthetic OpenAI text, bounded-read, and search-to-read gates now
+   pass. The exact patched head still requires hosted Windows/macOS/Ubuntu
+   revalidation before increment 3 is accepted and merged.
 4. **Developer capability pack.** Bounded read/search, patch/edit, process/test,
    Git status/diff, and verification over the accepted authority. Add an explicit
    outcome-verification state that distinguishes a valid terminal planner turn from

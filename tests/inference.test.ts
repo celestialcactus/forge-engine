@@ -135,6 +135,123 @@ test('normalizes Ollama and OpenAI tool streams to the same semantic call', asyn
   assert.equal((openAiBody as { parallel_tool_calls?: unknown }).parallel_tool_calls, false);
   assert.equal((openAiBody as { store?: unknown }).store, false);
 });
+test('replays complete OpenAI output items across store:false tool turns', async () => {
+  const bodies: Array<{ readonly input?: unknown; readonly store?: unknown }> = [];
+  let turn = 0;
+  const reasoningItem = {
+    type: 'reasoning',
+    id: 'reasoning-1',
+    encrypted_content: 'sealed-reasoning-fixture',
+    summary: [],
+  };
+  const functionArguments = JSON.stringify({ path: 'README.md', maxLines: 5 });
+  const functionItem = {
+    type: 'function_call',
+    id: 'function-1',
+    call_id: 'provider-call-1',
+    name: 'forge_workspace_read',
+    arguments: functionArguments,
+  };
+  const stream = (...events: readonly Record<string, unknown>[]): string =>
+    events.map((event) => 'data: ' + JSON.stringify(event)).join('\n\n') + '\n\n';
+  const provider = new OpenAiResponsesProvider({
+    apiKey: 'fixture-secret',
+    fetch: async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as { readonly input?: unknown; readonly store?: unknown });
+      turn++;
+      if (turn === 1) {
+        return new Response(stream(
+          { type: 'response.output_item.done', output_index: 0, item: reasoningItem },
+          {
+            type: 'response.output_item.added',
+            output_index: 1,
+            item: {
+              type: 'function_call',
+              id: 'function-1',
+              call_id: 'provider-call-1',
+              name: 'forge_workspace_read',
+              arguments: '',
+            },
+          },
+          { type: 'response.function_call_arguments.delta', output_index: 1, delta: functionArguments },
+          { type: 'response.output_item.done', output_index: 1, item: functionItem },
+          { type: 'response.completed', response: { usage: { input_tokens: 20, output_tokens: 4 } } },
+        ), { status: 200 });
+      }
+      return new Response(stream(
+        { type: 'response.output_text.delta', delta: 'done' },
+        {
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: {
+            type: 'message',
+            id: 'message-2',
+            role: 'assistant',
+            status: 'completed',
+            content: [{ type: 'output_text', text: 'done', annotations: [] }],
+          },
+        },
+        { type: 'response.completed', response: { usage: { input_tokens: 30, output_tokens: 2 } } },
+      ), { status: 200 });
+    },
+  });
+  const tool = developerEvidenceTools.find((candidate) => candidate.name === 'forge_workspace_read');
+  if (tool === undefined) throw new Error('Read tool fixture is missing.');
+  const firstRequest: ProviderInferenceRequest = {
+    requestId: 'inference:openai-one',
+    model: 'fixture-model',
+    messages: [{ role: 'user', content: 'Inspect the workspace.' }],
+    tools: [tool],
+  };
+  const first = await collectProviderInference(
+    provider,
+    { provider: 'openai', model: 'fixture-model' },
+    firstRequest,
+    new AbortController().signal,
+    { now: fixedNow(0, 1) },
+  );
+  const providerCall = first.toolCalls[0];
+  if (providerCall === undefined) throw new Error('OpenAI tool call fixture was not normalized.');
+  const second = await collectProviderInference(
+    provider,
+    { provider: 'openai', model: 'fixture-model' },
+    {
+      requestId: 'inference:openai-two',
+      model: 'fixture-model',
+      messages: [
+        ...firstRequest.messages,
+        { role: 'assistant', content: first.text, toolCalls: first.toolCalls },
+        {
+          role: 'tool',
+          toolCallId: providerCall.id,
+          name: providerCall.name,
+          content: '{"ok":true}',
+        },
+      ],
+      tools: [tool],
+    },
+    new AbortController().signal,
+    { now: fixedNow(2, 3) },
+  );
+  assert.equal(second.text, 'done');
+  assert.equal(bodies.length, 2);
+  assert.equal(bodies[1]?.store, false);
+  assert.deepEqual(bodies[1]?.input, [
+    { role: 'user', content: 'Inspect the workspace.' },
+    reasoningItem,
+    functionItem,
+    {
+      type: 'function_call_output',
+      call_id: 'provider-call-1',
+      output: '{"ok":true}',
+    },
+  ]);
+  const secondInput = bodies[1]?.input;
+  assert.ok(Array.isArray(secondInput));
+  assert.equal(secondInput.filter((item) =>
+    typeof item === 'object' && item !== null && (item as { type?: unknown }).type === 'function_call').length, 1);
+});
+
 
 test('runs a provider tool call and final response through the canonical Forge runtime', async () => {
   const observed: ProviderInferenceRequest[] = [];
@@ -217,6 +334,7 @@ test('runs a provider tool call and final response through the canonical Forge r
   assert.match(system?.content ?? '', /Final answers must directly answer the developer in plain text/u);
   const developerContext = observed[0]?.messages.find((message) => message.role === 'user');
   assert.match(developerContext?.content ?? '', /Manifest counts are not file contents or source evidence/u);
+  assert.match(developerContext?.content ?? '', /new planning turn begins and you may call one additional tool/u);
   assert.doesNotMatch(developerContext?.content ?? '', /workspace:\/\//u);
 });
 

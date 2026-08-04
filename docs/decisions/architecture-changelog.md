@@ -1,5 +1,27 @@
 # Architecture Changelog
 
+## 2026-08-03 - Credentialed OpenAI multi-turn gate
+
+- A conservative synthetic text call proved the persisted project key and direct
+  Responses endpoint without sending Forge repository data.
+- One-read passed, but dependent search-to-read stopped early. The audit found that
+  the `store: false` adapter did not replay exact OpenAI output items and that
+  "one tool in this turn" was ambiguous to GPT-5.6 Sol.
+- The adapter now replays bounded provider-private output items, including encrypted
+  reasoning state, alongside the next function result. That state remains outside
+  the canonical artifact and event contract.
+- Planner wording now says one tool per provider response and explicitly permits a
+  new tool after Forge returns a result. The runtime one-call-per-response invariant
+  is unchanged.
+- Full local validation passed typecheck, 58/58 tests, and build. Final synthetic
+  search-to-read passed on both GPT-5.6 Sol and Qwen 7B with three inference turns,
+  two successful capabilities, and 12 canonical events.
+- Earlier terminal responses were mechanically `completed` while failing the
+  requested outcome. This is retained as the concrete gate for increment 4's
+  explicit outcome-verification state.
+- Recorded [Checkpoint 58](checkpoints/2026-08-03-58-openai-live-multiturn-gate.md).
+  Exact-head hosted cross-platform revalidation remains before merge.
+
 ## 2026-08-03 - Deterministic host-authority replay under concurrency
 
 - A macOS hybrid rerun exposed a time-of-check/time-of-use race in host challenge

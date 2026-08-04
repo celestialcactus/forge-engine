@@ -1,6 +1,6 @@
 # CLI ship lane 3: live CLI loop
 
-**Status:** live-loop, Qwen, interactive DX, controlled VS Code, and hosted cross-platform gates green; credentialed OpenAI gate pending
+**Status:** local and live-provider gates green; exact-head hosted cross-platform revalidation pending
 **Branch:** `feature/cli-live-loop`
 **Base:** merged real-inference `develop` at `e865de5`
 
@@ -19,6 +19,8 @@ See [ADR-0019](../decisions/ADRs/ADR-0019-ephemeral-live-cli-presentation.md) an
 and [Checkpoint 56](../decisions/checkpoints/2026-08-03-56-low-compute-model-floor.md).
 The post-gate concurrency correction is recorded in
 [Checkpoint 57](../decisions/checkpoints/2026-08-03-57-host-authority-replay-race.md).
+The credentialed OpenAI continuation correction and live gate are recorded in
+[Checkpoint 58](../decisions/checkpoints/2026-08-03-58-openai-live-multiturn-gate.md).
 
 ## In scope
 
@@ -30,7 +32,7 @@ The post-gate concurrency correction is recorded in
 - Preserve a single terminal JSON document under `--json`.
 - Route Ctrl+C and timeout through the existing abort/bridge cancellation path.
 - Print a terminal evidence summary from the authoritative `RunArtifact`.
-- Prove the existing multi-turn provider/tool continuation with Ollama/Qwen.
+- Prove multi-turn provider/tool continuation with Ollama/Qwen and direct OpenAI.
 
 ## Non-goals
 
@@ -39,7 +41,7 @@ The post-gate concurrency correction is recorded in
 - Mutation tools, generic shell, unrestricted writes, or public MCP mutation.
 - Interactive approval callbacks or organization policy distribution.
 - Provider fallback, model racing, parallel tool calls, or a new runtime.
-- A live OpenAI claim before the developer configures `OPENAI_API_KEY`.
+- Sending private workspace data during cloud acceptance; live checks use only an explicit synthetic fixture.
 
 ## Exit gates
 
@@ -50,13 +52,14 @@ The post-gate concurrency correction is recorded in
 4. `--json` stays parseable and contains no streamed human text.
 5. Ctrl+C and timeout produce attributable cancellation without leaving the kernel
    child alive.
-6. A live Ollama/Qwen text task and one-tool multi-turn task complete with a final
-   evidence summary, and the measured local context does not silently clip the tool
-   continuation.
+6. Live Ollama/Qwen and credentialed OpenAI text, bounded-read, and dependent
+   search-to-read tasks complete with final evidence summaries, and provider
+   continuation does not silently clip required state or tools.
 7. Node/Rust checks, hosted Windows/macOS/Ubuntu, and controlled VS Code tether
    remain green before merge.
-8. Execution pauses before the first live OpenAI request and reports the exact
-   project-key environment setup required from the developer.
+8. Execution pauses before the first live OpenAI request, reports the exact
+   project-key environment setup, and uses synthetic data unless the developer
+   explicitly authorizes workspace disclosure.
 9. A developer can launch plain forge, see effective provider/model/workspace state,
    prompt repeatedly, and use help, status, model, clear, and exit controls without
    reconstructing the one-shot command on every turn.
@@ -73,7 +76,7 @@ The post-gate concurrency correction is recorded in
 - First SIGINT and the configured deadline use one abort controller. A live 100 ms
   deadline produced canonical cancellation, exit 124, and left zero kernel
   processes.
-- npm run check passed 57 tests, typecheck, and the production build.
+- npm run check passed 58 tests, typecheck, and the production build.
 - Ollama now declares an 8K context and uses deterministic agent sampling; bounded
   read evidence is projected compactly for the provider while the internal artifact
   remains unchanged.
@@ -100,6 +103,12 @@ The post-gate concurrency correction is recorded in
   a terminal evidence summary.
 - Live JSON mode parsed as one terminal artifact and contained no `assistant>`
   prefix.
+- Credentialed GPT-5.6 Sol text and one-read gates passed on the isolated synthetic
+  fixture. The first dependent-flow attempts exposed missing `store: false` output
+  item replay and ambiguous one-tool wording.
+- The bounded adapter correction privately replays exact response output items
+  without changing `RunArtifact`. The final GPT-5.6 Sol and Qwen 7B controls each
+  completed search-to-read in three turns with two capabilities and 12 events.
 
 ## Hosted acceptance
 
@@ -118,14 +127,15 @@ fixtures still assumed the retired private path; Checkpoint 57 records the fixtu
 correction. Exact implementation `86daa83` then passed Node on Windows/macOS and
 the full Rust-kernel/TypeScript product on Windows/macOS/Ubuntu.
 The controlled seven-tool VS Code MCP regression already passed with one Forge call
-and no recovery loop.
+and no recovery loop. The provider-only continuation patch does not change MCP
+presentation. Exact-head hosted cross-platform revalidation is pending.
 
 ## Remaining acceptance
 
-
+- Run the exact patched head through hosted Node on Windows/macOS and the full
+  Rust-kernel/TypeScript product on Windows/macOS/Ubuntu before merge.
 - Exercise a real terminal Ctrl+C gesture where the host permits controlled input;
   deterministic SIGINT and live timeout coverage are already green.
-- Pause before any live OpenAI request and wait for developer key configuration.
 
 ## Honest limits
 
@@ -136,8 +146,9 @@ and no recovery loop.
   carry inspected conversation context across prompts. Durable restart-resume and
   cross-prompt memory remain later.
 - Runtime status completed means a valid terminal turn, not proof that every model
-  claim is grounded. A two-tool Qwen stress case stopped early and hallucinated;
-  explicit outcome verification remains required.
+  claim is grounded. Earlier Qwen and OpenAI two-tool attempts stopped early while
+  still recording `completed`; the corrected synthetic flow passes, but explicit
+  outcome verification remains required.
 - Provider-driven mutation, interactive approvals, and recovery remain later ship
   lanes.
 - This does not add an OS sandbox or change the trusted-execution posture.
