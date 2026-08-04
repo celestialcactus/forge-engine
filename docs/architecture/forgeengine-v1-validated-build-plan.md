@@ -430,7 +430,8 @@ expansion, the current planning ranges are:
 - first real-inference, evidence-backed CLI demonstration: **accepted and merged through PR #16 at `e865de5`**;
 - interactive live CLI and credentialed OpenAI multi-turn flow: **accepted and merged through PR #17 at `0441d865`**;
 - Rust-authoritative outcome contracts and the 4A gate: **accepted and merged through PR #18 at `742b8c8`**;
-- 4B-1 prepared ChangeSet/approval binding: **accepted at `3262e3b`; 4B-2 interactive composition is next**;
+- 4B-1 prepared ChangeSet/approval binding: **accepted at `3262e3b`**;
+- 4B-2 interactive edit composition: **local implementation complete; hosted exact-kernel, full verified edit, VS Code, and aggregate-lifecycle gates remain open**;
 - shippable standalone CLI alpha: **3–5 weeks**;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.

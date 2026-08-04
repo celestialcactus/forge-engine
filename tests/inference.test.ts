@@ -376,6 +376,39 @@ test('fails closed when a provider prints a tool envelope as terminal text', asy
   );
 });
 
+test('fails closed when a provider prints a registered tool call as terminal JSON', async () => {
+  const provider: InferenceProvider = {
+    id: 'ollama',
+    locality: 'local',
+    async *stream(): AsyncGenerator<NormalizedInferenceEvent> {
+      yield {
+        type: 'text.delta',
+        text: '{"name":"forge_workspace_read","arguments":{"path":"README.md"}}',
+      };
+      yield { type: 'response.completed', finishReason: 'stop' };
+    },
+  };
+  const planner = new ProviderTaskPlanner({
+    provider,
+    route,
+    tools: developerEvidenceTools,
+    now: fixedNow(0, 1),
+  });
+  const service = new ForgeWorkspaceService(resolve('tests/fixtures/slice1-workspace'), {
+    runtime: typeScriptConformanceFixture,
+    runIdFactory: () => 'run:printed-tool-json',
+  });
+  const artifact = await service.executeTask('Read source evidence.', planner);
+  service.close();
+  assert.equal(artifact.status, 'failed');
+  const terminal = artifact.events.at(-1);
+  assert.equal(terminal?.type, 'run.failed');
+  assert.match(
+    terminal?.type === 'run.failed' ? terminal.message : '',
+    /printed a registered Forge tool call as terminal JSON/u,
+  );
+});
+
 test('compacts duplicate read evidence before returning it to a provider', () => {
   const lines = Array.from({ length: 80 }, (_, index) => ({
     line: index + 1,

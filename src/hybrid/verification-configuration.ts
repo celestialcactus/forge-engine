@@ -22,4 +22,6 @@ export interface VerificationCheckConfiguration {
   readonly maxOutputBytes: number;
 }
 
-export type TrustedVerificationCheckConfiguration = VerificationCheckConfiguration;
+export type TrustedVerificationCheckConfiguration =
+  Omit<VerificationCheckConfiguration, 'isolationPolicy'>
+  & { readonly isolationPolicy?: never };

@@ -26,6 +26,29 @@ const MAX_CANCELLATION_REASON_BYTES: usize = 512;
 const CHANGE_ACCEPT_CAPABILITY_ID: &str = "workspace.change.accept";
 const CHANGE_DISCARD_CAPABILITY_ID: &str = "workspace.change.discard";
 
+fn project_prepare_artifact(mut artifact: Value) -> Value {
+    let Some(operations) = artifact.get_mut("operations").and_then(Value::as_array_mut) else {
+        return artifact;
+    };
+    for operation in operations {
+        let Some(fields) = operation.as_object_mut() else {
+            continue;
+        };
+        for (wire_name, host_name) in [
+            ("before_sha256", "beforeSha256"),
+            ("before_mode", "beforeMode"),
+            ("after_mode", "afterMode"),
+            ("from_path", "fromPath"),
+            ("to_path", "toPath"),
+        ] {
+            if let Some(value) = fields.remove(wire_name) {
+                fields.insert(host_name.to_owned(), value);
+            }
+        }
+    }
+    artifact
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SovereignChangeStart {
@@ -313,7 +336,10 @@ pub fn execute(
                         code: "change_prepare_failed",
                         message,
                     })?;
-            ("prepare", serde_json::to_value(artifact))
+            (
+                "prepare",
+                serde_json::to_value(artifact).map(project_prepare_artifact),
+            )
         }
         SovereignChangeOperation::Inspect { transaction_id } => {
             let artifact =
@@ -525,6 +551,27 @@ mod tests {
             parsed.operation,
             SovereignChangeOperation::Propose { .. }
         ));
+    }
+
+    #[test]
+    fn projects_prepared_operation_fields_to_the_camel_case_host_contract() {
+        let projected = project_prepare_artifact(json!({
+            "schemaVersion": 2,
+            "operations": [{
+                "kind": "move",
+                "from_path": "before.txt",
+                "to_path": "after.txt",
+                "before_sha256": "digest",
+                "before_mode": "regular",
+                "after_mode": "regular"
+            }]
+        }));
+        assert_eq!(projected["operations"][0]["fromPath"], "before.txt");
+        assert_eq!(projected["operations"][0]["toPath"], "after.txt");
+        assert_eq!(projected["operations"][0]["beforeSha256"], "digest");
+        assert_eq!(projected["operations"][0]["beforeMode"], "regular");
+        assert_eq!(projected["operations"][0]["afterMode"], "regular");
+        assert!(projected["operations"][0].get("before_sha256").is_none());
     }
 
     #[test]

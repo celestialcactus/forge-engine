@@ -47,9 +47,13 @@ export interface ChangeProposalArtifact {
   readonly conflicts: readonly ChangeConflict[];
 }
 
+type PlanningTextChangeRequest = Omit<TextChangeRequest, 'expectedSha256'> & {
+  readonly expectedSha256?: string;
+};
+
 type PreparedChange = {
   readonly path: string;
-  readonly expectedSha256: string;
+  readonly expectedSha256?: string;
   readonly replacementText: string;
   readonly before: Buffer;
   readonly beforeSha256: string;
@@ -59,7 +63,7 @@ type PreparedChange = {
 
 const objectInput = (call: CapabilityCall): Readonly<Record<string, unknown>> => {
   if (call.input === undefined || call.input === null || typeof call.input !== 'object' || Array.isArray(call.input)) {
-    throw new Error('workspace.change.propose input must be an object.');
+    throw new Error('workspace.change.plan input must be an object.');
   }
   return call.input as Readonly<Record<string, unknown>>;
 };
@@ -74,7 +78,10 @@ const boundedInteger = (value: unknown, fallback: number, minimum: number, maxim
   return Number(selected);
 };
 
-const parseRequests = (input: Readonly<Record<string, unknown>>): readonly TextChangeRequest[] => {
+const parseRequests = (
+  input: Readonly<Record<string, unknown>>,
+  modelInput: boolean,
+): readonly PlanningTextChangeRequest[] => {
   if (!Array.isArray(input.changes) || input.changes.length === 0 || input.changes.length > maximumChanges) {
     throw new Error(`changes must contain from 1 to ${maximumChanges} text replacements.`);
   }
@@ -87,23 +94,28 @@ const parseRequests = (input: Readonly<Record<string, unknown>>): readonly TextC
     if (typeof change.path !== 'string') throw new Error(`changes[${index}].path must be a string.`);
     if (seen.has(change.path)) throw new Error(`Duplicate change target: ${change.path}`);
     seen.add(change.path);
-    if (typeof change.expectedSha256 !== 'string' || !digestPattern.test(change.expectedSha256)) {
-      throw new Error(`changes[${index}].expectedSha256 must be a lowercase SHA-256 digest.`);
+    if (modelInput && change.expectedSha256 !== undefined) {
+      throw new Error(`changes[${index}].expectedSha256 is Forge-owned and must be omitted.`);
     }
-    if (typeof change.replacementText !== 'string') {
-      throw new Error(`changes[${index}].replacementText must be a string.`);
+    if (change.expectedSha256 !== undefined
+      && (typeof change.expectedSha256 !== 'string' || !digestPattern.test(change.expectedSha256))) {
+      throw new Error(`changes[${index}].expectedSha256 must be omitted or a lowercase SHA-256 digest.`);
     }
-    const replacementBytes = Buffer.byteLength(change.replacementText, 'utf8');
+    const replacementText = modelInput ? change.content : change.replacementText;
+    if (typeof replacementText !== 'string') {
+      throw new Error(`changes[${index}].${modelInput ? 'content' : 'replacementText'} must be a string.`);
+    }
+    const replacementBytes = Buffer.byteLength(replacementText, 'utf8');
     if (replacementBytes > maximumTextBytes) {
       throw new Error(`changes[${index}].replacementText exceeds the 1 MiB proposal limit.`);
     }
-    if (change.replacementText.includes('\0')) {
-      throw new Error(`changes[${index}].replacementText must not contain NUL bytes.`);
+    if (replacementText.includes('\0')) {
+      throw new Error(`changes[${index}].${modelInput ? 'content' : 'replacementText'} must not contain NUL bytes.`);
     }
     return {
       path: change.path,
-      expectedSha256: change.expectedSha256,
-      replacementText: change.replacementText,
+      ...(change.expectedSha256 === undefined ? {} : { expectedSha256: change.expectedSha256 }),
+      replacementText,
     };
   });
 };
@@ -161,7 +173,7 @@ const truncateUtf8 = (value: string, maximumBytes: number): { readonly value: st
 const prepareChanges = async (
   workspaceRoot: string,
   snapshot: WorkspaceSnapshot,
-  requests: readonly TextChangeRequest[],
+  requests: readonly PlanningTextChangeRequest[],
   signal: AbortSignal,
 ): Promise<readonly PreparedChange[]> => {
   const prepared: PreparedChange[] = [];
@@ -178,7 +190,7 @@ const prepareChanges = async (
     const after = Buffer.from(request.replacementText, 'utf8');
     prepared.push({
       path: file.path,
-      expectedSha256: request.expectedSha256,
+      ...(request.expectedSha256 === undefined ? {} : { expectedSha256: request.expectedSha256 }),
       replacementText: request.replacementText,
       before,
       beforeSha256: sha256(before),
@@ -207,19 +219,26 @@ const proposalId = (
   return `change:${digest}`;
 };
 
-export function createChangeProposalCapability(workspaceRoot: string): Capability {
+export function createChangeProposalCapability(
+  workspaceRoot: string,
+  options: { readonly modelInput?: boolean } = {},
+): Capability {
   return {
-    id: 'workspace.change.propose',
+    id: 'workspace.change.plan',
     async invoke(call, snapshot, signal): Promise<CapabilityResult> {
       const input = objectInput(call);
-      const requests = parseRequests(input);
-      const maxDiffBytes = boundedInteger(input.maxDiffBytes, 100_000, 1_000, 500_000, 'maxDiffBytes');
+      const modelInput = options.modelInput === true;
+      const requests = parseRequests(input, modelInput);
+      const maxDiffBytes = modelInput
+        ? 100_000
+        : boundedInteger(input.maxDiffBytes, 100_000, 1_000, 500_000, 'maxDiffBytes');
       const prepared = await prepareChanges(workspaceRoot, snapshot, requests, signal);
       const conflicts = prepared
-        .filter((change) => change.beforeSha256 !== change.expectedSha256)
+        .filter((change) =>
+          change.expectedSha256 !== undefined && change.beforeSha256 !== change.expectedSha256)
         .map((change): ChangeConflict => ({
           path: change.path,
-          expectedSha256: change.expectedSha256,
+          expectedSha256: change.expectedSha256!,
           actualSha256: change.beforeSha256,
           reason: 'base_digest_mismatch',
         }));

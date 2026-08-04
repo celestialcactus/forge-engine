@@ -1,5 +1,27 @@
 # Architecture Changelog
 
+## 2026-08-04 - Interactive edit composition local gate
+
+- Implemented CLI-only, policy-enabled change planning over the accepted Rust
+  ChangeSet v2 transaction authority. Ordinary CLI, one-shot inference, and MCP
+  remain seven-tool read-only surfaces.
+- Moved opaque digest and diff-budget bookkeeping out of the model schema. Forge now
+  requires complete prior read coverage at the same digest, cross-checks retained
+  content/diff against Rust preparation, and keeps both execution and promotion
+  behind visible developer decisions.
+- Added strict trusted-only policy parsing, bounded capability failure reasons, and
+  fail-closed detection for registered tool calls printed as terminal JSON.
+- Low-compute Qwen tests found an honest model floor: 0.5B/1.5B did not sequence the
+  read, 3B leaked/malformed calls, and 7B produced one complete read plus one valid
+  plan for a clear replacement.
+- That 7B test exposed snake_case operation fields in the prepared Rust artifact.
+  The v3 bridge now projects them to the camelCase host contract without changing
+  durable/core ChangeSet serialization. No candidate or source mutation occurred.
+- Recorded [ADR-0024](ADRs/ADR-0024-model-plan-and-rust-change-composition.md) and
+  [Checkpoint 63](checkpoints/2026-08-04-63-interactive-edit-local-gate.md). Hosted
+  native/product, exact-kernel full edit, VS Code, and aggregate RunArtifact gates
+  remain open.
+
 ## 2026-08-04 - Prepared ChangeSet approval binding accepted
 
 - Accepted CLI ship lane increment 4B-1 at exact implementation `3262e3b` after

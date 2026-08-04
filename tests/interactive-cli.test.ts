@@ -61,6 +61,7 @@ test('runs repeated prompts and session controls without creating another runtim
       source: 'ollama-discovery',
     },
     io,
+    notices: ['changes: disabled for fixture'],
     runTask: async (task, route) => {
       runs.push({ task, route });
       return { runId: 'run:' + runs.length, status: 'completed', outcome: 'not_evaluated' };
@@ -73,6 +74,7 @@ test('runs repeated prompts and session controls without creating another runtim
   assert.equal(cleared, 1);
   assert.equal(closed, 1);
   assert.ok(output.some((line) => line.includes('Each prompt creates a new evidence run')));
+  assert.ok(output.includes('changes: disabled for fixture'));
   assert.ok(output.some((line) => line.includes('status=completed, outcome=not_evaluated')));
   assert.ok(output.some((line) => line.includes('route changed: ollama/alternate-coder:7b (session)')));
 });

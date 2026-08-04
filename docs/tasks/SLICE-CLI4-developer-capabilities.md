@@ -1,6 +1,6 @@
 # CLI ship lane 4: developer capability pack
 
-**Status:** active; increments 4A and 4B-1 accepted; increment 4B-2 next
+**Status:** active; increments 4A and 4B-1 accepted; 4B-2 local implementation awaiting hosted/product acceptance
 **Branch:** `feature/cli-edit-verification-composition`
 **Base:** merged outcome-contract `develop` at `742b8c8` (PR #18)
 
@@ -86,6 +86,23 @@ This is machinery, not the finished developer UX. The following increment must
 compose the existing TypeScript digest-bound plan/diff, a visible interactive
 approval callback, Rust candidate verification, and explicit accept/discard without
 adding a second runtime or an MCP mutation tool.
+
+### Increment 4B-2: interactive edit composition
+
+[ADR-0024](../decisions/ADRs/ADR-0024-model-plan-and-rust-change-composition.md)
+keeps the model on a CLI-only, non-mutating `{path, content}` adapter while Forge
+owns complete-read coverage, digest/diff bounds, and exact TypeScript/Rust identity
+comparison. The first prompt authorizes only the prepared ChangeSet plus verifier
+IDs; Rust owns candidate execution and outcome; a second prompt accepts, discards,
+or retains the verified transaction. Policy parsing is strict and trusted-only, and
+MCP remains seven read-only tools.
+
+[Checkpoint 63](../decisions/checkpoints/2026-08-04-63-interactive-edit-local-gate.md)
+records the local implementation, Qwen 0.5B/1.5B/3B failure modes, the 7B one-read/
+one-plan result, and the Rust prepared-operation projection defect caught before
+candidate creation. Hosted native/product acceptance and exact-kernel CLI/VS Code
+tests remain open. The planning RunArtifact and Rust transaction artifact are not
+yet one durable aggregate lifecycle record.
 
 ### 4B exit gate
 

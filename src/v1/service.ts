@@ -42,36 +42,36 @@ class SingleCapabilityPlanner implements TaskPlanner {
   }
 }
 
-const readOnlyApprovalFacts = (call: CapabilityCall) => ({
+const nonMutatingApprovalFacts = (call: CapabilityCall) => ({
   schemaVersion: 1 as const,
   callId: call.id,
   capabilityId: call.capabilityId,
   hostPolicy: {
     posture: 'allow' as const,
     source: 'forge.v1.read-only-policy',
-    reason: 'Developer Test Milestone A exposes only registered read-only evidence.',
+    reason: 'Forge permits registered non-mutating workspace evidence and change planning.',
   },
   userConsent: {
     status: 'notRequired' as const,
     source: 'forge.v1.read-only-policy',
-    reason: 'Registered read-only evidence does not require interactive consent.',
+    reason: 'Registered non-mutating capabilities do not require interactive consent.',
   },
 });
 
-const readOnlyPolicy: ApprovalPolicy = {
+const nonMutatingPolicy: ApprovalPolicy = {
   async decide(call) {
     return {
       outcome: 'allow',
-      reason: 'Developer Test Milestone A exposes only registered read-only evidence.',
-      facts: readOnlyApprovalFacts(call),
+      reason: 'Forge permits registered non-mutating workspace evidence and change planning.',
+      facts: nonMutatingApprovalFacts(call),
     };
   },
 };
 
-const readOnlyApprovalFactsProvider: ApprovalFactsProvider = {
+const nonMutatingApprovalFactsProvider: ApprovalFactsProvider = {
   async collect(call, signal) {
     signal.throwIfAborted();
-    return readOnlyApprovalFacts(call);
+    return nonMutatingApprovalFacts(call);
   },
 };
 
@@ -180,24 +180,27 @@ export class ForgeWorkspaceService {
     options: ExecuteTaskOptions = {},
     signal?: AbortSignal,
   ): Promise<RunArtifact> {
-    if (task.trim().length === 0) throw new Error('A Forge task must not be empty.');
-    const contextBudgetBytes = options.contextBudgetBytes ?? 65_536;
-    const maxTurns = options.maxTurns ?? 8;
-    if (!Number.isInteger(contextBudgetBytes) || contextBudgetBytes < 1 || contextBudgetBytes > 1_048_576) {
-      throw new Error('contextBudgetBytes must be an integer from 1 to 1048576.');
-    }
-    if (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > 32) {
-      throw new Error('maxTurns must be an integer from 1 to 32.');
-    }
-    return this.#runPlanner(
+    return this.#executeTaskWithCapabilities(
       task,
       planner,
       [...this.#evidenceCapabilities.values()],
-      contextBudgetBytes,
-      maxTurns,
-      options.outcomeContract,
+      options,
       signal,
-      options.onEvent,
+    );
+  }
+
+  async executeChangePlanningTask(
+    task: string,
+    planner: TaskPlanner,
+    options: ExecuteTaskOptions = {},
+    signal?: AbortSignal,
+  ): Promise<RunArtifact> {
+    return this.#executeTaskWithCapabilities(
+      task,
+      planner,
+      [...this.#evidenceCapabilities.values(), createChangeProposalCapability(this.workspaceRoot, { modelInput: true })],
+      options,
+      signal,
     );
   }
 
@@ -263,6 +266,34 @@ export class ForgeWorkspaceService {
     );
   }
 
+  async #executeTaskWithCapabilities(
+    task: string,
+    planner: TaskPlanner,
+    capabilities: readonly Capability[],
+    options: ExecuteTaskOptions,
+    signal?: AbortSignal,
+  ): Promise<RunArtifact> {
+    if (task.trim().length === 0) throw new Error('A Forge task must not be empty.');
+    const contextBudgetBytes = options.contextBudgetBytes ?? 65_536;
+    const maxTurns = options.maxTurns ?? 8;
+    if (!Number.isInteger(contextBudgetBytes) || contextBudgetBytes < 1 || contextBudgetBytes > 1_048_576) {
+      throw new Error('contextBudgetBytes must be an integer from 1 to 1048576.');
+    }
+    if (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > 32) {
+      throw new Error('maxTurns must be an integer from 1 to 32.');
+    }
+    return this.#runPlanner(
+      task,
+      planner,
+      capabilities,
+      contextBudgetBytes,
+      maxTurns,
+      options.outcomeContract,
+      signal,
+      options.onEvent,
+    );
+  }
+
   async #runCapability(task: string, capability: Capability, input: unknown, signal?: AbortSignal): Promise<RunArtifact> {
     const call: CapabilityCall = { id: 'call-1', capabilityId: capability.id, input };
     const planner = new SingleCapabilityPlanner(call);
@@ -297,13 +328,13 @@ export class ForgeWorkspaceService {
     const runtime = this.#runtime.kind === 'typescript_conformance_fixture'
       ? new TypeScriptConformanceRuntime({
           planner,
-          approvalPolicy: readOnlyPolicy,
+          approvalPolicy: nonMutatingPolicy,
           capabilities,
           ...(onEvent === undefined ? {} : { onEvent }),
         })
       : new RustKernelRuntime({
           planner,
-          approvalFacts: readOnlyApprovalFactsProvider,
+          approvalFacts: nonMutatingApprovalFactsProvider,
           capabilities,
           ...(onEvent === undefined ? {} : { onEvent }),
           kernelPath: this.#runtime.kernel.binaryPath,
