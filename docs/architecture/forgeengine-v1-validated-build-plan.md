@@ -430,7 +430,7 @@ expansion, the current planning ranges are:
 - first real-inference, evidence-backed CLI demonstration: **accepted and merged through PR #16 at `e865de5`**;
 - interactive live CLI and credentialed OpenAI multi-turn flow: **accepted and merged through PR #17 at `0441d865`**;
 - Rust-authoritative outcome contracts and the 4A gate: **accepted and merged through PR #18 at `742b8c8`**;
-- 4B prepared ChangeSet/approval composition: **active on `feature/cli-edit-verification-composition`; local gate only**;
+- 4B-1 prepared ChangeSet/approval binding: **accepted at `3262e3b`; 4B-2 interactive composition is next**;
 - shippable standalone CLI alpha: **3–5 weeks**;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
@@ -470,8 +470,9 @@ hosted, exact-kernel product, and controlled VS Code gates and is merged on
 `develop` through PR #16. The live CLI and credentialed OpenAI multi-turn gates
 are merged through PR #17 at `0441d865`. Rust-authoritative outcome contracts are
 merged through PR #18 at current `develop` head `742b8c8`. The prepared
-ChangeSet/approval boundary is now active as increment 4B-1; its local gate does not
-yet mean the interactive developer edit loop is complete.
+ChangeSet/approval boundary is accepted at `3262e3b` after exact-head hosted
+Windows/macOS/Ubuntu and exact Windows-kernel product gates. Increment 4B-2 now
+composes that machinery into the interactive developer edit loop.
 `restricted` remains fail-closed until a
 separately proven Windows/macOS backend passes adversarial gates; the trusted developer alpha must name that
 limitation.

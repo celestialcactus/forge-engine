@@ -1,6 +1,6 @@
 # CLI ship lane 4: developer capability pack
 
-**Status:** active; increment 4A accepted, increment 4B-1 local gate passed; hosted acceptance pending
+**Status:** active; increments 4A and 4B-1 accepted; increment 4B-2 next
 **Branch:** `feature/cli-edit-verification-composition`
 **Base:** merged outcome-contract `develop` at `742b8c8` (PR #18)
 
@@ -78,7 +78,9 @@ identity and the selected verifier set, reject a changed identity before candida
 mutation, and retain the approved call, attributable facts, final decision, outcome
 contract, and assessment. Protocol v3 and artifact schema 2 implement that bounded
 primitive. [Checkpoint 61](../decisions/checkpoints/2026-08-04-61-prepared-changeset-local-gate.md)
-records the local gate; hosted product acceptance remains open.
+records the local gate. [Checkpoint 62](../decisions/checkpoints/2026-08-04-62-prepared-changeset-accepted.md)
+records exact-head hosted Windows/macOS/Ubuntu, 41/41 exact Windows-kernel hybrid,
+and product-smoke acceptance.
 
 This is machinery, not the finished developer UX. The following increment must
 compose the existing TypeScript digest-bound plan/diff, a visible interactive

@@ -1,5 +1,19 @@
 # Architecture Changelog
 
+## 2026-08-04 - Prepared ChangeSet approval binding accepted
+
+- Accepted CLI ship lane increment 4B-1 at exact implementation `3262e3b` after
+  Node passed on Windows/macOS (Actions run `30925912676`) and the real
+  Rust-kernel/TypeScript product passed on Windows/macOS/Ubuntu (Actions run
+  `30925913647`).
+- Downloaded exact Windows artifact `8899186885`; doctor, 41/41 hybrid tests, and
+  product smoke pass locally with sovereign change protocol v3.
+- The initial full local hybrid attempt exposed only an artifact-location assumption:
+  auto-discovery intentionally ignores the environment override. Placing the exact
+  unchanged binary in ignored `target/release` closed it without a source fix.
+- Recorded [Checkpoint 62](checkpoints/2026-08-04-62-prepared-changeset-accepted.md).
+  Increment 4B-2 interactive provider edit/diff/approval/accept-discard composition
+  is next; MCP remains read-only.
 ## 2026-08-04 - Prepared ChangeSet approval binding opened
 
 - Opened CLI ship lane increment 4B from merged `develop` at `742b8c8` on

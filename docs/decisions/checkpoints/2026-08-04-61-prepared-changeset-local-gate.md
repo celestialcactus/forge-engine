@@ -3,7 +3,7 @@
 **Date:** 2026-08-04
 **Branch:** `feature/cli-edit-verification-composition`
 **Base:** merged `develop` at `742b8c8` (PR #18)
-**Status:** local compile and conformance gate passed; hosted product acceptance pending
+**Status:** local compile and conformance gate passed; see [Checkpoint 62](2026-08-04-62-prepared-changeset-accepted.md) for hosted acceptance
 
 ## Why this checkpoint exists
 
