@@ -21,7 +21,7 @@ pub use host_authority::*;
 pub use isolation::*;
 pub use runtime::{
     ApprovalPolicy, Cancellation, CapabilityAdapter, EventSink, NoCancellation, NoopEventSink,
-    RuntimeSignal, Slice0Runtime, TaskPlanner, resolve_approval,
+    RuntimeSignal, Slice0Runtime, TaskPlanner, assess_outcome, resolve_approval,
 };
 pub use sovereign_change::*;
 pub use verification_runner::*;

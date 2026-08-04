@@ -143,7 +143,7 @@ broader V1 slices remain authoritative capability goals.
    product on Windows/macOS/Ubuntu (Actions run `30867433674`). Credentialed
    synthetic OpenAI text, bounded-read, and search-to-read gates pass. Increment 3
    is accepted and merged; increment 4 now proceeds on its own feature branch.
-4. **Developer capability pack — increment 4A accepted on `feature/cli-outcome-verification`.** Bounded read/search, patch/edit, process/test,
+4. **Developer capability pack — 4A accepted on `develop`; 4B active.** Bounded read/search, patch/edit, process/test,
    Git status/diff, and verification over the accepted authority. Add an explicit
    outcome-verification state that distinguishes a valid terminal planner turn from
    an evidence-grounded accepted result; do not infer correctness from model prose.
@@ -151,9 +151,13 @@ broader V1 slices remain authoritative capability goals.
    RunArtifact v2, bridge v4, and explicit `not_evaluated` / `verified` / `unmet`
    states. Exact-head hosted Windows/macOS/Ubuntu, 39/39 local hybrid, product
    smoke, and controlled one-call VS Code gates are green at `be2069a`. Increment
-   4B edit/process composition is next. See
-   [CLI ship lane 4](../tasks/SLICE-CLI4-developer-capabilities.md) and
-   [ADR-0022](../decisions/ADRs/ADR-0022-rust-authoritative-outcome-contract.md).
+   4B edit/process composition is active on
+   `feature/cli-edit-verification-composition`. Increment 4B-1 first makes Rust
+   prepare the exact ChangeSet before approval, rejects identity drift before
+   candidate mutation, and retains approval plus outcome attribution. See
+   [CLI ship lane 4](../tasks/SLICE-CLI4-developer-capabilities.md),
+   [ADR-0022](../decisions/ADRs/ADR-0022-rust-authoritative-outcome-contract.md),
+   and [ADR-0023](../decisions/ADRs/ADR-0023-prepared-changeset-approval-binding.md).
    **Exit:** a representative change is proposed, reviewed, verified, accepted or
    discarded, and fully attributed without generic raw powers; unsupported claims
    cannot silently inherit an accepted verification state.
@@ -425,6 +429,8 @@ expansion, the current planning ranges are:
 - accepted kernel/change machinery on `develop`: **complete at merged PR #15 (`1fcab25`)**;
 - first real-inference, evidence-backed CLI demonstration: **accepted and merged through PR #16 at `e865de5`**;
 - interactive live CLI and credentialed OpenAI multi-turn flow: **accepted and merged through PR #17 at `0441d865`**;
+- Rust-authoritative outcome contracts and the 4A gate: **accepted and merged through PR #18 at `742b8c8`**;
+- 4B prepared ChangeSet/approval composition: **active on `feature/cli-edit-verification-composition`; local gate only**;
 - shippable standalone CLI alpha: **3–5 weeks**;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
@@ -462,8 +468,10 @@ through Slice 2F-2b are accepted, while raw host assertions still fail closed.
 CLI and MCP now use that one Rust authority. The real-inference feature passes
 hosted, exact-kernel product, and controlled VS Code gates and is merged on
 `develop` through PR #16. The live CLI and credentialed OpenAI multi-turn gates
-are merged through PR #17 at `0441d865`. The developer capability pack is now the
-active ship-lane increment.
+are merged through PR #17 at `0441d865`. Rust-authoritative outcome contracts are
+merged through PR #18 at current `develop` head `742b8c8`. The prepared
+ChangeSet/approval boundary is now active as increment 4B-1; its local gate does not
+yet mean the interactive developer edit loop is complete.
 `restricted` remains fail-closed until a
 separately proven Windows/macOS backend passes adversarial gates; the trusted developer alpha must name that
 limitation.

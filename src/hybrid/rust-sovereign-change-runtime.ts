@@ -4,10 +4,16 @@ import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
 import type { Readable } from 'node:stream';
-import type { ApprovalFacts, CapabilityCall } from '../slice0/contracts.js';
+import type {
+  ApprovalFacts,
+  ApprovalOutcome,
+  CapabilityCall,
+  OutcomeAssessment,
+  OutcomeContract,
+} from '../slice0/contracts.js';
 import type { TrustedVerificationCheckConfiguration } from './verification-configuration.js';
 
-export const rustSovereignChangeProtocolVersion = 'forge.kernel.changeset.v2';
+export const rustSovereignChangeProtocolVersion = 'forge.kernel.changeset.v3';
 
 export interface SovereignChangeProposal {
   readonly schemaVersion: 1;
@@ -30,13 +36,24 @@ export interface SovereignCoordinatorArtifact {
   readonly failure?: string;
 }
 
+export interface SovereignPreparedArtifact {
+  readonly schemaVersion: 2;
+  readonly changeSetId: string;
+  readonly snapshotId: string;
+  readonly operations: readonly Record<string, unknown>[];
+}
+
 export interface SovereignProposalArtifact {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly status: 'verified_candidate' | 'verification_failed' | 'cancelled' | 'failed';
   readonly changeSet?: Record<string, unknown>;
   readonly boundary?: Record<string, unknown>;
   readonly application?: Record<string, unknown>;
   readonly verification: readonly Record<string, unknown>[];
+  readonly approvedCall: CapabilityCall;
+  readonly approval: { readonly outcome: ApprovalOutcome; readonly reason: string; readonly facts: ApprovalFacts };
+  readonly outcomeContract: OutcomeContract;
+  readonly outcome: OutcomeAssessment;
   readonly transaction?: SovereignCoordinatorArtifact;
   readonly candidateCleanup?: string;
   readonly failure?: string;
@@ -55,7 +72,7 @@ export interface RustSovereignChangeRuntimeOptions {
 }
 
 type JsonObject = Record<string, unknown>;
-type OperationKind = 'propose' | 'inspect' | 'accept' | 'discard';
+type OperationKind = 'prepare' | 'propose' | 'inspect' | 'accept' | 'discard';
 type ExitState = { readonly code: number | null; readonly signal: NodeJS.Signals | null };
 const maximumOutputFrameBytes = 8 * 1_048_576;
 
@@ -118,8 +135,21 @@ export class RustSovereignChangeRuntime {
     this.#requestIdFactory = options.requestIdFactory ?? (() => 'change-bridge:' + randomUUID());
   }
 
+  async prepare(proposal: SovereignChangeProposal): Promise<SovereignPreparedArtifact> {
+    const artifact = await this.#execute('prepare', { kind: 'prepare', proposal });
+    if (!isObject(artifact)
+      || artifact.schemaVersion !== 2
+      || typeof artifact.changeSetId !== 'string'
+      || typeof artifact.snapshotId !== 'string'
+      || !Array.isArray(artifact.operations)) {
+      throw new Error('Rust kernel returned an invalid prepared ChangeSet artifact.');
+    }
+    return artifact as unknown as SovereignPreparedArtifact;
+  }
+
   async propose(
     proposal: SovereignChangeProposal,
+    expectedChangeSetId: string,
     selectedCheckIds: readonly string[],
     call: CapabilityCall,
     approvalFacts: ApprovalFacts,
@@ -128,15 +158,26 @@ export class RustSovereignChangeRuntime {
     const artifact = await this.#execute('propose', {
       kind: 'propose',
       proposal,
+      expectedChangeSetId,
       selectedCheckIds,
       call,
       approvalFacts,
       ...(signal.aborted ? { initialCancellationReason: cancellationReason(signal) } : {}),
     }, signal);
     if (!isObject(artifact)
-      || artifact.schemaVersion !== 1
+      || artifact.schemaVersion !== 2
       || typeof artifact.status !== 'string'
-      || !Array.isArray(artifact.verification)) {
+      || !Array.isArray(artifact.verification)
+      || !isObject(artifact.approvedCall)
+      || !isObject(artifact.approval)
+      || !isObject(artifact.approval.facts)
+      || artifact.approval.outcome !== 'allow'
+      || !isObject(artifact.outcomeContract)
+      || artifact.outcomeContract.schemaVersion !== 1
+      || !Array.isArray(artifact.outcomeContract.requirements)
+      || !isObject(artifact.outcome)
+      || artifact.outcome.schemaVersion !== 1
+      || !Array.isArray(artifact.outcome.checks)) {
       throw new Error('Rust kernel returned an invalid sovereign proposal artifact.');
     }
     if (artifact.transaction !== undefined) validateCoordinator(artifact.transaction);
@@ -244,7 +285,7 @@ export class RustSovereignChangeRuntime {
         },
         operation,
       });
-      if (kind === 'inspect') child.stdin.end();
+      if (kind === 'inspect' || kind === 'prepare') child.stdin.end();
       if (!signal.aborted) {
         signal.addEventListener('abort', sendCancellation, { once: true });
         if (signal.aborted) sendCancellation();

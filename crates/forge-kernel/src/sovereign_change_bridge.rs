@@ -7,7 +7,8 @@ use std::{
 };
 
 use forge_core::{
-    ApprovalFacts, ApprovalOutcome, Cancellation, CapabilityCall, IsolationPolicy,
+    ApprovalDecision, ApprovalFacts, ApprovalOutcome, Cancellation, CapabilityCall,
+    IsolationPolicy, SOVEREIGN_CHANGE_PROPOSE_CAPABILITY_ID, SovereignChangeApproval,
     SovereignChangeConfig, SovereignChangeProposal, SovereignChangeService, VerificationCheck,
     resolve_approval,
 };
@@ -21,7 +22,7 @@ use crate::protocol::{
 
 const MAX_REQUEST_ID_BYTES: usize = 128;
 const MAX_CANCELLATION_REASON_BYTES: usize = 512;
-const CHANGE_PROPOSE_CAPABILITY_ID: &str = "workspace.change.propose";
+
 const CHANGE_ACCEPT_CAPABILITY_ID: &str = "workspace.change.accept";
 const CHANGE_DISCARD_CAPABILITY_ID: &str = "workspace.change.discard";
 
@@ -79,8 +80,12 @@ struct EnvironmentEntry {
     deny_unknown_fields
 )]
 enum SovereignChangeOperation {
+    Prepare {
+        proposal: SovereignChangeProposal,
+    },
     Propose {
         proposal: SovereignChangeProposal,
+        expected_change_set_id: String,
         selected_check_ids: Vec<String>,
         call: CapabilityCall,
         approval_facts: ApprovalFacts,
@@ -176,7 +181,7 @@ fn validate_approval(
     facts: &ApprovalFacts,
     expected_capability: &str,
     expected_input: Value,
-) -> Result<(), SovereignChangeFailure> {
+) -> Result<ApprovalDecision, SovereignChangeFailure> {
     if call.capability_id != expected_capability
         || call.input != expected_input
         || facts.call_id != call.id
@@ -200,7 +205,7 @@ fn validate_approval(
             message: decision.reason,
         });
     }
-    Ok(())
+    Ok(decision)
 }
 
 fn build_service(
@@ -299,6 +304,17 @@ pub fn execute(
     let service = build_service(&start.config, &request_id)?;
     let cancellation = Arc::new(CancellationState::default());
     let (operation, artifact) = match start.operation {
+        SovereignChangeOperation::Prepare { proposal } => {
+            let artifact =
+                service
+                    .prepare(&proposal)
+                    .map_err(|message| SovereignChangeFailure {
+                        request_id: Some(request_id.clone()),
+                        code: "change_prepare_failed",
+                        message,
+                    })?;
+            ("prepare", serde_json::to_value(artifact))
+        }
         SovereignChangeOperation::Inspect { transaction_id } => {
             let artifact =
                 service
@@ -312,17 +328,18 @@ pub fn execute(
         }
         SovereignChangeOperation::Propose {
             proposal,
+            expected_change_set_id,
             selected_check_ids,
             call,
             approval_facts,
             initial_cancellation_reason,
         } => {
-            validate_approval(
+            let approval_decision = validate_approval(
                 &call,
                 &approval_facts,
-                CHANGE_PROPOSE_CAPABILITY_ID,
+                SOVEREIGN_CHANGE_PROPOSE_CAPABILITY_ID,
                 json!({
-                    "proposalSchemaVersion": proposal.schema_version,
+                    "changeSetId": expected_change_set_id,
                     "selectedCheckIds": selected_check_ids,
                 }),
             )?;
@@ -337,10 +354,17 @@ pub fn execute(
             thread::spawn(move || {
                 cancellation_reader(reader, reader_request_id, reader_cancellation)
             });
+            let approval = SovereignChangeApproval {
+                expected_change_set_id,
+                selected_check_ids,
+                call,
+                facts: approval_facts,
+                decision: approval_decision,
+            };
             let artifact = service.propose(
                 &proposal,
+                &approval,
                 verification_checks(&start.config),
-                &selected_check_ids,
                 cancellation.as_ref(),
             );
             ("propose", serde_json::to_value(artifact))
@@ -456,19 +480,20 @@ mod tests {
             "operation": {
                 "kind": "propose",
                 "proposal": proposal,
+                "expectedChangeSetId": "changeset:test",
                 "selectedCheckIds": ["test"],
                 "call": {
                     "id": "call:test",
-                    "capabilityId": CHANGE_PROPOSE_CAPABILITY_ID,
+                    "capabilityId": SOVEREIGN_CHANGE_PROPOSE_CAPABILITY_ID,
                     "input": {
-                        "proposalSchemaVersion": 1,
+                        "changeSetId": "changeset:test",
                         "selectedCheckIds": ["test"]
                     }
                 },
                 "approvalFacts": {
                     "schemaVersion": 1,
                     "callId": "call:test",
-                    "capabilityId": CHANGE_PROPOSE_CAPABILITY_ID,
+                    "capabilityId": SOVEREIGN_CHANGE_PROPOSE_CAPABILITY_ID,
                     "hostPolicy": {
                         "posture": "ask",
                         "source": "test",

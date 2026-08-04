@@ -219,6 +219,8 @@ const printChangeArtifact = (artifact: unknown): void => {
   if (typeof transaction?.changeSetId === 'string') console.log(`ChangeSet: ${transaction.changeSetId}`);
   if (typeof transaction?.candidateRetained === 'boolean') console.log(`Candidate retained: ${transaction.candidateRetained}`);
   if (Array.isArray(transaction?.verification)) console.log(`Verification checks: ${transaction.verification.length}`);
+  const outcome = asRecord(value?.outcome);
+  if (typeof outcome?.status === 'string') console.log(`Outcome: ${outcome.status}`);
   if (typeof value?.failure === 'string') console.log(`Failure: ${value.failure}`);
   if (typeof transaction?.failure === 'string') console.log(`Failure: ${transaction.failure}`);
 };
@@ -266,7 +268,7 @@ try {
       workspaceRoot,
       engineRoot: engineRoot(),
       readOnlyFeatures: ['summary', 'search', 'read', 'symbols', 'typescript-diagnostics', 'git-status', 'git-diff'],
-      changeFlow: kernelProbe?.ready === true ? 'forge.kernel.changeset.v2' : 'unavailable',
+      changeFlow: kernelProbe?.ready === true ? 'forge.kernel.changeset.v3' : 'unavailable',
       isolation: 'trusted verification; process lifecycle owned; no Forge-enforced OS sandbox',
     };
     if (!report.ok) process.exitCode = 1;
@@ -311,7 +313,6 @@ try {
   } else if (command === 'change') {
     const action = positionals[1];
     if (action === 'propose') {
-      requireConsent('forge change propose');
       const proposalPath = positionals[2];
       if (proposalPath === undefined || values.policy === undefined) {
         throw new Error('Usage: forge change propose <proposal.json> --policy <verification-policy.json> --approve [--check <id,id>]');
@@ -319,10 +320,18 @@ try {
       const proposal = await loadProposal(proposalPath);
       const checks = await loadVerificationPolicy(values.policy);
       const checkIds = selectedChecks(checks);
-      const input = { proposalSchemaVersion: proposal.schemaVersion, selectedCheckIds: checkIds };
+      const runtime = sovereignChangeRuntime(checks);
+      const prepared = await runtime.prepare(proposal);
+      if (!values.approve) {
+        throw new Error(
+          `forge change propose prepared ${prepared.changeSetId}; rerun with --approve only after reviewing this exact proposal.`,
+        );
+      }
+      const input = { changeSetId: prepared.changeSetId, selectedCheckIds: checkIds };
       const exact = mutationApproval('workspace.change.propose', input);
-      printChangeArtifact(await sovereignChangeRuntime(checks).propose(
+      printChangeArtifact(await runtime.propose(
         proposal,
+        prepared.changeSetId,
         checkIds,
         exact.call,
         exact.approvalFacts,

@@ -6,17 +6,21 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::{
-    CHANGE_SET_V2_SCHEMA_VERSION, Cancellation, CandidateOperationApplyEvidence,
-    CandidateOperationBoundaryEvidence, ChangeOperationV2, ChangeSetV2,
-    ChangeSetV2CandidateAdapter, ChangeSetV2Coordinator, ChangeSetV2CoordinatorArtifact,
-    ChangeSetV2CoordinatorConfig, ChangeSetV2Registration, FileBlobStore, FileMode,
-    IsolationRequest, RepositoryPathIdentity, VerificationCheck, VerificationEvidence,
-    VerificationRunner, change_set_id, workspace_snapshot_id,
+    ApprovalDecision, ApprovalFacts, ApprovalOutcome, CHANGE_SET_V2_SCHEMA_VERSION, Cancellation,
+    CandidateOperationApplyEvidence, CandidateOperationBoundaryEvidence, CapabilityCall,
+    ChangeOperationV2, ChangeSetV2, ChangeSetV2CandidateAdapter, ChangeSetV2Coordinator,
+    ChangeSetV2CoordinatorArtifact, ChangeSetV2CoordinatorConfig, ChangeSetV2Registration,
+    FileBlobStore, FileMode, IsolationRequest, OutcomeAssessment, OutcomeCapabilityAttempt,
+    OutcomeContract, OutcomeRequirement, RepositoryPathIdentity, VerificationCheck,
+    VerificationEvidence, VerificationRunner, assess_outcome, change_set_id, resolve_approval,
+    workspace_snapshot_id,
 };
 
 pub const SOVEREIGN_CHANGE_PROPOSAL_SCHEMA_VERSION: u8 = 1;
+pub const SOVEREIGN_CHANGE_PROPOSE_CAPABILITY_ID: &str = "workspace.change.propose";
 const MAX_SELECTED_CHECKS: usize = 8;
 const MAX_DURABLE_VERIFICATION_BYTES: usize = 128 * 1024;
 const DEFAULT_MAX_DIFF_BYTES: usize = 100_000;
@@ -94,6 +98,15 @@ pub struct SovereignChangeProposal {
     pub operations: Vec<DraftChangeOperation>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct SovereignChangeApproval {
+    pub expected_change_set_id: String,
+    pub selected_check_ids: Vec<String>,
+    pub call: CapabilityCall,
+    pub facts: ApprovalFacts,
+    pub decision: ApprovalDecision,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SovereignChangeProposalStatus {
@@ -115,6 +128,10 @@ pub struct SovereignChangeProposalArtifact {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub application: Option<CandidateOperationApplyEvidence>,
     pub verification: Vec<VerificationEvidence>,
+    pub approved_call: CapabilityCall,
+    pub approval: ApprovalDecision,
+    pub outcome_contract: OutcomeContract,
+    pub outcome: OutcomeAssessment,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transaction: Option<ChangeSetV2CoordinatorArtifact>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -195,28 +212,47 @@ impl SovereignChangeService {
         Ok(service)
     }
 
+    pub fn prepare(&self, proposal: &SovereignChangeProposal) -> Result<ChangeSetV2, String> {
+        self.build_change_set(proposal)
+    }
+
     pub fn propose(
         &self,
         proposal: &SovereignChangeProposal,
+        approval: &SovereignChangeApproval,
         verification_checks: Vec<VerificationCheck>,
-        selected_check_ids: &[String],
         cancellation: &dyn Cancellation,
     ) -> SovereignChangeProposalArtifact {
+        let outcome_contract = change_outcome_contract(
+            &approval.expected_change_set_id,
+            &approval.selected_check_ids,
+        );
         let mut artifact = SovereignChangeProposalArtifact {
-            schema_version: 1,
+            schema_version: 2,
             status: SovereignChangeProposalStatus::Failed,
             change_set: None,
             boundary: None,
             application: None,
             verification: Vec::new(),
+            approved_call: approval.call.clone(),
+            approval: approval.decision.clone(),
+            outcome: assess_outcome(Some(&outcome_contract), "", &[]),
+            outcome_contract,
             transaction: None,
             candidate_cleanup: None,
             failure: None,
         };
         let result = (|| -> Result<(), String> {
-            validate_selected_checks(selected_check_ids)?;
+            validate_change_approval_binding(approval)?;
+            validate_selected_checks(&approval.selected_check_ids)?;
             let verification = VerificationRunner::try_new(verification_checks)?;
             let change_set = self.build_change_set(proposal)?;
+            if change_set.change_set_id != approval.expected_change_set_id {
+                return Err(
+                    "Prepared ChangeSet no longer matches the current workspace and proposal."
+                        .into(),
+                );
+            }
             artifact.change_set = Some(change_set.clone());
             let expected_base_revision = self.head()?;
             let mut adapter_config = crate::CandidateOperationAdapterConfig::new(
@@ -236,7 +272,7 @@ impl SovereignChangeService {
                 .candidate_path()
                 .ok_or("Candidate path is unavailable after application.")?
                 .to_path_buf();
-            for check_id in selected_check_ids {
+            for check_id in &approval.selected_check_ids {
                 if let Some(reason) = cancellation.reason() {
                     artifact.status = SovereignChangeProposalStatus::Cancelled;
                     artifact.failure = Some(reason);
@@ -310,6 +346,28 @@ impl SovereignChangeService {
             artifact.status = SovereignChangeProposalStatus::Failed;
             artifact.failure = Some(error);
         }
+        let mut attempts = artifact
+            .verification
+            .iter()
+            .map(|evidence| OutcomeCapabilityAttempt {
+                capability_id: verification_capability_id(&evidence.check_id),
+                success: evidence.success,
+            })
+            .collect::<Vec<_>>();
+        attempts.push(OutcomeCapabilityAttempt {
+            capability_id: "workspace.change.candidate.registered".into(),
+            success: artifact.transaction.is_some(),
+        });
+        let actual_change_set_id = artifact
+            .change_set
+            .as_ref()
+            .map(|change_set| change_set.change_set_id.as_str())
+            .unwrap_or("");
+        artifact.outcome = assess_outcome(
+            Some(&artifact.outcome_contract),
+            actual_change_set_id,
+            &attempts,
+        );
         artifact
     }
 
@@ -451,6 +509,60 @@ impl SovereignChangeService {
     }
 }
 
+fn validate_change_approval_binding(approval: &SovereignChangeApproval) -> Result<(), String> {
+    if approval.call.capability_id != SOVEREIGN_CHANGE_PROPOSE_CAPABILITY_ID
+        || approval.call.input
+            != json!({
+                "changeSetId": approval.expected_change_set_id,
+                "selectedCheckIds": approval.selected_check_ids,
+            })
+        || approval.facts.call_id != approval.call.id
+        || approval.facts.capability_id != approval.call.capability_id
+    {
+        return Err("Approval does not bind the exact prepared ChangeSet call.".into());
+    }
+    let resolved = resolve_approval(&approval.facts)?;
+    if resolved != approval.decision || approval.decision.outcome != ApprovalOutcome::Allow {
+        return Err("Approval evidence does not contain the Rust-resolved allow decision.".into());
+    }
+    Ok(())
+}
+
+fn verification_capability_id(check_id: &str) -> String {
+    format!("verification.check.{check_id}")
+}
+
+fn change_outcome_contract(
+    expected_change_set_id: &str,
+    selected_check_ids: &[String],
+) -> OutcomeContract {
+    let mut requirements = vec![OutcomeRequirement::OutputEquals {
+        id: "prepared-change-set-retained".into(),
+        expected: expected_change_set_id.to_owned(),
+    }];
+    requirements.extend(
+        selected_check_ids
+            .iter()
+            .enumerate()
+            .map(
+                |(index, check_id)| OutcomeRequirement::CapabilitySucceeded {
+                    id: format!("verification-passed-{}", index + 1),
+                    capability_id: verification_capability_id(check_id),
+                    minimum_invocations: 1,
+                },
+            ),
+    );
+    requirements.push(OutcomeRequirement::CapabilitySucceeded {
+        id: "candidate-registered".into(),
+        capability_id: "workspace.change.candidate.registered".into(),
+        minimum_invocations: 1,
+    });
+    OutcomeContract {
+        schema_version: 1,
+        requirements,
+    }
+}
+
 fn validate_selected_checks(check_ids: &[String]) -> Result<(), String> {
     if check_ids.is_empty() || check_ids.len() > MAX_SELECTED_CHECKS {
         return Err(format!(
@@ -459,8 +571,15 @@ fn validate_selected_checks(check_ids: &[String]) -> Result<(), String> {
     }
     let mut unique = HashSet::new();
     for check_id in check_ids {
-        if check_id.trim().is_empty() || !unique.insert(check_id) {
-            return Err("selectedCheckIds must be non-empty and unique.".into());
+        if check_id.trim().is_empty()
+            || check_id.chars().count() > 160
+            || check_id.chars().any(char::is_control)
+            || !unique.insert(check_id)
+        {
+            return Err(
+                "selectedCheckIds must be non-empty, unique, control-free, and at most 160 characters."
+                    .into(),
+            );
         }
     }
     Ok(())
@@ -492,5 +611,100 @@ fn path_is_within(candidate: &Path, root: &Path) -> bool {
     #[cfg(not(windows))]
     {
         candidate == root || candidate.starts_with(root)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::OutcomeStatus;
+
+    #[test]
+    fn change_outcome_requires_exact_identity_every_check_and_registration() {
+        let selected = vec!["typecheck".to_owned(), "test".to_owned()];
+        let contract = change_outcome_contract("changeset:expected", &selected);
+        assert_eq!(contract.requirements.len(), 4);
+
+        let incomplete = assess_outcome(
+            Some(&contract),
+            "changeset:expected",
+            &[OutcomeCapabilityAttempt {
+                capability_id: verification_capability_id("typecheck"),
+                success: true,
+            }],
+        );
+        assert_eq!(incomplete.status, OutcomeStatus::Unmet);
+
+        let verified = assess_outcome(
+            Some(&contract),
+            "changeset:expected",
+            &[
+                OutcomeCapabilityAttempt {
+                    capability_id: verification_capability_id("typecheck"),
+                    success: true,
+                },
+                OutcomeCapabilityAttempt {
+                    capability_id: verification_capability_id("test"),
+                    success: true,
+                },
+                OutcomeCapabilityAttempt {
+                    capability_id: "workspace.change.candidate.registered".into(),
+                    success: true,
+                },
+            ],
+        );
+        assert_eq!(verified.status, OutcomeStatus::Verified);
+    }
+
+    #[test]
+    fn core_rejects_approval_for_a_different_prepared_change_set() {
+        let selected = vec!["test".to_owned()];
+        let call: CapabilityCall = serde_json::from_value(json!({
+            "id": "call:test",
+            "capabilityId": SOVEREIGN_CHANGE_PROPOSE_CAPABILITY_ID,
+            "input": {
+                "changeSetId": "changeset:sha256:expected",
+                "selectedCheckIds": selected,
+            }
+        }))
+        .expect("call");
+        let facts: ApprovalFacts = serde_json::from_value(json!({
+            "schemaVersion": 1,
+            "callId": "call:test",
+            "capabilityId": SOVEREIGN_CHANGE_PROPOSE_CAPABILITY_ID,
+            "hostPolicy": {
+                "posture": "ask",
+                "source": "test",
+                "reason": "test"
+            },
+            "userConsent": {
+                "status": "granted",
+                "source": "test",
+                "reason": "test"
+            }
+        }))
+        .expect("facts");
+        let decision = resolve_approval(&facts).expect("approval");
+        let approval = SovereignChangeApproval {
+            expected_change_set_id: "changeset:sha256:expected".into(),
+            selected_check_ids: selected,
+            call,
+            facts,
+            decision,
+        };
+        assert!(validate_change_approval_binding(&approval).is_ok());
+        let replay = SovereignChangeApproval {
+            expected_change_set_id: "changeset:sha256:different".into(),
+            ..approval
+        };
+        assert!(validate_change_approval_binding(&replay).is_err());
+    }
+
+    #[test]
+    fn selected_check_ids_are_bounded_before_they_enter_outcome_contracts() {
+        assert!(validate_selected_checks(&["test".into()]).is_ok());
+        assert!(validate_selected_checks(&["test".into(), "test".into()]).is_err());
+        assert!(validate_selected_checks(&["x".repeat(161)]).is_err());
+        assert!(validate_selected_checks(&["bad\ncheck".into()]).is_err());
     }
 }

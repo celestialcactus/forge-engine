@@ -1,5 +1,21 @@
 # Architecture Changelog
 
+## 2026-08-04 - Prepared ChangeSet approval binding opened
+
+- Opened CLI ship lane increment 4B from merged `develop` at `742b8c8` on
+  `feature/cli-edit-verification-composition`.
+- The pre-implementation audit found that the expert change command approved only a
+  proposal schema version and verifier list; the actual ChangeSet was constructed
+  afterward and approval attribution was not retained in its artifact.
+- Added the bounded design in
+  [ADR-0023](ADRs/ADR-0023-prepared-changeset-approval-binding.md): Rust prepares an
+  exact non-mutating ChangeSet, approved execution recomputes it, stale identity
+  fails before candidate creation, and the artifact retains the exact approved call,
+  facts, Rust decision, contract, and outcome.
+- Local typecheck, 63/63 ordinary tests, build, Rust formatting, all-target compile,
+  and strict clippy pass. Hosted native/hybrid and interactive composition gates
+  remain open; no MCP mutation tool was added. See
+  [Checkpoint 61](checkpoints/2026-08-04-61-prepared-changeset-local-gate.md).
 ## 2026-08-04 - Rust-authoritative outcome contract accepted
 
 - Accepted CLI ship lane increment 4A at `be2069a` after Node 22 passed on Windows

@@ -76,7 +76,7 @@ const assessRequirement = (
       id: requirement.id,
       kind: requirement.kind,
       satisfied,
-      explanation: 'Planner output contained ' + characters + ' characters and '
+      explanation: 'Observed outcome value contained ' + characters + ' characters and '
         + (satisfied ? 'included' : 'did not include') + ' non-whitespace content.',
     };
   }
@@ -87,8 +87,8 @@ const assessRequirement = (
       kind: requirement.kind,
       satisfied,
       explanation: satisfied
-        ? 'Planner output matched the caller-authored expected value.'
-        : 'Planner output did not match the caller-authored expected value.',
+        ? 'Observed outcome value matched the caller-authored expected value.'
+        : 'Observed outcome value did not match the caller-authored expected value.',
     };
   }
   const successful = attempts.filter((attempt) =>
