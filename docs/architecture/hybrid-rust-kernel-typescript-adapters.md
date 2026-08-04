@@ -1,6 +1,6 @@
 # Hybrid runtime candidate: Rust kernel and TypeScript adapters
 
-**Status:** accepted hybrid boundary; protocol v5 hosted-validated on Windows, macOS, and Ubuntu; governed lifecycle exact-head validation pending
+**Status:** accepted hybrid boundary; protocol v5 and the governed edit lifecycle are exact-head validated on Windows, macOS, Ubuntu, live Qwen, and controlled VS Code
 **Date:** 2026-07-22
 **Updated:** 2026-08-04
 

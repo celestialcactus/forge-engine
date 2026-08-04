@@ -14,10 +14,17 @@
   capability context.
 - MCP and VS Code remain exactly seven read-only tools. No raw write, shell, public
   mutation, or TypeScript aggregate runtime was added.
-- Local 4B-3b validation passes typecheck, 79/79 tests, production build, Rust
-  formatting, focused lifecycle tests, and diff hygiene. Exact-head native/hybrid,
-  real Qwen/product, and controlled VS Code gates remain pending. See
-  [Checkpoint 66](checkpoints/2026-08-04-66-governed-edit-lifecycle-local-gate.md).
+- Accepted 4B-3b at exact implementation `1cc1e3f`: Node Windows/macOS passed in
+  Actions run `30955324195`, and the real Rust-kernel/TypeScript product passed
+  Windows/macOS/Ubuntu in run `30955324364`.
+- A disposable exact-commit Qwen 7B run completed one governed promotion in 30.5
+  seconds and changed source only after Rust reported `promoted`. Qwen corrected
+  one malformed read before succeeding, so functional transaction acceptance does
+  not claim perfect low-model tool-call efficiency.
+- A trusted fresh VS Code chat selected exactly seven read-only Forge tools and
+  completed one bounded summary call in roughly five seconds with full provenance,
+  outcome, lifecycle, and ordered event metadata; no built-in or mutation tool was
+  used. See [Checkpoint 66](checkpoints/2026-08-04-66-governed-edit-lifecycle-local-gate.md).
 
 # 2026-08-04 - Rust-owned lifecycle convergence begins
 
