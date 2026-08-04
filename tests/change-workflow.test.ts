@@ -6,7 +6,7 @@ import {
   renderInteractiveChangePlan,
   validatePreparedChangePlan,
 } from '../src/change-workflow.js';
-import { developerChangePlanningTools, developerEvidenceTools } from '../src/inference/developer-tools.js';
+import { developerEvidenceTools, developerGovernedChangeTools } from '../src/inference/developer-tools.js';
 import type { RunArtifact } from '../src/slice0/contracts.js';
 import type { SovereignPreparedArtifact } from '../src/hybrid/rust-sovereign-change-runtime.js';
 import type { ChangeProposalArtifact } from '../src/v1/change-proposal.js';
@@ -154,14 +154,15 @@ const prepared: SovereignPreparedArtifact = {
   }],
 };
 
-test('keeps the change-plan tool CLI-only and out of the seven-tool evidence surface', () => {
+test('keeps the governed change tool CLI-only and out of the seven-tool evidence surface', () => {
   assert.equal(developerEvidenceTools.length, 7);
-  assert.equal(developerEvidenceTools.some((tool) => tool.capabilityId === 'workspace.change.plan'), false);
-  assert.equal(developerChangePlanningTools.length, 8);
-  const planningTool = developerChangePlanningTools.at(-1);
-  assert.equal(planningTool?.name, 'forge_workspace_change_plan');
-  assert.match(JSON.stringify(planningTool?.inputSchema), /"content"/u);
-  assert.doesNotMatch(JSON.stringify(planningTool?.inputSchema), /expectedSha256|maxDiffBytes/u);
+  assert.equal(developerEvidenceTools.some((tool) => tool.capabilityId === 'workspace.change.execute'), false);
+  assert.equal(developerGovernedChangeTools.length, 8);
+  const changeTool = developerGovernedChangeTools.at(-1);
+  assert.equal(changeTool?.name, 'forge_workspace_change');
+  assert.equal(changeTool?.capabilityId, 'workspace.change.execute');
+  assert.match(JSON.stringify(changeTool?.inputSchema), /"content"/u);
+  assert.doesNotMatch(JSON.stringify(changeTool?.inputSchema), /expectedSha256|maxDiffBytes/u);
 });
 
 test('extracts one complete digest-bound plan and cross-checks the Rust-prepared operation', () => {

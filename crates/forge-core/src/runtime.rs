@@ -251,6 +251,7 @@ pub fn assess_outcome(
 }
 
 const MAX_CAPABILITY_EVIDENCE_BYTES: usize = 4 * 1_048_576;
+const MAX_CAPABILITY_CONTEXT_BYTES: usize = 4 * 1_048_576;
 
 fn capability_evidence_validation_error(result: &CapabilityResult) -> Option<String> {
     let evidence = result.evidence.as_ref()?;
@@ -444,6 +445,9 @@ impl RunState {
             .map_err(|_| "Unable to canonicalize prior capability observations.".to_owned())?;
         let encoded = serde_json::to_vec(&canonical)
             .map_err(|_| "Unable to encode prior capability observations.".to_owned())?;
+        if encoded.len() > MAX_CAPABILITY_CONTEXT_BYTES {
+            return Err("Prior capability context exceeds the 4 MiB limit.".to_owned());
+        }
         let prior_call_ids = self
             .capability_observations
             .iter()

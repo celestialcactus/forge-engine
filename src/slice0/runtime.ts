@@ -26,6 +26,7 @@ import type {
 } from './contracts.js';
 
 const maximumCapabilityEvidenceBytes = 4 * 1_048_576;
+const maximumCapabilityContextBytes = 4 * 1_048_576;
 const capabilityEvidenceKind = /^[a-z0-9._-]{1,100}$/u;
 
 const canonicalJsonValue = (value: unknown): unknown => {
@@ -44,6 +45,9 @@ const capabilityContext = (
 ): CapabilityContext => {
   const observations = [...priorObservations];
   const canonical = JSON.stringify(canonicalJsonValue(observations));
+  if (Buffer.byteLength(canonical, 'utf8') > maximumCapabilityContextBytes) {
+    throw new Error('Prior capability context exceeds the 4 MiB limit.');
+  }
   return {
     schemaVersion: 1,
     task: request.task,

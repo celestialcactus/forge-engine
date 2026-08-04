@@ -246,6 +246,28 @@ impl CapabilityAdapter for InvalidEvidenceCapabilities {
     }
 }
 
+struct LargeContextCapabilities;
+
+impl CapabilityAdapter for LargeContextCapabilities {
+    fn supports(&self, capability_id: &str) -> bool {
+        capability_id == "fixture.large-context"
+    }
+
+    fn invoke(
+        &mut self,
+        call: &CapabilityCall,
+        _snapshot: &WorkspaceSnapshot,
+        _context: &CapabilityContext,
+    ) -> Result<CapabilityResult, RuntimeSignal> {
+        Ok(CapabilityResult {
+            call_id: call.id.clone(),
+            success: true,
+            content: "x".repeat((4 * 1_048_576) + 1),
+            evidence: None,
+        })
+    }
+}
+
 fn allow() -> FixedPolicy {
     FixedPolicy(ApprovalDecision {
         outcome: ApprovalOutcome::Allow,
@@ -484,6 +506,48 @@ fn fails_closed_on_invalid_capability_evidence_and_duplicate_call_ids() {
         duplicate.events.last().map(|event| &event.data),
         Some(forge_core::RunEventData::RunFailed { code, message })
             if code == "invalid_capability_call" && message.contains("already used")
+    ));
+}
+
+#[test]
+fn fails_closed_before_approval_when_prior_capability_context_exceeds_four_mib() {
+    let call = |id: &str| CapabilityCall {
+        id: id.to_owned(),
+        capability_id: "fixture.large-context".to_owned(),
+        input: json!({}),
+    };
+    let artifact = run(
+        request("large-context-run"),
+        &mut ScriptedPlanner {
+            turns: VecDeque::from([
+                PlannerTurn::Call {
+                    call: call("large-context-1"),
+                    inference: None,
+                },
+                PlannerTurn::Call {
+                    call: call("large-context-2"),
+                    inference: None,
+                },
+            ]),
+        },
+        &mut allow(),
+        &mut LargeContextCapabilities,
+        &NoCancellation,
+    );
+    assert_eq!(artifact.status, RunStatus::Failed);
+    assert_eq!(artifact.capability_results.len(), 1);
+    assert_eq!(
+        artifact
+            .events
+            .iter()
+            .filter(|event| matches!(event.data, forge_core::RunEventData::ApprovalDecided { .. }))
+            .count(),
+        1
+    );
+    assert!(matches!(
+        artifact.events.last().map(|event| &event.data),
+        Some(forge_core::RunEventData::RunFailed { code, message })
+            if code == "runtime_error" && message == "Prior capability context exceeds the 4 MiB limit."
     ));
 }
 

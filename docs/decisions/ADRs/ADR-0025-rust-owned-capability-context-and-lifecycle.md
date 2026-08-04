@@ -51,8 +51,8 @@ make terminal truth depend on the integration layer.
 
 - capability context schema: exactly 1;
 - context basis schema: exactly 1;
-- prior observations: no more than the run turn limit and always in completion
-  order;
+- prior observations: no more than the run turn limit, always in completion
+  order, and at most 4 MiB when canonically serialized;
 - prior call IDs: non-empty and unique within the run;
 - observation digest: lowercase SHA-256;
 - capability evidence schema: exactly 1;

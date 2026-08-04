@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { ApprovalFacts, CapabilityCall, RunArtifact } from './slice0/contracts.js';
-import { developerChangePlanningTools, developerEvidenceTools } from './inference/developer-tools.js';
+import { developerEvidenceTools, developerGovernedChangeTools } from './inference/developer-tools.js';
 import { ProviderTaskPlanner } from './inference/planner.js';
 import { createInferenceProvider, resolveInferenceRoute } from './inference/routing.js';
 import {
@@ -15,8 +15,7 @@ import {
 } from './interactive-cli.js';
 import type { InferenceRoute } from './inference/contracts.js';
 import { createRunCancellation, LiveCliPresenter } from './live-cli.js';
-import { extractInteractiveChangePlan } from './change-workflow.js';
-import { executeInteractiveChangePlan } from './interactive-change.js';
+import type { GovernedChangeCapabilityOptions } from './governed-change.js';
 import { startForgeMcpServer } from './mcp/server.js';
 import {
   probeForgeKernelBinary,
@@ -80,7 +79,7 @@ const executeProviderTask = async (
   maxTurns: number,
   timeoutMs: number,
   presenter?: LiveCliPresenter,
-  changePlanning = false,
+  governedChange?: GovernedChangeCapabilityOptions,
 ): Promise<{
   readonly artifact: RunArtifact;
   readonly cancellationSource: ReturnType<typeof createRunCancellation>['source'];
@@ -93,8 +92,8 @@ const executeProviderTask = async (
     const planner = new ProviderTaskPlanner({
       provider: createInferenceProvider(route),
       route,
-      tools: changePlanning ? developerChangePlanningTools : developerEvidenceTools,
-      ...(presenter === undefined || changePlanning
+      tools: governedChange === undefined ? developerEvidenceTools : developerGovernedChangeTools,
+      ...(presenter === undefined || governedChange !== undefined
         ? {}
         : { onInferenceEvent: (observation) => presenter.onInferenceEvent(observation) }),
     });
@@ -104,16 +103,17 @@ const executeProviderTask = async (
         ? {}
         : { onEvent: (event: RunArtifact['events'][number]) => presenter.onRunEvent(event) }),
     };
-    const artifact = changePlanning
-      ? await workspaceService().executeChangePlanningTask(
+    const artifact = governedChange === undefined
+      ? await workspaceService().executeTask(
         task,
         planner,
         taskOptions,
         cancellation.signal,
       )
-      : await workspaceService().executeTask(
+      : await workspaceService().executeGovernedChangeTask(
         task,
         planner,
+        governedChange,
         taskOptions,
         cancellation.signal,
       );
@@ -381,14 +381,14 @@ try {
       ? []
       : await loadVerificationPolicy(verificationPolicyPath);
     const checkIds = verificationChecks.length === 0 ? [] : selectedChecks(verificationChecks);
-    const changePlanning = verificationChecks.length > 0;
+    const governedChanges = verificationChecks.length > 0;
     const io = createNodeInteractiveIo();
     await runInteractiveSession({
       workspaceRoot,
       initialRoute: selection,
       io,
-      notices: [changePlanning
-        ? `changes: enabled with explicit approval; verification=${checkIds.join(', ')}`
+      notices: [governedChanges
+        ? `changes: governed inside the Rust run; verification=${checkIds.join(', ')}`
         : 'changes: disabled; start with --policy <file> or set FORGE_VERIFICATION_POLICY to enable verified edits'],
       validateRoute: (route) => { createInferenceProvider(route); },
       runTask: async (task, route) => {
@@ -399,27 +399,16 @@ try {
           maxTurns,
           timeoutMs,
           presenter,
-          changePlanning,
+          governedChanges
+            ? {
+                checkIds,
+                runtime: sovereignChangeRuntime(verificationChecks),
+                io,
+              }
+            : undefined,
         );
-        const plan = extractInteractiveChangePlan(artifact);
-        if (plan === undefined && artifact.output !== undefined) {
-          presenter.printAssistantOutput(artifact.output);
-        }
+        if (artifact.output !== undefined) presenter.printAssistantOutput(artifact.output);
         presenter.printSummary(artifact);
-        if (plan !== undefined) {
-          const cancellation = createRunCancellation(timeoutMs);
-          try {
-            await executeInteractiveChangePlan({
-              plan,
-              checkIds,
-              runtime: sovereignChangeRuntime(verificationChecks),
-              io,
-              signal: cancellation.signal,
-            });
-          } finally {
-            cancellation.dispose();
-          }
-        }
         return { runId: artifact.runId, status: artifact.status, outcome: artifact.outcome.status };
       },
     });

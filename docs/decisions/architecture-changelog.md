@@ -1,3 +1,24 @@
+# 2026-08-04 - Governed edit enters the Rust lifecycle
+
+- Accepted the 4B-3a contract at exact implementation `4ac3346`: Node passed on
+  Windows/macOS in Actions run `30938191923`, and the real
+  Rust-kernel/TypeScript product passed Windows/macOS/Ubuntu in run
+  `30938194060`.
+- Removed the interactive product's post-`run.completed` mutation handoff. A
+  policy-enabled CLI now exposes one CLI-only `workspace.change.execute`
+  capability that reuses complete-read proof, bounded plan evidence, ChangeSet v2,
+  visible candidate approval, verification, and accept/discard/retain before the
+  canonical Rust run terminates.
+- Added bounded `forge.workspace.change.execution.v1` evidence without duplicating
+  replacement bodies, plus a matched 4 MiB Rust/TypeScript ceiling for prior
+  capability context.
+- MCP and VS Code remain exactly seven read-only tools. No raw write, shell, public
+  mutation, or TypeScript aggregate runtime was added.
+- Local 4B-3b validation passes typecheck, 79/79 tests, production build, Rust
+  formatting, focused lifecycle tests, and diff hygiene. Exact-head native/hybrid,
+  real Qwen/product, and controlled VS Code gates remain pending. See
+  [Checkpoint 66](checkpoints/2026-08-04-66-governed-edit-lifecycle-local-gate.md).
+
 # 2026-08-04 - Rust-owned lifecycle convergence begins
 
 - Merged accepted interactive edit composition through PR #19; remote `develop`

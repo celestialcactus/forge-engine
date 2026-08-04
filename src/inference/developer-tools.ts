@@ -73,10 +73,10 @@ export const developerEvidenceTools: readonly InferenceToolDefinition[] = [
   },
 ];
 
-export const developerChangePlanTool: InferenceToolDefinition = {
-  name: 'forge_workspace_change_plan',
-  capabilityId: 'workspace.change.plan',
-  description: 'Create a non-mutating digest-bound review plan for complete UTF-8 file replacements. Read each complete target first, then provide its path and complete desired UTF-8 content. Forge owns digest and diff bounds. This only proposes a diff; it never applies or verifies a change.',
+export const developerGovernedChangeTool: InferenceToolDefinition = {
+  name: 'forge_workspace_change',
+  capabilityId: 'workspace.change.execute',
+  description: 'Run Forge\'s governed change flow for complete UTF-8 file replacements. Read every complete target first, then provide its path and complete desired content. Forge will show the digest-bound diff, ask before isolated candidate execution, verify it, and ask again before promotion. Report the returned status exactly.',
   inputSchema: objectSchema({
     changes: {
       type: 'array',
@@ -90,7 +90,7 @@ export const developerChangePlanTool: InferenceToolDefinition = {
   }, ['changes']),
 };
 
-export const developerChangePlanningTools: readonly InferenceToolDefinition[] = [
+export const developerGovernedChangeTools: readonly InferenceToolDefinition[] = [
   ...developerEvidenceTools,
-  developerChangePlanTool,
+  developerGovernedChangeTool,
 ];

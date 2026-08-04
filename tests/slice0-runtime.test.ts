@@ -185,6 +185,47 @@ test('fails closed on invalid structured capability evidence and duplicate call 
   assert.match(terminal.message, /already used/u);
 });
 
+test('fails closed before approval when prior capability context exceeds 4 MiB', async () => {
+  let approvalCount = 0;
+  const firstCall = { id: 'large-context-1', capabilityId: 'fixture.large-context', input: {} };
+  const secondCall = { id: 'large-context-2', capabilityId: 'fixture.large-context', input: {} };
+  const artifact = await new TypeScriptConformanceRuntime({
+    planner: new ScriptedPlanner([
+      { kind: 'call', call: firstCall },
+      { kind: 'call', call: secondCall },
+    ]),
+    approvalPolicy: {
+      async decide() {
+        approvalCount++;
+        return { outcome: 'allow', reason: 'Fixture permits bounded context.' };
+      },
+    },
+    capabilities: [{
+      id: 'fixture.large-context',
+      async invoke(call) {
+        return {
+          callId: call.id,
+          success: true,
+          content: 'x'.repeat((4 * 1_048_576) + 1),
+        };
+      },
+    }],
+  }).run({
+    runId: 'large-context-run',
+    task: 'Reject oversized prior context.',
+    snapshot: slice0Workspace,
+    contextBudgetBytes: 200,
+    maxTurns: 2,
+  });
+  assert.equal(artifact.status, 'failed');
+  assert.equal(approvalCount, 1);
+  assert.equal(artifact.capabilityResults.length, 1);
+  const terminal = artifact.events.at(-1);
+  assert.equal(terminal?.type, 'run.failed');
+  if (terminal?.type !== 'run.failed') throw new Error('Expected prior-context failure.');
+  assert.match(terminal.message, /Prior capability context exceeds the 4 MiB limit/u);
+});
+
 test('verifies only explicit caller-authored requirements', async () => {
   const verified = await successfulRuntime().run({
     runId: 'verified-run',

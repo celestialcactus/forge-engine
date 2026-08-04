@@ -1,6 +1,6 @@
 # CLI ship lane 4: developer capability pack
 
-**Status:** active; increments 4A, 4B-1, and 4B-2 accepted; 4B-3 contract-first lifecycle convergence active
+**Status:** active; increments 4A, 4B-1, 4B-2, and 4B-3a accepted; 4B-3b governed lifecycle local gate green
 **Branch:** `feature/cli-rust-lifecycle-continuation`
 **Base:** merged interactive edit `develop` at `1f0d792` (PR #19)
 
@@ -119,8 +119,16 @@ capability before `run.completed`; TypeScript remains the UI/provider adapter an
 does not synthesize a second lifecycle.
 
 [Checkpoint 65](../decisions/checkpoints/2026-08-04-65-rust-owned-capability-context-local-gate.md)
-records the 4B-3a local contract gate: 78 TypeScript tests/build and Rust formatting
-pass; exact-head hosted Rust compile/lint/test remains required before acceptance.
+records the 4B-3a local contract gate. Exact implementation `4ac3346` subsequently
+passed Node on Windows/macOS and the real Rust-kernel/TypeScript product on
+Windows/macOS/Ubuntu in Actions runs `30938191923` and `30938194060`.
+
+[Checkpoint 66](../decisions/checkpoints/2026-08-04-66-governed-edit-lifecycle-local-gate.md)
+records 4B-3b: the plan-only post-terminal handoff is removed from the product path;
+one CLI-only governed capability now performs review, consent, candidate
+verification, and promotion/discard/retain before the Rust run completes. The local
+79-test/build and Rust-format gate is green. Exact-head hosted, real Qwen/product,
+and controlled VS Code gates remain required before 4B-3 acceptance.
 
 ### 4B exit gate
 
