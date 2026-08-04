@@ -46,14 +46,14 @@ test('official MCP client preserves the seven-tool compact contract over the Rus
     const summary = structuredPayload<{
       readonly runId: string;
       readonly snapshotId: string;
-      readonly status: string;
+      readonly runStatus: string;
       readonly outcome: { readonly status: string };
       readonly evidence: { readonly files: readonly string[]; readonly totalFiles: number; readonly truncated: boolean };
       readonly events: ReadonlyArray<{ readonly sequence: number; readonly type: string }>;
     }>(summaryResult);
     assert.match(summary.runId, /^run:/u);
     assert.match(summary.snapshotId, /^workspace:/u);
-    assert.equal(summary.status, 'completed');
+    assert.equal(summary.runStatus, 'completed');
     assert.equal(summary.outcome.status, 'verified');
     assert.deepEqual(summary.evidence, { files: ['README.md'], totalFiles: 2, truncated: true });
     assert.deepEqual(summary.events, [

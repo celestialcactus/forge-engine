@@ -48,7 +48,7 @@ test('marks an unmet outcome as an MCP error even when the adapter call succeede
   };
   const result = forgeMcpArtifactResult(artifact, 'summary');
   assert.equal('isError' in result ? result.isError : undefined, true);
-  assert.match(result.content[0]?.text ?? '', /Outcome: unmet/u);
+  assert.match(result.content[0]?.text ?? '', /Outcome status: unmet/u);
 });
 
 test('official MCP client discovers and invokes the compact Forge repository-intelligence tether', async () => {
@@ -93,7 +93,7 @@ test('official MCP client discovers and invokes the compact Forge repository-int
       invocationId: string;
       runId: string;
       snapshotId: string;
-      status: string;
+      runStatus: string;
       outcome: { status: string; checks: Array<{ satisfied: boolean }> };
       capability: { success: boolean };
       workspace: { rootLabel: string };
@@ -103,7 +103,7 @@ test('official MCP client discovers and invokes the compact Forge repository-int
     assert.match(summary.invocationId, /^mcp:/u);
     assert.match(summary.runId, /^run:/u);
     assert.match(summary.snapshotId, /^workspace:/u);
-    assert.equal(summary.status, 'completed');
+    assert.equal(summary.runStatus, 'completed');
     assert.equal(summary.outcome.status, 'verified');
     assert.equal(summary.outcome.checks.length, 2);
     assert.equal(summary.outcome.checks.every((check) => check.satisfied), true);
@@ -125,7 +125,9 @@ test('official MCP client discovers and invokes the compact Forge repository-int
     assert.equal(JSON.stringify(summary).includes('"outcomeContract"'), false);
     assert.match(contentText(summaryResult), /^Forge run ID: run:/u);
     assert.match(contentText(summaryResult), /Snapshot ID: workspace:/u);
-    assert.match(contentText(summaryResult), /Outcome: verified/u);
+    assert.match(contentText(summaryResult), /Outcome status: verified/u);
+    assert.match(contentText(summaryResult), /Mechanical run status: completed \(not the task outcome\)/u);
+    assert.equal(JSON.stringify(summary).includes('"status":"completed"'), false);
     assert.match(contentText(summaryResult), /Paths:\nREADME\.md/u);
     assert.ok(Buffer.byteLength(JSON.stringify(summaryResult), 'utf8') < 5_000);
 

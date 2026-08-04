@@ -6,7 +6,7 @@ import { artifactPayload } from '../v1/service.js';
 export type ForgeMcpToolKind = 'summary' | 'search' | 'read' | 'symbols' | 'diagnostics' | 'gitStatus' | 'gitDiff';
 
 export const forgeMcpEvidenceGuidance =
-  ' Use the returned evidence directly; do not repeat an equivalent call to recover fields. Preserve its Forge run ID and complete workspace-relative paths.';
+  ' Use the returned evidence directly; do not repeat an equivalent call to recover fields. Preserve its Forge run ID and complete workspace-relative paths. Treat outcome.status as the task outcome; runStatus is only the mechanical run lifecycle.';
 
 const lineSchema = z.object({ line: z.number().int(), text: z.string() });
 const matchSchema = z.object({ path: z.string(), line: z.number().int(), preview: z.string() });
@@ -33,7 +33,6 @@ const artifactOutputSchema = (evidence: z.ZodType) => z.object({
   capability: z.object({ success: z.boolean() }).nullable(),
   evidence: evidence.optional(),
   workspace: z.object({ id: z.string(), rootLabel: z.string() }),
-  status: z.enum(['running', 'completed', 'failed', 'cancelled', 'budget_exhausted']),
   outcome: z.object({
     schemaVersion: z.literal(1),
     status: z.enum(['not_evaluated', 'verified', 'unmet']),
@@ -44,7 +43,9 @@ const artifactOutputSchema = (evidence: z.ZodType) => z.object({
       satisfied: z.boolean(),
       explanation: z.string(),
     })),
-  }),
+  }).describe('Caller-authored requirement assessment. Use outcome.status when reporting whether the task outcome was verified.'),
+  runStatus: z.enum(['running', 'completed', 'failed', 'cancelled', 'budget_exhausted'])
+    .describe('Mechanical Forge run lifecycle only. This is not the task outcome.'),
   events: z.array(z.object({ sequence: z.number().int(), type: z.string() })),
   cache: z.object({
     hit: z.literal(true),
@@ -278,8 +279,8 @@ export const forgeMcpArtifactPayload = (artifact: RunArtifact, kind: ForgeMcpToo
     capability: payload.capability === null ? null : { success: capability?.success === true },
     evidence: projectedEvidence(kind, payload.evidence),
     workspace: { id: workspace?.id, rootLabel: workspace?.rootLabel },
-    status: payload.status,
     outcome: artifact.outcome,
+    runStatus: payload.status,
     events: artifact.events.map((event) => ({ sequence: event.sequence, type: event.type })),
   };
 };
@@ -292,7 +293,8 @@ export const forgeMcpArtifactResult = (artifact: RunArtifact, kind: ForgeMcpTool
     `Forge invocation ID: ${payload.invocationId}`,
     `Snapshot ID: ${String(payload.snapshotId)}`,
     `Capability success: ${boolText(payload.capability?.success)}`,
-    `Outcome: ${payload.outcome.status} - ${payload.outcome.reason}`,
+    `Outcome status: ${payload.outcome.status} - ${payload.outcome.reason}`,
+    `Mechanical run status: ${payload.runStatus} (not the task outcome)`,
     `Workspace: ${String(payload.workspace.rootLabel)} (${String(payload.workspace.id)})`,
     ...evidenceText(kind, payload.evidence),
   ].join('\n');
