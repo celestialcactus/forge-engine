@@ -110,6 +110,26 @@ class FixtureIo implements InteractiveChangeIo {
   write(line: string): void { this.output.push(line); }
 }
 
+class BlockingFixtureIo implements InteractiveChangeIo {
+  readonly output: string[] = [];
+  readonly prompted: Promise<void>;
+  #markPrompted!: () => void;
+  #questionCount = 0;
+
+  constructor(private readonly firstAnswer?: string) {
+    this.prompted = new Promise<void>((resolvePrompted) => { this.#markPrompted = resolvePrompted; });
+  }
+
+  async question(): Promise<string | undefined> {
+    this.#questionCount++;
+    if (this.#questionCount === 1 && this.firstAnswer !== undefined) return this.firstAnswer;
+    this.#markPrompted();
+    return new Promise<string | undefined>(() => {});
+  }
+
+  write(line: string): void { this.output.push(line); }
+}
+
 const runtimeFixture = (
   candidate: SovereignProposalArtifact,
   acceptedState: SovereignCoordinatorArtifact['state'] = 'promoted',
@@ -154,6 +174,45 @@ test('developer decline stops after review without requesting candidate mutation
   assert.equal(result.status, 'declined');
   assert.deepEqual(fixture.calls.map((call) => call.kind), ['prepare']);
   assert.ok(io.output.some((line) => line.includes('no candidate or workspace mutation')));
+});
+
+test('cancellation while awaiting candidate approval returns without mutation', async () => {
+  const fixture = runtimeFixture(proposal('verified_candidate'));
+  const io = new BlockingFixtureIo();
+  const controller = new AbortController();
+  const pending = executeInteractiveChangePlan({
+    plan,
+    checkIds: ['typecheck'],
+    runtime: fixture.runtime,
+    io,
+    signal: controller.signal,
+  });
+  await io.prompted;
+  controller.abort(new Error('Fixture cancelled candidate approval.'));
+  const result = await pending;
+  assert.equal(result.status, 'cancelled');
+  assert.deepEqual(fixture.calls.map((call) => call.kind), ['prepare']);
+  assert.ok(io.output.some((line) => line.includes('cancelled before candidate execution')));
+});
+
+test('cancellation at promotion retains the verified transaction without source promotion', async () => {
+  const fixture = runtimeFixture(proposal('verified_candidate'));
+  const io = new BlockingFixtureIo('yes');
+  const controller = new AbortController();
+  const pending = executeInteractiveChangePlan({
+    plan,
+    checkIds: ['typecheck'],
+    runtime: fixture.runtime,
+    io,
+    signal: controller.signal,
+  });
+  await io.prompted;
+  controller.abort(new Error('Fixture cancelled promotion approval.'));
+  const result = await pending;
+  assert.equal(result.status, 'cancelled');
+  assert.equal(result.transactionId, 'transaction:test');
+  assert.deepEqual(fixture.calls.map((call) => call.kind), ['prepare', 'propose']);
+  assert.ok(io.output.some((line) => line.includes('retained after cancellation')));
 });
 
 test('approved verified candidate requires a second explicit promotion decision', async () => {
