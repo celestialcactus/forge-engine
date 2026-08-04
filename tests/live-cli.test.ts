@@ -60,6 +60,17 @@ test('streams human text while presenting canonical run status and a terminal ev
     {
       runId: 'run:live',
       sequence: 4,
+      type: 'outcome.assessed',
+      assessment: {
+        schemaVersion: 1,
+        status: 'not_evaluated',
+        reason: 'No caller-authored outcome contract was supplied.',
+        checks: [],
+      },
+    },
+    {
+      runId: 'run:live',
+      sequence: 5,
       type: 'run.completed',
       output: 'Forge ready',
     },
@@ -85,10 +96,13 @@ test('streams human text while presenting canonical run status and a terminal ev
     event: { type: 'response.completed', finishReason: 'stop' },
   });
   presenter.onRunEvent(runEvents[2]!);
+  presenter.onRunEvent(runEvents[3]!);
   const contextEvent = runEvents[1];
   if (contextEvent?.type !== 'context.planned') throw new Error('Context event fixture is missing.');
+  const outcomeEvent = runEvents[3];
+  if (outcomeEvent?.type !== 'outcome.assessed') throw new Error('Outcome event fixture is missing.');
   const artifact: RunArtifact = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     runId: 'run:live',
     task: 'Inspect.',
     snapshot: { id: 'workspace:live', rootLabel: 'fixture', files: [] },
@@ -96,6 +110,7 @@ test('streams human text while presenting canonical run status and a terminal ev
     contextPlan: contextEvent.plan,
     capabilityResults: [],
     inferenceEvidence: [inferenceEvidence],
+    outcome: outcomeEvent.assessment,
     output: 'Forge ready',
     events: runEvents,
   };
@@ -107,6 +122,7 @@ test('streams human text while presenting canonical run status and a terminal ev
   assert.match(stderr, /\[forge\] inference ollama\/fixture-model stop 12ms in=8 out=3/u);
   assert.match(stderr, /\[forge\] evidence summary/u);
   assert.match(stderr, /run=run:live status=completed/u);
+  assert.match(stderr, /outcome=not_evaluated checks=0/u);
   assert.match(stderr, /inference turns=1 tokens input=8 output=3/u);
   assert.equal(stderr.includes('Forge ready'), false);
 });

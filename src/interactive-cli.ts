@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline';
-import type { RunStatus } from './slice0/contracts.js';
+import type { OutcomeStatus, RunStatus } from './slice0/contracts.js';
 import type { InferenceFetch, InferenceRoute } from './inference/contracts.js';
 import { resolveInferenceRoute } from './inference/routing.js';
 
@@ -118,6 +118,7 @@ export interface InteractiveSessionIo {
 export interface InteractiveRunSummary {
   readonly runId: string;
   readonly status: RunStatus;
+  readonly outcome: OutcomeStatus;
 }
 
 export interface InteractiveSessionOptions {
@@ -208,7 +209,7 @@ export async function runInteractiveSession(options: InteractiveSessionOptions):
         options.io.write('route: ' + routeLabel(selection));
         options.io.write(lastRun === undefined
           ? 'last run: none'
-          : 'last run: ' + lastRun.runId + ' (' + lastRun.status + ')');
+          : 'last run: ' + lastRun.runId + ' (status=' + lastRun.status + ', outcome=' + lastRun.outcome + ')');
         options.io.write('conversation: prompts are independent; tool turns within each run are preserved');
       } else if (command === '/model') {
         if (argumentsList.length === 0) {

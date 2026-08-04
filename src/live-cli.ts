@@ -73,6 +73,8 @@ export class LiveCliPresenter {
         + ' ' + evidence.durationMs + 'ms'
         + (usage.length === 0 ? '' : ' ' + usage),
       );
+    } else if (event.type === 'outcome.assessed') {
+      this.#status('outcome ' + event.assessment.status + ': ' + event.assessment.reason);
     } else if (event.type === 'capability.requested') {
       this.#status('capability requested: ' + event.call.capabilityId);
     } else if (event.type === 'approval.decided') {
@@ -110,6 +112,7 @@ export class LiveCliPresenter {
     this.#sink.stderr([
       '[forge] evidence summary',
       '  run=' + artifact.runId + ' status=' + artifact.status,
+      '  outcome=' + artifact.outcome.status + ' checks=' + artifact.outcome.checks.length,
       '  snapshot=' + artifact.snapshot.id + ' files=' + artifact.snapshot.files.length,
       '  context selected=' + selected + ' omitted=' + omitted,
       '  inference turns=' + inference.length + ' tokens ' + tokenSummary,

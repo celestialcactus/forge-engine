@@ -4,8 +4,9 @@ use forge_core::{
     ApprovalDecision, ApprovalOutcome, ApprovalPolicy, Cancellation, CapabilityAdapter,
     CapabilityCall, CapabilityResult, InferenceCost, InferenceCostStatus, InferenceEvidence,
     InferenceFinishReason, InferenceLocality, InferenceRouting, InferenceUsage, NoCancellation,
-    NoopEventSink, PlannerRequest, PlannerTurn, RunRequest, RunStatus, RuntimeSignal,
-    Slice0Runtime, TaskPlanner, WorkspaceFile, WorkspaceSnapshot,
+    NoopEventSink, OutcomeContract, OutcomeRequirement, OutcomeStatus, PlannerRequest, PlannerTurn,
+    RunRequest, RunStatus, RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceFile,
+    WorkspaceSnapshot,
 };
 use serde_json::json;
 
@@ -37,6 +38,7 @@ fn request(run_id: &str) -> RunRequest {
         snapshot: workspace(),
         context_budget_bytes: 200,
         max_turns: 2,
+        outcome_contract: None,
     }
 }
 
@@ -45,6 +47,23 @@ fn inspect_call() -> CapabilityCall {
         id: "call-1".to_owned(),
         capability_id: "workspace.inventory".to_owned(),
         input: json!({}),
+    }
+}
+
+fn outcome_contract(capability_id: &str) -> OutcomeContract {
+    OutcomeContract {
+        schema_version: 1,
+        requirements: vec![
+            OutcomeRequirement::CapabilitySucceeded {
+                id: "required-capability".to_owned(),
+                capability_id: capability_id.to_owned(),
+                minimum_invocations: 1,
+            },
+            OutcomeRequirement::OutputEquals {
+                id: "expected-output".to_owned(),
+                expected: "Workspace inspected.".to_owned(),
+            },
+        ],
     }
 }
 
@@ -125,6 +144,26 @@ impl CapabilityAdapter for FixtureCapabilities {
     }
 }
 
+struct MismatchedCapabilities;
+
+impl CapabilityAdapter for MismatchedCapabilities {
+    fn supports(&self, capability_id: &str) -> bool {
+        capability_id == "workspace.inventory"
+    }
+
+    fn invoke(
+        &mut self,
+        _call: &CapabilityCall,
+        _snapshot: &WorkspaceSnapshot,
+    ) -> Result<CapabilityResult, RuntimeSignal> {
+        Ok(CapabilityResult {
+            call_id: "call-other".to_owned(),
+            success: true,
+            content: "Mismatched fixture result.".to_owned(),
+        })
+    }
+}
+
 fn allow() -> FixedPolicy {
     FixedPolicy(ApprovalDecision {
         outcome: ApprovalOutcome::Allow,
@@ -160,7 +199,9 @@ fn produces_the_slice_zero_golden_trace() {
         &mut FixtureCapabilities::inventory(),
         &NoCancellation,
     );
+    assert_eq!(artifact.schema_version, 2);
     assert_eq!(artifact.status, RunStatus::Completed);
+    assert_eq!(artifact.outcome.status, OutcomeStatus::NotEvaluated);
     assert_eq!(artifact.output.as_deref(), Some("Workspace inspected."));
     let event_types: Vec<&str> = artifact
         .events
@@ -171,6 +212,7 @@ fn produces_the_slice_zero_golden_trace() {
             forge_core::RunEventData::CapabilityRequested { .. } => "capability.requested",
             forge_core::RunEventData::ApprovalDecided { .. } => "approval.decided",
             forge_core::RunEventData::CapabilityCompleted { .. } => "capability.completed",
+            forge_core::RunEventData::OutcomeAssessed { .. } => "outcome.assessed",
             forge_core::RunEventData::RunCompleted { .. } => "run.completed",
             _ => "unexpected",
         })
@@ -183,6 +225,7 @@ fn produces_the_slice_zero_golden_trace() {
             "capability.requested",
             "approval.decided",
             "capability.completed",
+            "outcome.assessed",
             "run.completed",
         ]
     );
@@ -203,6 +246,129 @@ fn produces_the_slice_zero_golden_trace() {
             "workspace://src/greeting.ts",
         ]
     );
+}
+
+#[test]
+fn verifies_only_caller_authored_requirements() {
+    let mut verified_request = request("verified-run");
+    verified_request.outcome_contract = Some(outcome_contract("workspace.inventory"));
+    let verified = run(
+        verified_request,
+        &mut ScriptedPlanner::successful(),
+        &mut allow(),
+        &mut FixtureCapabilities::inventory(),
+        &NoCancellation,
+    );
+    assert_eq!(verified.status, RunStatus::Completed);
+    assert_eq!(verified.outcome.status, OutcomeStatus::Verified);
+    assert_eq!(
+        verified.outcome_contract,
+        Some(outcome_contract("workspace.inventory"))
+    );
+    assert!(verified.outcome.checks.iter().all(|check| check.satisfied));
+    assert!(matches!(
+        verified.events[verified.events.len() - 2].data,
+        forge_core::RunEventData::OutcomeAssessed { .. }
+    ));
+
+    let mut unmet_request = request("unmet-run");
+    unmet_request.outcome_contract = Some(outcome_contract("workspace.read"));
+    let unmet = run(
+        unmet_request,
+        &mut ScriptedPlanner::successful(),
+        &mut allow(),
+        &mut FixtureCapabilities::inventory(),
+        &NoCancellation,
+    );
+    assert_eq!(unmet.status, RunStatus::Completed);
+    assert_eq!(unmet.outcome.status, OutcomeStatus::Unmet);
+    assert_eq!(
+        unmet
+            .outcome
+            .checks
+            .iter()
+            .find(|check| check.id == "required-capability")
+            .map(|check| check.satisfied),
+        Some(false)
+    );
+}
+
+#[test]
+fn uses_rust_unicode_whitespace_semantics_for_non_empty_output_checks() {
+    for (run_id, output, expected_status) in [
+        (
+            "byte-order-mark-output",
+            "\u{feff}",
+            OutcomeStatus::Verified,
+        ),
+        ("next-line-output", "\u{0085}", OutcomeStatus::Unmet),
+    ] {
+        let mut output_request = request(run_id);
+        output_request.max_turns = 1;
+        output_request.outcome_contract = Some(OutcomeContract {
+            schema_version: 1,
+            requirements: vec![OutcomeRequirement::OutputNonEmpty {
+                id: "output".to_owned(),
+            }],
+        });
+        let mut planner = ScriptedPlanner {
+            turns: VecDeque::from([PlannerTurn::Complete {
+                output: output.to_owned(),
+                inference: None,
+            }]),
+        };
+        let artifact = run(
+            output_request,
+            &mut planner,
+            &mut allow(),
+            &mut FixtureCapabilities::inventory(),
+            &NoCancellation,
+        );
+        assert_eq!(artifact.outcome.status, expected_status);
+    }
+}
+
+#[test]
+fn does_not_credit_a_capability_result_for_a_different_call_id() {
+    let mut mismatched_request = request("mismatched-result-run");
+    mismatched_request.outcome_contract = Some(outcome_contract("workspace.inventory"));
+    let artifact = run(
+        mismatched_request,
+        &mut ScriptedPlanner::successful(),
+        &mut allow(),
+        &mut MismatchedCapabilities,
+        &NoCancellation,
+    );
+    assert_eq!(artifact.status, RunStatus::Completed);
+    assert_eq!(artifact.outcome.status, OutcomeStatus::Unmet);
+    assert_eq!(artifact.capability_results[0].call_id, "call-1");
+    assert!(!artifact.capability_results[0].success);
+    assert_eq!(
+        artifact.capability_results[0].content,
+        "Capability result call ID call-other does not match call-1."
+    );
+}
+
+#[test]
+fn rejects_invalid_outcome_contracts_before_planning() {
+    let mut invalid_request = request("invalid-outcome-run");
+    invalid_request.outcome_contract = Some(OutcomeContract {
+        schema_version: 1,
+        requirements: Vec::new(),
+    });
+    let artifact = run(
+        invalid_request,
+        &mut ScriptedPlanner::successful(),
+        &mut allow(),
+        &mut FixtureCapabilities::inventory(),
+        &NoCancellation,
+    );
+    assert_eq!(artifact.status, RunStatus::Failed);
+    assert_eq!(artifact.outcome.status, OutcomeStatus::NotEvaluated);
+    assert!(matches!(
+        artifact.events[1].data,
+        forge_core::RunEventData::RunFailed { ref code, .. } if code == "invalid_outcome_contract"
+    ));
 }
 
 #[test]
@@ -271,6 +437,10 @@ fn records_normalized_inference_evidence_before_terminal_completion() {
     ));
     assert!(matches!(
         artifact.events[3].data,
+        forge_core::RunEventData::OutcomeAssessed { .. }
+    ));
+    assert!(matches!(
+        artifact.events[4].data,
         forge_core::RunEventData::RunCompleted { .. }
     ));
 

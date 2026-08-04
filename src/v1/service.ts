@@ -4,6 +4,7 @@ import type {
   Capability,
   CapabilityCall,
   CapabilityResult,
+  OutcomeContract,
   PlannerRequest,
   PlannerTurn,
   RunArtifact,
@@ -103,6 +104,7 @@ export interface GitDiffOptions {
 export interface ExecuteTaskOptions {
   readonly contextBudgetBytes?: number;
   readonly maxTurns?: number;
+  readonly outcomeContract?: OutcomeContract;
   readonly onEvent?: (event: RunEvent) => void;
 }
 
@@ -193,6 +195,7 @@ export class ForgeWorkspaceService {
       [...this.#evidenceCapabilities.values()],
       contextBudgetBytes,
       maxTurns,
+      options.outcomeContract,
       signal,
       options.onEvent,
     );
@@ -263,7 +266,19 @@ export class ForgeWorkspaceService {
   async #runCapability(task: string, capability: Capability, input: unknown, signal?: AbortSignal): Promise<RunArtifact> {
     const call: CapabilityCall = { id: 'call-1', capabilityId: capability.id, input };
     const planner = new SingleCapabilityPlanner(call);
-    return this.#runPlanner(task, planner, [capability], 65_536, 2, signal);
+    const outcomeContract: OutcomeContract = {
+      schemaVersion: 1,
+      requirements: [
+        {
+          id: 'capability-succeeded',
+          kind: 'capability_succeeded',
+          capabilityId: capability.id,
+          minimumInvocations: 1,
+        },
+        { id: 'output-present', kind: 'output_non_empty' },
+      ],
+    };
+    return this.#runPlanner(task, planner, [capability], 65_536, 2, outcomeContract, signal);
   }
 
   async #runPlanner(
@@ -272,6 +287,7 @@ export class ForgeWorkspaceService {
     capabilities: readonly Capability[],
     contextBudgetBytes: number,
     maxTurns: number,
+    outcomeContract?: OutcomeContract,
     signal?: AbortSignal,
     onEvent?: (event: RunEvent) => void,
   ): Promise<RunArtifact> {
@@ -300,6 +316,7 @@ export class ForgeWorkspaceService {
       snapshot,
       contextBudgetBytes,
       maxTurns,
+      ...(outcomeContract === undefined ? {} : { outcomeContract }),
       ...(signal === undefined ? {} : { signal }),
     });
   }
@@ -342,6 +359,8 @@ export function artifactPayload(artifact: RunArtifact): Readonly<Record<string, 
     runId: artifact.runId,
     task: artifact.task,
     status: artifact.status,
+    outcomeContract: artifact.outcomeContract,
+    outcome: artifact.outcome,
     capability: result === undefined ? null : { callId: result.callId, success: result.success },
     workspace: { id: artifact.snapshot.id, rootLabel: artifact.snapshot.rootLabel },
     context: {

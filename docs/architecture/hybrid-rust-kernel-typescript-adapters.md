@@ -1,7 +1,8 @@
 # Hybrid runtime candidate: Rust kernel and TypeScript adapters
 
-**Status:** accepted target boundary; hosted and VS Code gates passed; production adoption staged
+**Status:** accepted hybrid boundary; protocol v4 implementation awaits hosted and VS Code gates
 **Date:** 2026-07-22
+**Updated:** 2026-08-04
 
 ## Architectural claim
 
@@ -19,12 +20,12 @@ VS Code / MCP / future provider SDK / TypeScript compiler
        tools, workflow definitions, presentation,
            provider/compiler/host integration
                          |
-            forge.kernel.bridge.v3 over NDJSON
+            forge.kernel.bridge.v4 over NDJSON
                          |
                  Rust kernel authority
      validate -> authorize -> schedule -> invoke -> record
                          |
-                   RunArtifact v1
+                   RunArtifact v2
 ```
 
 The bridge is a local child-process protocol for the spike. It is not a public
@@ -44,13 +45,15 @@ network service and does not introduce a second persistence boundary.
 FFI/N-API is intentionally deferred. It would optimize a boundary before proving
 that the boundary is correct.
 
-## Bridge protocol v2
+## Bridge protocol v4
 
 Every message is one UTF-8 JSON object followed by LF. Every message carries
-`protocolVersion: "forge.kernel.bridge.v3"` and a caller-selected `requestId`.
-Version 2 replaces adapter-computed approval decisions with attributable facts;
-version 1 remains historical spike evidence and is intentionally rejected by a
-version-2 peer.
+`protocolVersion: "forge.kernel.bridge.v4"` and a caller-selected `requestId`.
+Version 4 adds a bounded caller-supplied outcome contract and a Rust-produced
+assessment to the authoritative artifact. Version 3 added normalized inference
+evidence, version 2 replaced adapter-computed approval decisions with attributable
+facts, and earlier versions remain historical evidence intentionally rejected by a
+version-4 peer.
 
 ### Host to kernel
 
@@ -91,7 +94,8 @@ Rust owns:
 - workflow execution state, scheduling, budgets, and cancellation;
 - capability request/result correlation and ordering;
 - the only transition from adapter answers to run state;
-- terminal status and failure taxonomy;
+- lifecycle status and failure taxonomy;
+- outcome-contract validation and the only authoritative outcome assessment;
 - final artifact serialization.
 
 TypeScript owns:
@@ -110,7 +114,17 @@ validates schema version, non-empty provenance, and exact call/capability identi
 applies host-deny and user-decline precedence; resolves `ask`; and produces the
 only final `ApprovalDecision`. The authoritative `approval.decided` event retains
 those structured facts as an optional backward-compatible evidence extension.
-Legacy artifacts remain readable and logical event order is unchanged.
+The approval-facts meaning is retained. RunArtifact v2 intentionally adds an
+outcome event before completion, and v1 artifacts are not accepted as current bridge
+results.
+
+`RunStatus.completed` records that the planner produced a valid terminal turn. It
+does not certify that the developer objective was achieved. When a caller supplies
+a valid `OutcomeContract`, Rust evaluates its deterministic requirements and emits
+`outcome.assessed` immediately before `run.completed`. Without a contract the
+artifact says `not_evaluated`; a failed requirement says `unmet`. `verified` means
+only that the recorded contract requirements passed, not that every model sentence
+is true.
 
 TypeScript must not synthesize missing Rust events or repair a malformed artifact.
 The host either accepts one schema-valid terminal artifact or records a bridge
@@ -124,14 +138,15 @@ does not pursue a future all-Rust rewrite.
 
 ## Compatibility strategy
 
-The accepted TypeScript kernel is the differential oracle for schema version 1.
+The TypeScript conformance runtime is the differential oracle for RunArtifact
+schema version 2; it is not a selectable product runtime.
 Canonical fixture artifacts must deep-match structurally, including ordered event
 and evidence arrays. The NDJSON bridge is deterministic, but JSON object member
 order is not an architectural contract.
 
 The MCP adapter remains TypeScript during SGU-003. Enabling the Rust kernel must
 not alter tool names, inputs, compact evidence, complete workspace-relative paths,
-run IDs, snapshot IDs, or the six-event single-capability sequence.
+run IDs, snapshot IDs, or the seven-event single-capability sequence.
 
 ## Failure and cancellation rules
 

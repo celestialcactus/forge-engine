@@ -5,7 +5,9 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { forgeMcpArtifactResult } from '../src/mcp/presentation.js';
 import { forgeMcpReadCacheKey } from '../src/mcp/server.js';
+import type { RunArtifact } from '../src/slice0/contracts.js';
 
 const fixtureRoot = resolve('tests/fixtures/slice1-workspace');
 type TextContent = Array<{ readonly type: string; readonly text?: string }>;
@@ -16,6 +18,38 @@ const contentText = (result: unknown): string => {
 };
 const structuredPayload = <T>(result: unknown): T =>
   (result as { readonly structuredContent?: unknown }).structuredContent as T;
+
+test('marks an unmet outcome as an MCP error even when the adapter call succeeded', () => {
+  const outcome = {
+    schemaVersion: 1 as const,
+    status: 'unmet' as const,
+    reason: 'One or more caller-authored outcome requirements were not satisfied.',
+    checks: [{
+      id: 'output',
+      kind: 'output_non_empty' as const,
+      satisfied: false,
+      explanation: 'Planner output contained 0 characters and did not include non-whitespace content.',
+    }],
+  };
+  const artifact: RunArtifact = {
+    schemaVersion: 2,
+    runId: 'run:unmet-mcp',
+    task: 'Return output.',
+    snapshot: { id: 'workspace:unmet-mcp', rootLabel: 'fixture', files: [] },
+    status: 'completed',
+    capabilityResults: [{ callId: 'call-1', success: true, content: '' }],
+    outcomeContract: { schemaVersion: 1, requirements: [{ id: 'output', kind: 'output_non_empty' }] },
+    outcome,
+    output: '',
+    events: [
+      { runId: 'run:unmet-mcp', sequence: 1, type: 'outcome.assessed', assessment: outcome },
+      { runId: 'run:unmet-mcp', sequence: 2, type: 'run.completed', output: '' },
+    ],
+  };
+  const result = forgeMcpArtifactResult(artifact, 'summary');
+  assert.equal('isError' in result ? result.isError : undefined, true);
+  assert.match(result.content[0]?.text ?? '', /Outcome: unmet/u);
+});
 
 test('official MCP client discovers and invokes the compact Forge repository-intelligence tether', async () => {
   const transport = new StdioClientTransport({
@@ -60,6 +94,7 @@ test('official MCP client discovers and invokes the compact Forge repository-int
       runId: string;
       snapshotId: string;
       status: string;
+      outcome: { status: string; checks: Array<{ satisfied: boolean }> };
       capability: { success: boolean };
       workspace: { rootLabel: string };
       evidence: { totalFiles: number; files: string[]; truncated: boolean };
@@ -69,6 +104,9 @@ test('official MCP client discovers and invokes the compact Forge repository-int
     assert.match(summary.runId, /^run:/u);
     assert.match(summary.snapshotId, /^workspace:/u);
     assert.equal(summary.status, 'completed');
+    assert.equal(summary.outcome.status, 'verified');
+    assert.equal(summary.outcome.checks.length, 2);
+    assert.equal(summary.outcome.checks.every((check) => check.satisfied), true);
     assert.equal(summary.capability.success, true);
     assert.equal(summary.workspace.rootLabel, 'slice1-workspace');
     assert.equal(summary.evidence.totalFiles, 2);
@@ -80,11 +118,14 @@ test('official MCP client discovers and invokes the compact Forge repository-int
       { sequence: 3, type: 'capability.requested' },
       { sequence: 4, type: 'approval.decided' },
       { sequence: 5, type: 'capability.completed' },
-      { sequence: 6, type: 'run.completed' },
+      { sequence: 6, type: 'outcome.assessed' },
+      { sequence: 7, type: 'run.completed' },
     ]);
     assert.equal(JSON.stringify(summary).includes('"plan"'), false);
+    assert.equal(JSON.stringify(summary).includes('"outcomeContract"'), false);
     assert.match(contentText(summaryResult), /^Forge run ID: run:/u);
     assert.match(contentText(summaryResult), /Snapshot ID: workspace:/u);
+    assert.match(contentText(summaryResult), /Outcome: verified/u);
     assert.match(contentText(summaryResult), /Paths:\nREADME\.md/u);
     assert.ok(Buffer.byteLength(JSON.stringify(summaryResult), 'utf8') < 5_000);
 

@@ -34,6 +34,17 @@ const artifactOutputSchema = (evidence: z.ZodType) => z.object({
   evidence: evidence.optional(),
   workspace: z.object({ id: z.string(), rootLabel: z.string() }),
   status: z.enum(['running', 'completed', 'failed', 'cancelled', 'budget_exhausted']),
+  outcome: z.object({
+    schemaVersion: z.literal(1),
+    status: z.enum(['not_evaluated', 'verified', 'unmet']),
+    reason: z.string(),
+    checks: z.array(z.object({
+      id: z.string(),
+      kind: z.enum(['output_non_empty', 'output_equals', 'capability_succeeded']),
+      satisfied: z.boolean(),
+      explanation: z.string(),
+    })),
+  }),
   events: z.array(z.object({ sequence: z.number().int(), type: z.string() })),
   cache: z.object({
     hit: z.literal(true),
@@ -268,18 +279,20 @@ export const forgeMcpArtifactPayload = (artifact: RunArtifact, kind: ForgeMcpToo
     evidence: projectedEvidence(kind, payload.evidence),
     workspace: { id: workspace?.id, rootLabel: workspace?.rootLabel },
     status: payload.status,
+    outcome: artifact.outcome,
     events: artifact.events.map((event) => ({ sequence: event.sequence, type: event.type })),
   };
 };
 
 export const forgeMcpArtifactResult = (artifact: RunArtifact, kind: ForgeMcpToolKind) => {
   const payload = { invocationId: newInvocationId(), ...forgeMcpArtifactPayload(artifact, kind) };
-  const failed = artifact.capabilityResults.at(-1)?.success === false;
+  const failed = artifact.capabilityResults.at(-1)?.success === false || artifact.outcome.status === 'unmet';
   const content = [
     `Forge run ID: ${String(payload.runId)}`,
     `Forge invocation ID: ${payload.invocationId}`,
     `Snapshot ID: ${String(payload.snapshotId)}`,
     `Capability success: ${boolText(payload.capability?.success)}`,
+    `Outcome: ${payload.outcome.status} - ${payload.outcome.reason}`,
     `Workspace: ${String(payload.workspace.rootLabel)} (${String(payload.workspace.id)})`,
     ...evidenceText(kind, payload.evidence),
   ].join('\n');

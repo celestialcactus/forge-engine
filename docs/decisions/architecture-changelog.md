@@ -1,5 +1,29 @@
 # Architecture Changelog
 
+## 2026-08-04 - Rust-authoritative outcome contract local gate
+
+- Opened CLI ship lane 4 from merged `develop` at `0441d865` on
+  `feature/cli-outcome-verification`.
+- Separated mechanical run lifecycle from outcome assessment. RunArtifact v2 now
+  always reports `not_evaluated`, `verified`, or `unmet`; `completed` alone no
+  longer implies that a developer objective was achieved.
+- Added bounded caller-supplied outcome contracts and made Rust their only validator
+  and evaluator. The initial checks cover non-empty output, exact expected output,
+  and successful correlated capability invocations.
+- Bumped the child-process run bridge to `forge.kernel.bridge.v4`, retained the full
+  contract in the authoritative artifact, and exposed only the compact assessment
+  through MCP presentation.
+- The implementation audit caught a missing bridge request projection and a generic
+  call-ID correlation hole. Both now fail closed and have Rust/TypeScript parity
+  regressions.
+- Local validation passes typecheck, 63/63 tests, build, Rust formatting, GNU
+  all-target compile, and strict clippy. Native Rust test execution remains hosted
+  because this Windows machine lacks both MSVC `link.exe` and GNU `dlltool.exe`.
+- Recorded [ADR-0022](ADRs/ADR-0022-rust-authoritative-outcome-contract.md),
+  [Checkpoint 59](checkpoints/2026-08-04-59-outcome-contract-local-gate.md), and
+  [CLI ship lane 4](../tasks/SLICE-CLI4-developer-capabilities.md). Hosted and
+  controlled VS Code gates remain pending before 4A is accepted.
+
 ## 2026-08-03 - Credentialed OpenAI multi-turn gate
 
 - A conservative synthetic text call proved the persisted project key and direct

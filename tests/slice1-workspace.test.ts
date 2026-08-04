@@ -172,12 +172,17 @@ test('runs real workspace inventory through the accepted Forge run contract', as
   const artifact = await new ForgeWorkspaceService(fixtureRoot, { runtime: typeScriptConformanceFixture }).inspect(1);
   const payload = artifactPayload(artifact);
   const evidence = payload.evidence as { totalFiles: number; files: unknown[]; truncated: boolean };
+  assert.equal(artifact.schemaVersion, 2);
   assert.equal(artifact.status, 'completed');
+  assert.equal(artifact.outcome.status, 'verified');
+  assert.equal(artifact.outcomeContract?.requirements.length, 2);
+  assert.deepEqual(payload.outcomeContract, artifact.outcomeContract);
+  assert.equal(artifact.outcome.checks.every((check) => check.satisfied), true);
   assert.equal(evidence.totalFiles, 2);
   assert.equal(evidence.files.length, 1);
   assert.equal(evidence.truncated, true);
   assert.deepEqual(artifact.events.map((event) => event.type), [
-    'run.started', 'context.planned', 'capability.requested', 'approval.decided', 'capability.completed', 'run.completed',
+    'run.started', 'context.planned', 'capability.requested', 'approval.decided', 'capability.completed', 'outcome.assessed', 'run.completed',
   ]);
   const approval = artifact.events.find((event) => event.type === 'approval.decided');
   assert.equal(approval?.type, 'approval.decided');
@@ -192,6 +197,7 @@ test('returns bounded attributable literal search evidence', async () => {
   const payload = artifactPayload(artifact);
   const evidence = payload.evidence as { matches: Array<{ path: string; line: number; preview: string }> };
   assert.equal(artifact.status, 'completed');
+  assert.equal(artifact.outcome.status, 'verified');
   assert.deepEqual(evidence.matches, [{
     path: 'README.md',
     line: 3,
