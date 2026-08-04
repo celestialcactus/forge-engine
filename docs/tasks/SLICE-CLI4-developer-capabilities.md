@@ -1,6 +1,6 @@
 # CLI ship lane 4: developer capability pack
 
-**Status:** active; increments 4A and 4B-1 accepted; 4B-2 local implementation awaiting hosted/product acceptance
+**Status:** active; increments 4A, 4B-1, and 4B-2 accepted; 4B-3 lifecycle convergence next
 **Branch:** `feature/cli-edit-verification-composition`
 **Base:** merged outcome-contract `develop` at `742b8c8` (PR #18)
 
@@ -98,11 +98,18 @@ or retains the verified transaction. Policy parsing is strict and trusted-only, 
 MCP remains seven read-only tools.
 
 [Checkpoint 63](../decisions/checkpoints/2026-08-04-63-interactive-edit-local-gate.md)
-records the local implementation, Qwen 0.5B/1.5B/3B failure modes, the 7B one-read/
-one-plan result, and the Rust prepared-operation projection defect caught before
-candidate creation. Hosted native/product acceptance and exact-kernel CLI/VS Code
-tests remain open. The planning RunArtifact and Rust transaction artifact are not
-yet one durable aggregate lifecycle record.
+records the local implementation and low-model failure evidence. [Checkpoint 64](../decisions/checkpoints/2026-08-04-64-interactive-edit-accepted.md)
+records exact-head hosted Windows/macOS/Ubuntu, a full promoted Qwen flow, and the
+controlled one-call VS Code acceptance gate. The planning RunArtifact and Rust
+transaction artifact are still not one durable continuable lifecycle record.
+
+### Increment 4B-3: Rust-owned lifecycle convergence
+
+Do not add a TypeScript aggregate that merely points at two completed artifacts.
+The runtime must retain the evidence-selected plan, exact approval, candidate
+verification, and terminal promotion/discard/retain state under one Rust-owned,
+continuable task lifecycle. The design must preserve the accepted seven-tool MCP
+surface and reuse the ChangeSet v2 transaction authority.
 
 ### 4B exit gate
 

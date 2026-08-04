@@ -1,6 +1,6 @@
 # ADR-0024: Model plan and Rust change composition
 
-- **Status:** Implemented locally; hosted/product acceptance pending
+- **Status:** Accepted for increment 4B-2; lifecycle convergence remains 4B-3
 - **Date:** 2026-08-04
 - **Scope:** Interactive CLI edit planning, review, verification, and promotion
 

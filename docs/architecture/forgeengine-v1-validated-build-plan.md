@@ -151,13 +151,15 @@ broader V1 slices remain authoritative capability goals.
    RunArtifact v2, bridge v4, and explicit `not_evaluated` / `verified` / `unmet`
    states. Exact-head hosted Windows/macOS/Ubuntu, 39/39 local hybrid, product
    smoke, and controlled one-call VS Code gates are green at `be2069a`. Increment
-   4B edit/process composition is active on
-   `feature/cli-edit-verification-composition`. Increment 4B-1 first makes Rust
-   prepare the exact ChangeSet before approval, rejects identity drift before
-   candidate mutation, and retains approval plus outcome attribution. See
+   Increment 4B-1 prepared identity/approval binding and 4B-2 interactive edit
+   composition are accepted on `feature/cli-edit-verification-composition`.
+   Exact-head hosted Windows/macOS/Ubuntu, a full promoted Qwen flow, and a
+   controlled seven-tool VS Code regression are green at implementation `bbf119e`.
+   Increment 4B-3 must converge planning and transaction evidence into one
+   Rust-owned continuable lifecycle before 4B closes. See
    [CLI ship lane 4](../tasks/SLICE-CLI4-developer-capabilities.md),
-   [ADR-0022](../decisions/ADRs/ADR-0022-rust-authoritative-outcome-contract.md),
-   and [ADR-0023](../decisions/ADRs/ADR-0023-prepared-changeset-approval-binding.md).
+   [ADR-0024](../decisions/ADRs/ADR-0024-model-plan-and-rust-change-composition.md),
+   and [Checkpoint 64](../decisions/checkpoints/2026-08-04-64-interactive-edit-accepted.md).
    **Exit:** a representative change is proposed, reviewed, verified, accepted or
    discarded, and fully attributed without generic raw powers; unsupported claims
    cannot silently inherit an accepted verification state.
@@ -420,7 +422,7 @@ not source volume or the number of abstractions present.
 | Scope | Estimated complete | Remaining critical path |
 | --- | ---: | --- |
 | Core runtime and dependable local change machinery | 98% | Kernel convergence is merged on `develop`; native restricted execution remains a separately gated hardening boundary. |
-| Shippable standalone CLI alpha | 82% | Live Qwen and credentialed OpenAI flows, the interactive loop, outcome authority, hosted cross-platform gates, and controlled VS Code pass. Edit/process composition, recovery UX, packaging, and clean-install smoke remain open. |
+| Shippable standalone CLI alpha | 85% | Live Qwen and credentialed OpenAI flows, the interactive loop, outcome authority, verified edit composition, hosted cross-platform gates, and controlled VS Code pass. Lifecycle convergence, recovery UX, packaging, and clean-install smoke remain open. |
 | Broader V1 platform | 28% | Context quality gates, durable projections, reviewed skills/memory, symmetric host integrations, restricted execution, connectors, and release hardening. |
 
 Assuming one focused implementation lane, working hosted CI, and no material scope
@@ -431,7 +433,8 @@ expansion, the current planning ranges are:
 - interactive live CLI and credentialed OpenAI multi-turn flow: **accepted and merged through PR #17 at `0441d865`**;
 - Rust-authoritative outcome contracts and the 4A gate: **accepted and merged through PR #18 at `742b8c8`**;
 - 4B-1 prepared ChangeSet/approval binding: **accepted at `3262e3b`**;
-- 4B-2 interactive edit composition: **local implementation complete; hosted exact-kernel, full verified edit, VS Code, and aggregate-lifecycle gates remain open**;
+- 4B-2 interactive edit composition: **accepted at implementation `bbf119e` with hosted Windows/macOS/Ubuntu, a full promoted Qwen flow, and controlled one-call VS Code evidence**;
+- 4B-3 Rust-owned lifecycle convergence: **next; planning and transaction evidence are attributable but not yet one continuable lifecycle**;
 - shippable standalone CLI alpha: **3–5 weeks**;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
@@ -472,8 +475,10 @@ hosted, exact-kernel product, and controlled VS Code gates and is merged on
 are merged through PR #17 at `0441d865`. Rust-authoritative outcome contracts are
 merged through PR #18 at current `develop` head `742b8c8`. The prepared
 ChangeSet/approval boundary is accepted at `3262e3b` after exact-head hosted
-Windows/macOS/Ubuntu and exact Windows-kernel product gates. Increment 4B-2 now
-composes that machinery into the interactive developer edit loop.
+Windows/macOS/Ubuntu and exact Windows-kernel product gates. Increment 4B-2 is
+accepted at `bbf119e` after hosted cross-platform, full promoted Qwen, and
+controlled one-call VS Code gates. Increment 4B-3 now closes the remaining split
+between the completed planning RunArtifact and the governed Rust transaction.
 `restricted` remains fail-closed until a
 separately proven Windows/macOS backend passes adversarial gates; the trusted developer alpha must name that
 limitation.

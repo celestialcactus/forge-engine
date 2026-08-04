@@ -1,5 +1,20 @@
 # Architecture Changelog
 
+## 2026-08-04 - Interactive edit composition accepted
+
+- Accepted CLI ship lane increment 4B-2 at implementation `bbf119e`. Local
+  typecheck, all 76 tests, and production build pass; Node passed on Windows/macOS
+  in Actions run `30933939503`; the real Rust-kernel/TypeScript product passed on
+  Windows/macOS/Ubuntu in Actions run `30933939342`.
+- A disposable Qwen 7B flow completed one read, one plan, exact diff review,
+  explicit candidate approval, successful verification, and explicit promotion.
+  The workspace changed only after Rust reported `promoted`, and governed provider
+  prose remained hidden before the decision UI.
+- A fresh trusted VS Code Agent chat exposed exactly seven read-only Forge tools and
+  completed one workspace-summary call in four seconds with no built-ins, retries,
+  or mutation surface. See [Checkpoint 64](checkpoints/2026-08-04-64-interactive-edit-accepted.md).
+- Increment 4B-3 remains open: planning currently completes before the Rust
+  transaction begins, so one Rust-owned continuable lifecycle is not yet proven.
 ## 2026-08-04 - Interactive edit presentation truthfulness
 
 - Stopped streaming provider prose directly during a policy-enabled change-planning
