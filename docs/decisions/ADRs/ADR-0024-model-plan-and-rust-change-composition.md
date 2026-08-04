@@ -46,6 +46,11 @@ to the model.
 8. Verification-policy parsing is strict and trusted-only. Unsupported isolation
    fields, malformed bounds, duplicate checks, and unknown selections fail before
    approval. This path does not claim an OS sandbox.
+9. A change-planning session does not stream provider prose directly to the human.
+   If no valid plan is produced, Forge prints the completed buffered answer. If a
+   valid plan is produced, the Forge-rendered diff, approval state, verifier result,
+   and Rust terminal transaction state are the human-facing authority. This prevents
+   model wording from claiming that a reviewed change was already applied.
 
 ## Why this preserves the hybrid boundary
 

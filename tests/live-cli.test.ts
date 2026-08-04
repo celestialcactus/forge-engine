@@ -127,6 +127,16 @@ test('streams human text while presenting canonical run status and a terminal ev
   assert.equal(stderr.includes('Forge ready'), false);
 });
 
+test('prints a buffered assistant answer when the caller withheld live deltas', () => {
+  let stdout = '';
+  const presenter = new LiveCliPresenter({
+    stdout: (chunk) => { stdout += chunk; },
+    stderr: () => {},
+  });
+  presenter.printAssistantOutput('Evidence-backed answer.');
+  assert.equal(stdout, 'assistant> Evidence-backed answer.\n');
+});
+
 test('shows a bounded single-line capability failure reason', () => {
   let stderr = '';
   const presenter = new LiveCliPresenter({

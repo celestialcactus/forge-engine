@@ -94,7 +94,7 @@ const executeProviderTask = async (
       provider: createInferenceProvider(route),
       route,
       tools: changePlanning ? developerChangePlanningTools : developerEvidenceTools,
-      ...(presenter === undefined
+      ...(presenter === undefined || changePlanning
         ? {}
         : { onInferenceEvent: (observation) => presenter.onInferenceEvent(observation) }),
     });
@@ -401,8 +401,11 @@ try {
           presenter,
           changePlanning,
         );
-        presenter.printSummary(artifact);
         const plan = extractInteractiveChangePlan(artifact);
+        if (plan === undefined && artifact.output !== undefined) {
+          presenter.printAssistantOutput(artifact.output);
+        }
+        presenter.printSummary(artifact);
         if (plan !== undefined) {
           const cancellation = createRunCancellation(timeoutMs);
           try {

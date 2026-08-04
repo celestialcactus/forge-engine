@@ -103,6 +103,11 @@ export class LiveCliPresenter {
     }
   }
 
+  printAssistantOutput(output: string): void {
+    this.#closeText();
+    this.#sink.stdout('assistant> ' + output + (output.endsWith('\n') ? '' : '\n'));
+  }
+
   printSummary(artifact: RunArtifact): void {
     this.#closeText();
     const inference = artifact.inferenceEvidence ?? [];

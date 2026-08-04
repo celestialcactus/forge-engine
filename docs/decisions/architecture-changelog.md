@@ -1,5 +1,17 @@
 # Architecture Changelog
 
+## 2026-08-04 - Interactive edit presentation truthfulness
+
+- Stopped streaming provider prose directly during a policy-enabled change-planning
+  turn. A no-plan turn still prints the completed buffered answer, while a valid
+  plan is presented only through Forge's diff, approval, verification, and Rust
+  transaction-state UI.
+- This is a presentation-boundary correction, not a new source of authority. A live
+  Qwen 7B acceptance flow had correctly waited for approval and Rust promotion but
+  its prose prematurely said that the replacement had occurred.
+- Typecheck, all 76 tests, and the production build pass locally. Exact-head hosted
+  and controlled VS Code acceptance remain pending.
+
 ## 2026-08-04 - Interactive edit composition local gate
 
 - Implemented CLI-only, policy-enabled change planning over the accepted Rust
