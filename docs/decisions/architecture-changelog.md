@@ -1,5 +1,24 @@
 # Architecture Changelog
 
+## 2026-08-04 - Rust-authoritative outcome contract accepted
+
+- Accepted CLI ship lane increment 4A at `be2069a` after Node 22 passed on Windows
+  and macOS (Actions run `30922333249`) and the exact Rust-kernel/TypeScript product
+  passed on Windows, macOS, and Ubuntu (Actions run `30922337824`).
+- The exact hosted Windows release kernel passed local product smoke and all 39
+  hybrid tests with zero skips.
+- A controlled trusted-workspace VS Code test exposed one adapter ambiguity: raw
+  Forge evidence said `verified`, while Copilot reported the top-level mechanical
+  `status=completed` as the outcome. The MCP projection now calls that field
+  `runStatus`, puts `outcome.status` first, and leaves the internal RunArtifact
+  unchanged.
+- A fresh retest with exactly seven Forge tools made one summary call, used no
+  built-in search or retries, and reported outcome `verified` plus the canonical
+  seven-event order.
+- Recorded the completed gate in
+  [Checkpoint 60](checkpoints/2026-08-04-60-outcome-contract-accepted.md). Increment
+  4B bounded edit and verification composition is now the next implementation lane.
+
 ## 2026-08-04 - Rust-authoritative outcome contract local gate
 
 - Opened CLI ship lane 4 from merged `develop` at `0441d865` on

@@ -143,14 +143,15 @@ broader V1 slices remain authoritative capability goals.
    product on Windows/macOS/Ubuntu (Actions run `30867433674`). Credentialed
    synthetic OpenAI text, bounded-read, and search-to-read gates pass. Increment 3
    is accepted and merged; increment 4 now proceeds on its own feature branch.
-4. **Developer capability pack — active on `feature/cli-outcome-verification`.** Bounded read/search, patch/edit, process/test,
+4. **Developer capability pack — increment 4A accepted on `feature/cli-outcome-verification`.** Bounded read/search, patch/edit, process/test,
    Git status/diff, and verification over the accepted authority. Add an explicit
    outcome-verification state that distinguishes a valid terminal planner turn from
    an evidence-grounded accepted result; do not infer correctness from model prose.
    The 4A foundation now adds Rust-authoritative bounded outcome contracts,
    RunArtifact v2, bridge v4, and explicit `not_evaluated` / `verified` / `unmet`
-   states. Its local gate is green; hosted and controlled VS Code acceptance remain
-   open before edit/process composition begins. See
+   states. Exact-head hosted Windows/macOS/Ubuntu, 39/39 local hybrid, product
+   smoke, and controlled one-call VS Code gates are green at `be2069a`. Increment
+   4B edit/process composition is next. See
    [CLI ship lane 4](../tasks/SLICE-CLI4-developer-capabilities.md) and
    [ADR-0022](../decisions/ADRs/ADR-0022-rust-authoritative-outcome-contract.md).
    **Exit:** a representative change is proposed, reviewed, verified, accepted or
@@ -415,7 +416,7 @@ not source volume or the number of abstractions present.
 | Scope | Estimated complete | Remaining critical path |
 | --- | ---: | --- |
 | Core runtime and dependable local change machinery | 98% | Kernel convergence is merged on `develop`; native restricted execution remains a separately gated hardening boundary. |
-| Shippable standalone CLI alpha | 80% | Live Qwen and credentialed OpenAI flows, the interactive loop, hosted cross-platform gates, and controlled VS Code pass. Outcome authority is locally green but still needs hosted/VS Code acceptance; edit/process composition, recovery UX, packaging, and clean-install smoke remain open. |
+| Shippable standalone CLI alpha | 82% | Live Qwen and credentialed OpenAI flows, the interactive loop, outcome authority, hosted cross-platform gates, and controlled VS Code pass. Edit/process composition, recovery UX, packaging, and clean-install smoke remain open. |
 | Broader V1 platform | 28% | Context quality gates, durable projections, reviewed skills/memory, symmetric host integrations, restricted execution, connectors, and release hardening. |
 
 Assuming one focused implementation lane, working hosted CI, and no material scope

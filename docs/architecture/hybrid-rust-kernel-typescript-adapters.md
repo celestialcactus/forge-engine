@@ -1,6 +1,6 @@
 # Hybrid runtime candidate: Rust kernel and TypeScript adapters
 
-**Status:** accepted hybrid boundary; protocol v4 implementation awaits hosted and VS Code gates
+**Status:** accepted hybrid boundary; protocol v4 validated on hosted Windows, macOS, Ubuntu, and controlled VS Code
 **Date:** 2026-07-22
 **Updated:** 2026-08-04
 
@@ -189,6 +189,13 @@ controlled one-call VS Code apprentice test. It proves that Rust can be the sole
 run authority behind TypeScript integrations. It does not prove that today's
 Node-plus-native MCP package is simpler to distribute than Node alone or accept
 the spike transport as the production lifecycle.
+
+Protocol v4 and RunArtifact v2 were subsequently accepted at `be2069a`. Actions
+run `30922337824` passed the Rust/TypeScript product boundary on Windows, macOS,
+and Ubuntu; run `30922333249` passed the Node surface on Windows and macOS. The
+exact hosted Windows kernel passed 39/39 local hybrid tests and product smoke. A
+fresh trusted VS Code chat used one Forge call and reported `outcome.status` as
+`verified` after the MCP adapter renamed mechanical lifecycle to `runStatus`.
 
 ## Sovereign CLI constraint
 

@@ -1,6 +1,6 @@
 # ADR-0022: Rust-authoritative outcome contracts
 
-- **Status:** Accepted for CLI ship lane 4; implementation awaiting hosted and VS Code gates
+- **Status:** Accepted and validated for CLI ship lane increment 4A
 - **Date:** 2026-08-04
 - **Scope:** Canonical run contract, developer capability pack, host projections
 
@@ -64,6 +64,11 @@ from the requested operation and verifier plan rather than model prose.
 One-shot CLI execution exits nonzero for `unmet`. Interactive `/status`, human run
 summaries, JSON artifacts, and MCP projections expose lifecycle and outcome as
 separate fields.
+
+The compact MCP projection names mechanical lifecycle `runStatus` and reserves
+`outcome.status` for the caller-authored assessment. This naming is part of the
+host contract because a controlled VS Code test demonstrated that a generic
+top-level `status` field could be misreported as the task outcome.
 
 ## Consequences
 

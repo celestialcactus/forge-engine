@@ -4,6 +4,7 @@
 **Branch:** `feature/cli-outcome-verification`
 **Base:** `develop` at `0441d865` after merged PR #17
 **Status:** local implementation gate passed; hosted and VS Code acceptance pending
+**Follow-up:** [Checkpoint 60](2026-08-04-60-outcome-contract-accepted.md) records the completed hosted and VS Code acceptance gate.
 
 ## Why this checkpoint exists
 
@@ -90,3 +91,6 @@ macOS, and Ubuntu and remains the acceptance authority.
    `run.started`, `context.planned`, `capability.requested`, `approval.decided`,
    `capability.completed`, `outcome.assessed`, `run.completed`.
 7. Only then mark 4A accepted and begin 4B edit/process composition.
+
+This file intentionally preserves the pre-acceptance state. The gate above was
+closed by [Checkpoint 60](2026-08-04-60-outcome-contract-accepted.md).

@@ -1,6 +1,6 @@
 # CLI ship lane 4: developer capability pack
 
-**Status:** active; outcome-authority foundation is locally green, hosted and VS Code acceptance pending
+**Status:** active; increment 4A accepted, increment 4B next
 **Branch:** `feature/cli-outcome-verification`
 **Base:** merged live CLI `develop` at `0441d865` (PR #17)
 
@@ -47,12 +47,13 @@ Implemented:
 
 - [x] TypeScript typecheck, 63 tests, and production build pass locally.
 - [x] Rust formatting, all-target GNU compile, and strict clippy pass locally.
-- [ ] Native Rust tests and Rust/TypeScript hybrid parity pass on hosted Windows,
+- [x] Native Rust tests and Rust/TypeScript hybrid parity pass on hosted Windows,
       macOS, and Ubuntu.
-- [ ] Exact hosted Windows kernel passes product smoke and a controlled VS Code MCP
+- [x] Exact hosted Windows kernel passes product smoke and a controlled VS Code MCP
       call exposing `verified` plus the seven-event order.
-- [ ] Exact accepted implementation and validation evidence are committed and
-      linked here.
+- [x] Exact accepted implementation and validation evidence are committed in
+      `be2069a` and recorded in
+      [Checkpoint 60](../decisions/checkpoints/2026-08-04-60-outcome-contract-accepted.md).
 
 ## Increment 4B: bounded edit and verification composition
 
@@ -102,9 +103,9 @@ Reuse accepted machinery instead of adding generic powers:
 - `capability_succeeded` proves the named adapter reported success for the exact
   call; it does not independently prove semantic correctness of its content.
 - `output_non_empty` proves only that non-whitespace output exists.
-- Local Windows cannot currently link or execute the Rust test suite because the
-  installed GNU toolchain lacks `dlltool` and MSVC `link.exe` is absent. Hosted CI,
-  not a local compile-only check, is the executable cross-platform acceptance
-  authority.
+- Local Windows cannot currently link a new Rust binary because the installed GNU
+  toolchain lacks `dlltool` and MSVC `link.exe` is absent. The exact hosted Windows
+  kernel nevertheless passed 39/39 hybrid tests and product smoke locally. Hosted
+  CI remains the native cross-platform build authority.
 - No new OS sandbox is introduced by 4A. Restricted execution remains fail-closed
   unless an accepted provider proves containment.
