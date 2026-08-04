@@ -1,8 +1,8 @@
 # CLI ship lane 4: developer capability pack
 
-**Status:** active; increments 4A, 4B-1, and 4B-2 accepted; 4B-3 lifecycle convergence next
-**Branch:** `feature/cli-edit-verification-composition`
-**Base:** merged outcome-contract `develop` at `742b8c8` (PR #18)
+**Status:** active; increments 4A, 4B-1, and 4B-2 accepted; 4B-3 contract-first lifecycle convergence active
+**Branch:** `feature/cli-rust-lifecycle-continuation`
+**Base:** merged interactive edit `develop` at `1f0d792` (PR #19)
 
 ## Objective
 
@@ -110,6 +110,17 @@ The runtime must retain the evidence-selected plan, exact approval, candidate
 verification, and terminal promotion/discard/retain state under one Rust-owned,
 continuable task lifecycle. The design must preserve the accepted seven-tool MCP
 surface and reuse the ChangeSet v2 transaction authority.
+
+[ADR-0025](../decisions/ADRs/ADR-0025-rust-owned-capability-context-and-lifecycle.md)
+defines the contract-first implementation: RunArtifact v3, bridge v5, a
+Rust-authored digest-bound context shared by policy and capability invocation, and
+bounded structured capability evidence. The governed edit then executes as a
+capability before `run.completed`; TypeScript remains the UI/provider adapter and
+does not synthesize a second lifecycle.
+
+[Checkpoint 65](../decisions/checkpoints/2026-08-04-65-rust-owned-capability-context-local-gate.md)
+records the 4B-3a local contract gate: 78 TypeScript tests/build and Rust formatting
+pass; exact-head hosted Rust compile/lint/test remains required before acceptance.
 
 ### 4B exit gate
 

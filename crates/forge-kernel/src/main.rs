@@ -11,8 +11,9 @@ use std::sync::{Arc, Mutex};
 
 use forge_core::{
     ApprovalDecision, ApprovalFacts, ApprovalPolicy, Cancellation, CapabilityAdapter,
-    CapabilityCall, CapabilityResult, PlannerRequest, PlannerTurn, RunArtifact, RunEvent,
-    RunRequest, RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceSnapshot, resolve_approval,
+    CapabilityCall, CapabilityContext, CapabilityResult, PlannerRequest, PlannerTurn, RunArtifact,
+    RunEvent, RunRequest, RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceSnapshot,
+    resolve_approval,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -175,6 +176,7 @@ impl CapabilityAdapter for BridgeCapabilities {
         &mut self,
         call: &CapabilityCall,
         snapshot: &WorkspaceSnapshot,
+        context: &CapabilityContext,
     ) -> Result<CapabilityResult, RuntimeSignal> {
         let incoming = {
             let mut io = self.io.borrow_mut();
@@ -185,6 +187,7 @@ impl CapabilityAdapter for BridgeCapabilities {
                 "requestId": request_id,
                 "call": call,
                 "snapshot": snapshot,
+                "context": context,
             }))
             .map_err(RuntimeSignal::Failed)?;
             io.receive().map_err(RuntimeSignal::Failed)?
@@ -216,7 +219,11 @@ struct BridgePolicy {
 }
 
 impl ApprovalPolicy for BridgePolicy {
-    fn decide(&mut self, call: &CapabilityCall) -> Result<ApprovalDecision, RuntimeSignal> {
+    fn decide(
+        &mut self,
+        call: &CapabilityCall,
+        context: &CapabilityContext,
+    ) -> Result<ApprovalDecision, RuntimeSignal> {
         let incoming = {
             let mut io = self.io.borrow_mut();
             let request_id = io.request_id.clone();
@@ -225,6 +232,7 @@ impl ApprovalPolicy for BridgePolicy {
                 "protocolVersion": RUN_PROTOCOL_VERSION,
                 "requestId": request_id,
                 "call": call,
+                "context": context,
             }))
             .map_err(RuntimeSignal::Failed)?;
             io.receive().map_err(RuntimeSignal::Failed)?

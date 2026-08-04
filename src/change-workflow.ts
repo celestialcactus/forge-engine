@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
-import type { RunArtifact } from './slice0/contracts.js';
-import type { ChangeProposalArtifact, TextChangeRequest } from './v1/change-proposal.js';
+import type { CapabilityResult, RunArtifact } from './slice0/contracts.js';
+import {
+  changeProposalEvidenceKind,
+  type ChangeProposalArtifact,
+  type TextChangeRequest,
+} from './v1/change-proposal.js';
 import type {
   SovereignChangeProposal,
   SovereignPreparedArtifact,
@@ -32,14 +36,11 @@ const asRecord = (value: unknown): JsonRecord | undefined =>
 const sha256 = (value: string): string =>
   createHash('sha256').update(Buffer.from(value, 'utf8')).digest('hex');
 
-const parsePlanEvidence = (content: string): ChangeProposalArtifact => {
-  let decoded: unknown;
-  try {
-    decoded = JSON.parse(content) as unknown;
-  } catch {
-    throw new Error('Forge change-plan evidence is not valid JSON.');
+const parsePlanEvidence = (result: CapabilityResult): ChangeProposalArtifact => {
+  if (result.evidence?.schemaVersion !== 1 || result.evidence.kind !== changeProposalEvidenceKind) {
+    throw new Error('Forge change-plan result is missing typed proposal evidence.');
   }
-  const candidate = asRecord(decoded);
+  const candidate = asRecord(result.evidence.data);
   if (candidate?.schemaVersion !== 1
     || typeof candidate.proposalId !== 'string'
     || typeof candidate.snapshotId !== 'string'
@@ -166,7 +167,7 @@ export const extractInteractiveChangePlan = (artifact: RunArtifact): Interactive
   if (result === undefined || !result.success) {
     throw new Error('Forge change planning did not produce successful evidence.');
   }
-  const evidence = parsePlanEvidence(result.content);
+  const evidence = parsePlanEvidence(result);
   if (evidence.snapshotId !== artifact.snapshot.id) {
     throw new Error('Forge change-plan evidence does not match the planning workspace snapshot.');
   }

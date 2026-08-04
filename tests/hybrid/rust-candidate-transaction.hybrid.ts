@@ -67,6 +67,19 @@ const fixture = async (): Promise<Fixture> => {
     },
     snapshot,
     new AbortController().signal,
+    {
+      schemaVersion: 1,
+      task: 'Direct capability fixture.',
+      basis: {
+        schemaVersion: 1,
+        runId: 'run:direct-fixture',
+        snapshotId: snapshot.id,
+        contextPlanId: 'context:direct-fixture',
+        priorCallIds: [],
+        priorObservationsSha256: '0'.repeat(64),
+      },
+      priorObservations: [],
+    },
   );
   assert.equal(proposalResult.success, true);
   const proposal = JSON.parse(proposalResult.content) as ChangeProposalArtifact;

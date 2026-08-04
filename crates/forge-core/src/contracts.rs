@@ -131,12 +131,49 @@ pub struct CapabilityCall {
     pub input: Value,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CapabilityEvidence {
+    pub schema_version: u8,
+    pub kind: String,
+    pub data: Value,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilityResult {
     pub call_id: String,
     pub success: bool,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<CapabilityEvidence>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CapabilityObservation {
+    pub call: CapabilityCall,
+    pub result: CapabilityResult,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CapabilityContextBasis {
+    pub schema_version: u8,
+    pub run_id: String,
+    pub snapshot_id: String,
+    pub context_plan_id: String,
+    pub prior_call_ids: Vec<String>,
+    pub prior_observations_sha256: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CapabilityContext {
+    pub schema_version: u8,
+    pub task: String,
+    pub basis: CapabilityContextBasis,
+    pub prior_observations: Vec<CapabilityObservation>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -228,6 +265,7 @@ pub enum RunEventData {
         call_id: String,
         outcome: ApprovalOutcome,
         reason: String,
+        basis: CapabilityContextBasis,
         #[serde(skip_serializing_if = "Option::is_none")]
         facts: Option<ApprovalFacts>,
     },

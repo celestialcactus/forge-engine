@@ -155,11 +155,16 @@ broader V1 slices remain authoritative capability goals.
    composition are accepted on `feature/cli-edit-verification-composition`.
    Exact-head hosted Windows/macOS/Ubuntu, a full promoted Qwen flow, and a
    controlled seven-tool VS Code regression are green at implementation `bbf119e`.
-   Increment 4B-3 must converge planning and transaction evidence into one
-   Rust-owned continuable lifecycle before 4B closes. See
+   Increment 4B-3a now implements RunArtifact v3, bridge v5, Rust-authored
+   digest-bound prior-capability context, and bounded typed capability evidence.
+   The local 78-test/build and Rust-format gate is green; hosted Rust acceptance is
+   pending. Increment 4B-3b must then converge the interactive transaction into the
+   still-open Rust run before 4B closes. See
    [CLI ship lane 4](../tasks/SLICE-CLI4-developer-capabilities.md),
    [ADR-0024](../decisions/ADRs/ADR-0024-model-plan-and-rust-change-composition.md),
-   and [Checkpoint 64](../decisions/checkpoints/2026-08-04-64-interactive-edit-accepted.md).
+   [ADR-0025](../decisions/ADRs/ADR-0025-rust-owned-capability-context-and-lifecycle.md),
+   [Checkpoint 64](../decisions/checkpoints/2026-08-04-64-interactive-edit-accepted.md),
+   and [Checkpoint 65](../decisions/checkpoints/2026-08-04-65-rust-owned-capability-context-local-gate.md).
    **Exit:** a representative change is proposed, reviewed, verified, accepted or
    discarded, and fully attributed without generic raw powers; unsupported claims
    cannot silently inherit an accepted verification state.

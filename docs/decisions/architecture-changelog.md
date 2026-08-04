@@ -1,3 +1,20 @@
+# 2026-08-04 - Rust-owned lifecycle convergence begins
+
+- Merged accepted interactive edit composition through PR #19; remote `develop`
+  now points at `1f0d792`.
+- Accepted [ADR-0025](ADRs/ADR-0025-rust-owned-capability-context-and-lifecycle.md):
+  RunArtifact v3 and bridge v5 will carry a Rust-authored, digest-bound prior
+  capability context through approval and invocation plus bounded structured
+  capability evidence.
+- Increment 4B-3 will move the existing governed ChangeSet v2 edit flow inside the
+  active Rust run. It must not add a TypeScript wrapper runtime or an MCP mutation
+  tool.
+- Crash-resumable inference replay remains explicitly deferred to the Recovery
+  state ship lane; this increment closes the active-run evidence seam only.
+- [Checkpoint 65](checkpoints/2026-08-04-65-rust-owned-capability-context-local-gate.md)
+  records the green 78-test/build and Rust-format local gate, the unavailable
+  Windows linker, and the still-required exact-head hosted Rust gate.
+
 # Architecture Changelog
 
 ## 2026-08-04 - Interactive edit composition accepted

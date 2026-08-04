@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { compileContext, requiredContextBytes } from './context.js';
 import {
   assessOutcome,
@@ -9,6 +11,8 @@ import type {
   ApprovalPolicy,
   Capability,
   CapabilityCall,
+  CapabilityContext,
+  CapabilityObservation,
   CapabilityResult,
   ContextPlan,
   InferenceEvidence,
@@ -20,6 +24,51 @@ import type {
   PlannerTurn,
   TaskPlanner,
 } from './contracts.js';
+
+const maximumCapabilityEvidenceBytes = 4 * 1_048_576;
+const capabilityEvidenceKind = /^[a-z0-9._-]{1,100}$/u;
+
+const canonicalJsonValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonicalJsonValue);
+  if (typeof value !== 'object' || value === null) return value;
+  const record = value as Readonly<Record<string, unknown>>;
+  return Object.fromEntries(
+    Object.keys(record).sort().map((key) => [key, canonicalJsonValue(record[key])]),
+  );
+};
+
+const capabilityContext = (
+  request: RunRequest,
+  contextPlan: ContextPlan,
+  priorObservations: readonly CapabilityObservation[],
+): CapabilityContext => {
+  const observations = [...priorObservations];
+  const canonical = JSON.stringify(canonicalJsonValue(observations));
+  return {
+    schemaVersion: 1,
+    task: request.task,
+    basis: {
+      schemaVersion: 1,
+      runId: request.runId,
+      snapshotId: request.snapshot.id,
+      contextPlanId: contextPlan.id,
+      priorCallIds: observations.map((observation) => observation.call.id),
+      priorObservationsSha256: createHash('sha256').update(canonical).digest('hex'),
+    },
+    priorObservations: observations,
+  };
+};
+
+const capabilityEvidenceValidationError = (result: CapabilityResult): string | undefined => {
+  const evidence = result.evidence;
+  if (evidence === undefined) return undefined;
+  if (evidence.schemaVersion !== 1) return 'Capability evidence schemaVersion must be 1.';
+  if (!capabilityEvidenceKind.test(evidence.kind)) return 'Capability evidence kind is invalid.';
+  if (Buffer.byteLength(JSON.stringify(evidence), 'utf8') > maximumCapabilityEvidenceBytes) {
+    return 'Capability evidence exceeds the 4 MiB limit.';
+  }
+  return undefined;
+};
 
 const inferenceValidationError = (turn: PlannerTurn): string | undefined => {
   const evidence = turn.inference;
@@ -107,6 +156,7 @@ export class TypeScriptConformanceRuntime {
     const signal = request.signal ?? new AbortController().signal;
     const events: RunEvent[] = [];
     const results: CapabilityResult[] = [];
+    const observations: CapabilityObservation[] = [];
     const attempts: OutcomeCapabilityAttempt[] = [];
     const inferenceEvidence: InferenceEvidence[] = [];
     let sequence = 0;
@@ -124,7 +174,7 @@ export class TypeScriptConformanceRuntime {
     };
 
     const artifact = (): RunArtifact => ({
-      schemaVersion: 2,
+      schemaVersion: 3,
       runId: request.runId,
       task: request.task,
       snapshot: request.snapshot,
@@ -180,8 +230,9 @@ export class TypeScriptConformanceRuntime {
           emit({ type: 'run.completed', output });
           return artifact();
         }
-        const result = await this.#execute(next.call, request, signal, emit);
+        const result = await this.#execute(next.call, request, contextPlan, observations, signal, emit);
         attempts.push({ capabilityId: next.call.capabilityId, success: result.success });
+        observations.push({ call: next.call, result });
         results.push(result);
       }
 
@@ -200,10 +251,31 @@ export class TypeScriptConformanceRuntime {
     }
   }
 
-  async #execute(call: CapabilityCall, request: RunRequest, signal: AbortSignal, emit: (data: RunEventData) => void): Promise<CapabilityResult> {
+  async #execute(
+    call: CapabilityCall,
+    request: RunRequest,
+    contextPlan: ContextPlan,
+    priorObservations: readonly CapabilityObservation[],
+    signal: AbortSignal,
+    emit: (data: RunEventData) => void,
+  ): Promise<CapabilityResult> {
+    if (call.id.trim().length === 0 || call.capabilityId.trim().length === 0) {
+      throw new Error('Capability call ID and capability ID must not be empty.');
+    }
+    if (priorObservations.some((observation) => observation.call.id === call.id)) {
+      throw new Error(`Capability call ID ${call.id} was already used in this run.`);
+    }
     emit({ type: 'capability.requested', call });
-    const decision = await this.#approvalPolicy.decide(call);
-    emit({ type: 'approval.decided', callId: call.id, outcome: decision.outcome, reason: decision.reason, ...(decision.facts === undefined ? {} : { facts: decision.facts }) });
+    const context = capabilityContext(request, contextPlan, priorObservations);
+    const decision = await this.#approvalPolicy.decide(call, context);
+    emit({
+      type: 'approval.decided',
+      callId: call.id,
+      outcome: decision.outcome,
+      reason: decision.reason,
+      basis: context.basis,
+      ...(decision.facts === undefined ? {} : { facts: decision.facts }),
+    });
     if (decision.outcome !== 'allow') {
       const result = { callId: call.id, success: false, content: `${decision.outcome}: ${decision.reason}` };
       emit({ type: 'capability.completed', result });
@@ -216,14 +288,17 @@ export class TypeScriptConformanceRuntime {
       return result;
     }
     try {
-      const invoked = await capability.invoke(call, request.snapshot, signal);
-      const result = invoked.callId === call.id
-        ? invoked
-        : {
+      const invoked = await capability.invoke(call, request.snapshot, signal, context);
+      const evidenceError = capabilityEvidenceValidationError(invoked);
+      const result = invoked.callId !== call.id
+        ? {
             callId: call.id,
             success: false,
             content: `Capability result call ID ${invoked.callId} does not match ${call.id}.`,
-          };
+          }
+        : evidenceError === undefined
+          ? invoked
+          : { callId: call.id, success: false, content: evidenceError };
       emit({ type: 'capability.completed', result });
       return result;
     } catch (error) {

@@ -80,10 +80,38 @@ export interface CapabilityCall {
   readonly input: unknown;
 }
 
+export interface CapabilityEvidence {
+  readonly schemaVersion: 1;
+  readonly kind: string;
+  readonly data: unknown;
+}
+
 export interface CapabilityResult {
   readonly callId: string;
   readonly success: boolean;
   readonly content: string;
+  readonly evidence?: CapabilityEvidence;
+}
+
+export interface CapabilityObservation {
+  readonly call: CapabilityCall;
+  readonly result: CapabilityResult;
+}
+
+export interface CapabilityContextBasis {
+  readonly schemaVersion: 1;
+  readonly runId: string;
+  readonly snapshotId: string;
+  readonly contextPlanId: string;
+  readonly priorCallIds: readonly string[];
+  readonly priorObservationsSha256: string;
+}
+
+export interface CapabilityContext {
+  readonly schemaVersion: 1;
+  readonly task: string;
+  readonly basis: CapabilityContextBasis;
+  readonly priorObservations: readonly CapabilityObservation[];
 }
 
 export type InferenceLocality = 'local' | 'cloud';
@@ -121,7 +149,7 @@ export type RunEventData =
   | { readonly type: 'run.started'; readonly task: string; readonly snapshotId: string }
   | { readonly type: 'context.planned'; readonly plan: ContextPlan }
   | { readonly type: 'capability.requested'; readonly call: CapabilityCall }
-  | { readonly type: 'approval.decided'; readonly callId: string; readonly outcome: ApprovalOutcome; readonly reason: string; readonly facts?: ApprovalFacts }
+  | { readonly type: 'approval.decided'; readonly callId: string; readonly outcome: ApprovalOutcome; readonly reason: string; readonly basis: CapabilityContextBasis; readonly facts?: ApprovalFacts }
   | { readonly type: 'capability.completed'; readonly result: CapabilityResult }
   | { readonly type: 'inference.completed'; readonly evidence: InferenceEvidence }
   | { readonly type: 'outcome.assessed'; readonly assessment: OutcomeAssessment }
@@ -136,7 +164,7 @@ export type RunEvent = RunEventData & {
 };
 
 export interface RunArtifact {
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
   readonly runId: string;
   readonly task: string;
   readonly snapshot: WorkspaceSnapshot;
@@ -178,11 +206,16 @@ export interface TaskPlanner {
 
 export interface Capability {
   readonly id: string;
-  invoke(call: CapabilityCall, snapshot: WorkspaceSnapshot, signal: AbortSignal): Promise<CapabilityResult>;
+  invoke(
+    call: CapabilityCall,
+    snapshot: WorkspaceSnapshot,
+    signal: AbortSignal,
+    context: CapabilityContext,
+  ): Promise<CapabilityResult>;
 }
 
 export interface ApprovalPolicy {
-  decide(call: CapabilityCall): Promise<{
+  decide(call: CapabilityCall, context: CapabilityContext): Promise<{
     readonly outcome: ApprovalOutcome;
     readonly reason: string;
     readonly facts?: ApprovalFacts;

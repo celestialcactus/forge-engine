@@ -9,13 +9,34 @@ import {
 import { developerChangePlanningTools, developerEvidenceTools } from '../src/inference/developer-tools.js';
 import type { RunArtifact } from '../src/slice0/contracts.js';
 import type { SovereignPreparedArtifact } from '../src/hybrid/rust-sovereign-change-runtime.js';
+import type { ChangeProposalArtifact } from '../src/v1/change-proposal.js';
 
 const before = 'export const value = 1;\n';
 const after = 'export const value = 2;\n';
 const digest = (value: string): string => createHash('sha256').update(value).digest('hex');
 
+const planEvidence: ChangeProposalArtifact = {
+  schemaVersion: 1,
+  proposalId: 'change:test',
+  snapshotId: 'workspace:test',
+  status: 'ready',
+  mutatesWorkspace: false,
+  approvalRequiredBeforeApply: true,
+  changes: [{
+    path: 'src/value.ts',
+    beforeSha256: digest(before),
+    afterSha256: digest(after),
+    beforeBytes: Buffer.byteLength(before),
+    afterBytes: Buffer.byteLength(after),
+    diff: '--- a/src/value.ts\n+++ b/src/value.ts\n@@ -1,1 +1,1 @@\n-export const value = 1;\n+export const value = 2;\n',
+    diffBytes: 115,
+    truncated: false,
+  }],
+  conflicts: [],
+};
+
 const artifact = (overrides: Partial<RunArtifact> = {}): RunArtifact => ({
-  schemaVersion: 2,
+  schemaVersion: 3,
   runId: 'run:plan',
   task: 'Change value to two.',
   snapshot: {
@@ -42,25 +63,12 @@ const artifact = (overrides: Partial<RunArtifact> = {}): RunArtifact => ({
   }, {
     callId: 'call:plan',
     success: true,
-    content: JSON.stringify({
+    content: JSON.stringify(planEvidence),
+    evidence: {
       schemaVersion: 1,
-      proposalId: 'change:test',
-      snapshotId: 'workspace:test',
-      status: 'ready',
-      mutatesWorkspace: false,
-      approvalRequiredBeforeApply: true,
-      changes: [{
-        path: 'src/value.ts',
-        beforeSha256: digest(before),
-        afterSha256: digest(after),
-        beforeBytes: Buffer.byteLength(before),
-        afterBytes: Buffer.byteLength(after),
-        diff: '--- a/src/value.ts\n+++ b/src/value.ts\n@@ -1,1 +1,1 @@\n-export const value = 1;\n+export const value = 2;\n',
-        diffBytes: 115,
-        truncated: false,
-      }],
-      conflicts: [],
-    }),
+      kind: 'forge.workspace.change.plan.v1',
+      data: planEvidence,
+    },
   }],
   inferenceEvidence: [],
   outcome: {
@@ -177,15 +185,19 @@ test('refuses incomplete, repeated, truncated, or identity-mismatched plans befo
     ...repeated,
     events: [...repeated.events, planEvent],
   }), /exactly one change plan/u);
-  const truncatedEvidence = JSON.parse(artifact().capabilityResults[1]!.content) as Record<string, unknown>;
+  const planResult = artifact().capabilityResults[1]!;
+  const truncatedEvidence = JSON.parse(JSON.stringify(planResult.evidence?.data)) as Record<string, unknown>;
   const changes = truncatedEvidence.changes as Array<Record<string, unknown>>;
   changes[0] = { ...changes[0], truncated: true };
   assert.throws(() => extractInteractiveChangePlan(artifact({
     capabilityResults: [{
-      ...artifact().capabilityResults[1]!,
-      content: JSON.stringify(truncatedEvidence),
+      ...planResult,
+      evidence: { schemaVersion: 1, kind: 'forge.workspace.change.plan.v1', data: truncatedEvidence },
     }, artifact().capabilityResults[0]!],
   })), /review diff is truncated/u);
+  assert.throws(() => extractInteractiveChangePlan(artifact({
+    capabilityResults: [{ callId: planResult.callId, success: planResult.success, content: planResult.content }, artifact().capabilityResults[0]!],
+  })), /missing typed proposal evidence/u);
   const plan = extractInteractiveChangePlan(artifact());
   assert.ok(plan);
   assert.throws(() => validatePreparedChangePlan(plan, {
@@ -209,12 +221,16 @@ test('refuses incomplete, repeated, truncated, or identity-mismatched plans befo
       : event),
   }), /does not cover the complete target/u);
   const mismatchedSnapshot = artifact();
-  const planResult = JSON.parse(mismatchedSnapshot.capabilityResults[1]!.content) as Record<string, unknown>;
+  const mismatchedPlanResult = mismatchedSnapshot.capabilityResults[1]!;
+  const mismatchedEvidence = {
+    ...(mismatchedPlanResult.evidence?.data as Record<string, unknown>),
+    snapshotId: 'workspace:other',
+  };
   assert.throws(() => extractInteractiveChangePlan({
     ...mismatchedSnapshot,
     capabilityResults: [mismatchedSnapshot.capabilityResults[0]!, {
-      ...mismatchedSnapshot.capabilityResults[1]!,
-      content: JSON.stringify({ ...planResult, snapshotId: 'workspace:other' }),
+      ...mismatchedPlanResult,
+      evidence: { schemaVersion: 1, kind: 'forge.workspace.change.plan.v1', data: mismatchedEvidence },
     }],
   }), /does not match the planning workspace snapshot/u);
 });
