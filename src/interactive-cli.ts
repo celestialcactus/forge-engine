@@ -109,7 +109,7 @@ export async function resolveInteractiveRoute(
 }
 
 export interface InteractiveSessionIo {
-  question(prompt: string): Promise<string | undefined>;
+  question(prompt: string, signal?: AbortSignal): Promise<string | undefined>;
   write(line: string): void;
   clear(): void;
   close(): void;
@@ -142,27 +142,64 @@ const sessionHelp = [
 const routeLabel = (selection: InteractiveRouteSelection): string =>
   selection.route.provider + '/' + selection.route.model + ' (' + selection.source + ')';
 
+interface InteractiveLineWaiter {
+  readonly resolve: (line: string | undefined) => void;
+  readonly signal?: AbortSignal;
+  onAbort?: () => void;
+}
+
+const abortReason = (signal: AbortSignal): unknown =>
+  signal.reason ?? new Error('Forge interactive prompt was cancelled.');
+
 export function createNodeInteractiveIo(): InteractiveSessionIo {
   const readline = createInterface({ input: process.stdin, terminal: process.stdin.isTTY });
   const queuedLines: string[] = [];
-  const waiters: Array<(line: string | undefined) => void> = [];
+  const waiters: InteractiveLineWaiter[] = [];
   let closed = false;
+  const detach = (waiter: InteractiveLineWaiter): void => {
+    if (waiter.signal !== undefined && waiter.onAbort !== undefined) {
+      waiter.signal.removeEventListener('abort', waiter.onAbort);
+    }
+  };
   readline.on('line', (line) => {
     const waiter = waiters.shift();
     if (waiter === undefined) queuedLines.push(line);
-    else waiter(line);
+    else {
+      detach(waiter);
+      waiter.resolve(line);
+    }
   });
   readline.once('close', () => {
     closed = true;
-    for (const waiter of waiters.splice(0)) waiter(undefined);
+    for (const waiter of waiters.splice(0)) {
+      detach(waiter);
+      waiter.resolve(undefined);
+    }
   });
   return {
-    async question(prompt) {
+    async question(prompt, signal) {
+      if (signal?.aborted === true) throw abortReason(signal);
       process.stdout.write(prompt);
       const queued = queuedLines.shift();
       if (queued !== undefined) return queued;
       if (closed) return undefined;
-      return new Promise<string | undefined>((resolveLine) => waiters.push(resolveLine));
+      return new Promise<string | undefined>((resolveLine, rejectLine) => {
+        const waiter: InteractiveLineWaiter = {
+          resolve: resolveLine,
+          ...(signal === undefined ? {} : { signal }),
+        };
+        waiters.push(waiter);
+        if (signal !== undefined) {
+          waiter.onAbort = () => {
+            const index = waiters.indexOf(waiter);
+            if (index >= 0) waiters.splice(index, 1);
+            detach(waiter);
+            rejectLine(abortReason(signal));
+          };
+          signal.addEventListener('abort', waiter.onAbort, { once: true });
+          if (signal.aborted) waiter.onAbort();
+        }
+      });
     },
     write(line) {
       process.stdout.write(line + '\n');

@@ -12,7 +12,7 @@ import type {
 } from './hybrid/rust-sovereign-change-runtime.js';
 
 export interface InteractiveChangeIo {
-  question(prompt: string): Promise<string | undefined>;
+  question(prompt: string, signal?: AbortSignal): Promise<string | undefined>;
   write(line: string): void;
 }
 
@@ -71,6 +71,54 @@ const approval = (
 const normalizedChoice = (value: string | undefined): string => value?.trim().toLowerCase() ?? '';
 const approvedChoice = (value: string | undefined): boolean => ['y', 'yes', 'approve'].includes(normalizedChoice(value));
 
+interface PromptAnswer {
+  readonly kind: 'answer';
+  readonly value: string | undefined;
+}
+
+interface PromptCancellation {
+  readonly kind: 'cancelled';
+  readonly reason: string;
+}
+
+const cancellationReason = (signal: AbortSignal): string => {
+  const reason = signal.reason;
+  return reason instanceof Error ? reason.message : reason === undefined ? 'Forge approval was cancelled.' : String(reason);
+};
+
+const askWithCancellation = async (
+  io: InteractiveChangeIo,
+  prompt: string,
+  signal: AbortSignal,
+): Promise<PromptAnswer | PromptCancellation> => {
+  if (signal.aborted) return { kind: 'cancelled', reason: cancellationReason(signal) };
+  return new Promise<PromptAnswer | PromptCancellation>((resolve, reject) => {
+    let settled = false;
+    let onAbort: () => void = () => {};
+    const finish = (result: PromptAnswer | PromptCancellation): void => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      resolve(result);
+    };
+    onAbort = () => finish({ kind: 'cancelled', reason: cancellationReason(signal) });
+    signal.addEventListener('abort', onAbort, { once: true });
+    void io.question(prompt, signal).then(
+      (value) => signal.aborted
+        ? onAbort()
+        : finish({ kind: 'answer', value }),
+      (error: unknown) => {
+        if (signal.aborted) onAbort();
+        else {
+          signal.removeEventListener('abort', onAbort);
+          reject(error);
+        }
+      },
+    );
+    if (signal.aborted) onAbort();
+  });
+};
+
 const writeVerification = (io: InteractiveChangeIo, proposal: SovereignProposalArtifact): void => {
   io.write(`[forge] candidate status=${proposal.status}; outcome=${proposal.outcome.status}`);
   for (const raw of proposal.verification) {
@@ -95,13 +143,26 @@ export async function executeInteractiveChangePlan(
   if (options.checkIds.length === 0) throw new Error('Interactive change execution requires at least one verifier.');
   const signal = options.signal ?? new AbortController().signal;
   const callIdFactory = options.callIdFactory ?? (() => `forge-cli:${randomUUID()}`);
+  signal.throwIfAborted();
   const prepared = await options.runtime.prepare(options.plan.sovereignProposal);
   validatePreparedChangePlan(options.plan, prepared);
   for (const line of renderInteractiveChangePlan(options.plan, prepared, options.checkIds)) {
     options.io.write(line);
   }
-  const consent = await options.io.question('Apply this exact change in an isolated candidate and run verification? [y/N] ');
-  if (!approvedChoice(consent)) {
+  const consent = await askWithCancellation(
+    options.io,
+    'Apply this exact change in an isolated candidate and run verification? [y/N] ',
+    signal,
+  );
+  if (consent.kind === 'cancelled') {
+    options.io.write(`[forge] change cancelled before candidate execution: ${consent.reason}`);
+    return {
+      planningRunId: options.plan.planningRunId,
+      status: 'cancelled',
+      changeSetId: prepared.changeSetId,
+    };
+  }
+  if (!approvedChoice(consent.value)) {
     options.io.write('[forge] change declined; no candidate or workspace mutation was requested.');
     return {
       planningRunId: options.plan.planningRunId,
@@ -148,9 +209,23 @@ export async function executeInteractiveChangePlan(
     throw new Error('Verified candidate did not retain a durable transaction ID.');
   }
 
-  const choice = normalizedChoice(await options.io.question(
+  options.io.write(`[forge] verified candidate transaction=${transactionId}; awaiting explicit promotion or discard.`);
+  const promotionChoice = await askWithCancellation(
+    options.io,
     'Candidate verified. [a]ccept into workspace, [d]iscard, or [k]eep for later? ',
-  ));
+    signal,
+  );
+  if (promotionChoice.kind === 'cancelled') {
+    options.io.write(`[forge] transaction ${transactionId} retained after cancellation: ${promotionChoice.reason}`);
+    return {
+      planningRunId: options.plan.planningRunId,
+      status: 'cancelled',
+      changeSetId: prepared.changeSetId,
+      transactionId,
+      proposal,
+    };
+  }
+  const choice = normalizedChoice(promotionChoice.value);
   if (choice === 'a' || choice === 'accept' || choice === 'y' || choice === 'yes') {
     const exact = approval(
       'workspace.change.accept',

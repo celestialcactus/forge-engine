@@ -173,8 +173,16 @@ broader V1 slices remain authoritative capability goals.
    **Exit:** a representative change is proposed, reviewed, verified, accepted or
    discarded, and fully attributed without generic raw powers; unsupported claims
    cannot silently inherit an accepted verification state.
-5. **Approval and control.** Visible allow/ask/deny, approval callbacks,
-   cancellation, timeouts, iteration/tool budgets, and honest execution posture.
+5. **Approval and control - active on `feature/cli-approval-control`.** Visible
+   allow/ask/deny, approval callbacks, cancellation, timeouts, iteration/tool
+   budgets, and honest execution posture. Increment 5A makes both governed-change
+   approval waits cancellation-safe without changing the Rust protocol or MCP
+   surface; its 81-test local gate is green. Independent Rust-owned capability and
+   inference-usage budgets remain 5B, followed by explicit product policy/host
+   callback conformance in 5C. See
+   [CLI ship lane 5](../tasks/SLICE-CLI5-approval-control.md),
+   [ADR-0026](../decisions/ADRs/ADR-0026-cancellation-safe-approval-callbacks.md),
+   and [Checkpoint 67](../decisions/checkpoints/2026-08-04-67-approval-cancellation-local-gate.md).
    **Exit:** denial, cancellation, timeout, and exhaustion are deterministic and
    recoverable through CLI and embedded-host fixtures.
 6. **Recovery state.** Append-oriented local events/artifacts, idempotency and

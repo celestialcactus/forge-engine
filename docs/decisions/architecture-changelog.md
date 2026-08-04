@@ -1,3 +1,19 @@
+# 2026-08-04 - Approval cancellation hardening begins
+
+- Merged accepted Rust-owned governed lifecycle convergence through PR #20; remote
+  `develop` now points at `2ff5669`.
+- Accepted [ADR-0026](ADRs/ADR-0026-cancellation-safe-approval-callbacks.md): the
+  current run AbortSignal now governs both human edit decisions, and the executor
+  races cancellation even when a host question adapter ignores that signal.
+- Cancellation before candidate execution requests no mutation. Cancellation at
+  promotion prints and retains the verified transaction ID and performs no
+  accept/discard call.
+- Local validation passes typecheck, 81/81 tests, production build, focused 14/14
+  approval/interactive tests, and diff hygiene. Hosted cross-platform, live CLI,
+  and controlled VS Code gates remain pending. See
+  [Checkpoint 67](checkpoints/2026-08-04-67-approval-cancellation-local-gate.md).
+- This is increment 5A. Independent Rust-owned call/usage budgets remain 5B; policy
+  posture and embedded-host callback conformance remain 5C.
 # 2026-08-04 - Governed edit enters the Rust lifecycle
 
 - Accepted the 4B-3a contract at exact implementation `4ac3346`: Node passed on
