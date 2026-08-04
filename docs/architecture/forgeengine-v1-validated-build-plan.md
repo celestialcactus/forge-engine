@@ -2,7 +2,7 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
-**Last groomed:** 2026-08-03 after kernel-convergence hosted and VS Code acceptance
+**Last groomed:** 2026-08-04 after approval-cancellation hosted, live, and VS Code acceptance
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
 
@@ -143,7 +143,7 @@ broader V1 slices remain authoritative capability goals.
    product on Windows/macOS/Ubuntu (Actions run `30867433674`). Credentialed
    synthetic OpenAI text, bounded-read, and search-to-read gates pass. Increment 3
    is accepted and merged; increment 4 now proceeds on its own feature branch.
-4. **Developer capability pack — standalone 4A/4B core accepted on the feature branch.** Bounded read/search, patch/edit, process/test,
+4. **Developer capability pack - accepted and merged through PR #20 (`2ff5669`; implementation `1cc1e3f`).** Bounded read/search, patch/edit, process/test,
    Git status/diff, and verification over the accepted authority. Add an explicit
    outcome-verification state that distinguishes a valid terminal planner turn from
    an evidence-grounded accepted result; do not infer correctness from model prose.
@@ -177,8 +177,11 @@ broader V1 slices remain authoritative capability goals.
    allow/ask/deny, approval callbacks, cancellation, timeouts, iteration/tool
    budgets, and honest execution posture. Increment 5A makes both governed-change
    approval waits cancellation-safe without changing the Rust protocol or MCP
-   surface; its 81-test local gate is green. Independent Rust-owned capability and
-   inference-usage budgets remain 5B, followed by explicit product policy/host
+   surface. Increment 5A is accepted at implementation `ae746ff` after 81 local
+   tests, hosted Node Windows/macOS, hosted hybrid Windows/macOS/Ubuntu, two live
+   Windows Qwen cancellation gates, and a controlled one-call seven-tool VS Code
+   regression. Independent Rust-owned capability and inference-usage budgets remain
+   5B, followed by explicit product policy/host
    callback conformance in 5C. See
    [CLI ship lane 5](../tasks/SLICE-CLI5-approval-control.md),
    [ADR-0026](../decisions/ADRs/ADR-0026-cancellation-safe-approval-callbacks.md),
@@ -439,8 +442,8 @@ not source volume or the number of abstractions present.
 
 | Scope | Estimated complete | Remaining critical path |
 | --- | ---: | --- |
-| Core runtime and dependable local change machinery | 99% | The active-run governed edit lifecycle is accepted; deterministic live cancellation/control budgets and crash recovery remain separate ship-lane gates. |
-| Shippable standalone CLI alpha | 88% | Live Qwen/OpenAI, interactive outcome authority, verified edit composition, hosted cross-platform, and controlled VS Code gates pass. Approval/control UX, recovery, packaging, and clean-install smoke remain open. |
+| Core runtime and dependable local change machinery | 93% | The active-run governed edit lifecycle and cancellation-safe approvals are accepted. Independent call/usage budgets, policy-profile/host-callback conformance, and run-level recovery remain core gates; OS containment is a separately labeled hardening program. |
+| Shippable standalone CLI alpha | 83% | Live Qwen/OpenAI, interactive outcome authority, verified edit composition, hosted cross-platform, and controlled VS Code gates pass. Budgets, policy UX, recovery, native packaging, clean-install/update smoke, and the root license remain open. |
 | Broader V1 platform | 28% | Context quality gates, durable projections, reviewed skills/memory, symmetric host integrations, restricted execution, connectors, and release hardening. |
 
 Assuming one focused implementation lane, working hosted CI, and no material scope
@@ -452,7 +455,8 @@ expansion, the current planning ranges are:
 - Rust-authoritative outcome contracts and the 4A gate: **accepted and merged through PR #18 at `742b8c8`**;
 - 4B-1 prepared ChangeSet/approval binding: **accepted at `3262e3b`**;
 - 4B-2 interactive edit composition: **accepted at implementation `bbf119e` with hosted Windows/macOS/Ubuntu, a full promoted Qwen flow, and controlled one-call VS Code evidence**;
-- 4B-3 Rust-owned lifecycle convergence: **accepted at implementation `1cc1e3f` after exact-head hosted Windows/macOS/Ubuntu, an exact-kernel live Qwen promoted transaction, and a controlled one-call seven-tool VS Code gate**;
+- 4B-3 Rust-owned lifecycle convergence: **accepted at implementation `1cc1e3f` after exact-head hosted Windows/macOS/Ubuntu, an exact-kernel live Qwen promoted transaction, and a controlled one-call seven-tool VS Code gate; merged through PR #20 at `2ff5669`**;
+- 5A cancellation-safe approvals: **accepted at implementation `ae746ff` after local 81-test/build, hosted Windows/macOS/Ubuntu, two live Qwen timeout/no-mutation gates, and a controlled one-call seven-tool VS Code gate**;
 - shippable standalone CLI alpha: **3–5 weeks**;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
@@ -495,7 +499,8 @@ merged through PR #18 at current `develop` head `742b8c8`. The prepared
 ChangeSet/approval boundary is accepted at `3262e3b` after exact-head hosted
 Windows/macOS/Ubuntu and exact Windows-kernel product gates. Increment 4B-2 is
 accepted at `bbf119e` after hosted cross-platform, full promoted Qwen, and
-controlled one-call VS Code gates. Increment 4B-3 is accepted at exact implementation `1cc1e3f`: the governed
+controlled one-call VS Code gates. Increment 4B-3 is accepted at exact implementation `1cc1e3f` and merged through
+PR #20 at current `develop` head `2ff5669`: the governed
 transaction now completes before the authoritative Rust lifecycle terminates, and
 the exact head passed hosted Windows/macOS/Ubuntu, live Qwen promotion timing, and
 controlled one-call seven-tool VS Code gates.

@@ -1,6 +1,6 @@
 # CLI ship lane 5: approval and control
 
-**Status:** active; increment 5A cancellation-safe approval callbacks implemented locally
+**Status:** active; increment 5A accepted at `ae746ff`, increments 5B and 5C open
 **Branch:** `feature/cli-approval-control`
 **Base:** merged `develop` at `2ff5669` (PR #20)
 
@@ -50,9 +50,14 @@ prints and retains the verified transaction ID and does not call accept or disca
 - [x] decline, accept, discard, verification failure, and Rust terminal-state tests
       remain green;
 - [x] local typecheck, 81 tests, production build, and diff hygiene pass;
-- [ ] exact-head hosted Node Windows/macOS and hybrid Windows/macOS/Ubuntu pass;
-- [ ] live CLI timeout gates prove no early mutation at both prompts;
-- [ ] controlled VS Code still exposes exactly seven read-only Forge tools.
+- [x] exact-head hosted Node Windows/macOS and hybrid Windows/macOS/Ubuntu pass;
+- [x] live CLI timeout gates prove no early mutation at both prompts;
+- [x] controlled VS Code still exposes exactly seven read-only Forge tools.
+
+Acceptance evidence is recorded in
+[Checkpoint 67](../decisions/checkpoints/2026-08-04-67-approval-cancellation-local-gate.md).
+The VS Code gate is deliberately read-only: it proves tether compatibility, not an
+IDE mutation or approval surface.
 
 ## Increment 5B: Rust-owned execution budgets
 
