@@ -19,8 +19,11 @@
 - Earlier terminal responses were mechanically `completed` while failing the
   requested outcome. This is retained as the concrete gate for increment 4's
   explicit outcome-verification state.
+- Exact implementation `5b8d226` passed all five hosted jobs: Node on
+  Windows/macOS in Actions run `30867433664` and the real Rust-kernel/TypeScript
+  product on Windows/macOS/Ubuntu in run `30867433674`.
 - Recorded [Checkpoint 58](checkpoints/2026-08-03-58-openai-live-multiturn-gate.md).
-  Exact-head hosted cross-platform revalidation remains before merge.
+  Increment 3 is accepted and ready to merge through draft PR #17.
 
 ## 2026-08-03 - Deterministic host-authority replay under concurrency
 

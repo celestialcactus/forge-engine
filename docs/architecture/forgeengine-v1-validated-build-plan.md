@@ -120,7 +120,7 @@ broader V1 slices remain authoritative capability goals.
    acceptance is recorded under increment 3. **Exit achieved:** hosted Windows/macOS/Ubuntu,
    exact-kernel product, live local text/tool, cancellation/error conformance, and
    controlled VS Code gates pass.
-3. **Live CLI loop - local and live-provider gates complete on `feature/cli-live-loop`; exact-head hosted revalidation pending.**
+3. **Live CLI loop - accepted at implementation `5b8d226` on `feature/cli-live-loop`; ready to merge.**
    Validated provider text streams in human mode, canonical Rust lifecycle status
    remains authoritative, --json stays terminal-only, and Ctrl+C/deadline
    cancellation share one abort path. Ollama now declares an 8K context, uses
@@ -138,11 +138,11 @@ broader V1 slices remain authoritative capability goals.
    evidence-backed repository task interactively without reconstructing flags, and
    the hosted plus controlled VS Code gates pass. **Controlled VS Code achieved:**
    one summary call returned the canonical evidence/event projection without a
-   retry loop. **Hosted achieved:** Node passed on Windows/macOS and the real
-   Rust-kernel/TypeScript product passed on Windows/macOS/Ubuntu at `5326122`.
-   Credentialed synthetic OpenAI text, bounded-read, and search-to-read gates now
-   pass. The exact patched head still requires hosted Windows/macOS/Ubuntu
-   revalidation before increment 3 is accepted and merged.
+   retry loop. **Hosted achieved:** exact implementation `5b8d226` passed Node on
+   Windows/macOS (Actions run `30867433664`) and the real Rust-kernel/TypeScript
+   product on Windows/macOS/Ubuntu (Actions run `30867433674`). Credentialed
+   synthetic OpenAI text, bounded-read, and search-to-read gates pass. Increment 3
+   is accepted and ready to merge before increment 4 begins on a new branch.
 4. **Developer capability pack.** Bounded read/search, patch/edit, process/test,
    Git status/diff, and verification over the accepted authority. Add an explicit
    outcome-verification state that distinguishes a valid terminal planner turn from

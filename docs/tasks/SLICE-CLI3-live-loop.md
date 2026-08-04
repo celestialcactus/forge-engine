@@ -1,6 +1,6 @@
 # CLI ship lane 3: live CLI loop
 
-**Status:** local and live-provider gates green; exact-head hosted cross-platform revalidation pending
+**Status:** accepted at implementation `5b8d226`; ready to merge into `develop`
 **Branch:** `feature/cli-live-loop`
 **Base:** merged real-inference `develop` at `e865de5`
 
@@ -128,12 +128,12 @@ correction. Exact implementation `86daa83` then passed Node on Windows/macOS and
 the full Rust-kernel/TypeScript product on Windows/macOS/Ubuntu.
 The controlled seven-tool VS Code MCP regression already passed with one Forge call
 and no recovery loop. The provider-only continuation patch does not change MCP
-presentation. Exact-head hosted cross-platform revalidation is pending.
+presentation. Exact implementation `5b8d226` passed Node on Windows/macOS in
+Actions run `30867433664` and the full Rust-kernel/TypeScript product on
+Windows/macOS/Ubuntu in run `30867433674`.
 
-## Remaining acceptance
+## Remaining non-blocking validation
 
-- Run the exact patched head through hosted Node on Windows/macOS and the full
-  Rust-kernel/TypeScript product on Windows/macOS/Ubuntu before merge.
 - Exercise a real terminal Ctrl+C gesture where the host permits controlled input;
   deterministic SIGINT and live timeout coverage are already green.
 

@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-03
 **Branch:** `feature/cli-live-loop`
-**Status:** local and live provider gates green; exact-head hosted revalidation pending
+**Status:** accepted at exact implementation `5b8d226`; ready to merge
 
 ## Why this checkpoint exists
 
@@ -75,7 +75,8 @@ https://developers.openai.com/api/docs/guides/latest-model?model=gpt-5.6
 ## Acceptance boundary
 
 Credentialed OpenAI text, bounded-read, and dependent search-to-read behavior are
-live-green locally. Increment 3 is not merged or finally accepted until the exact
-patched head passes the hosted Node Windows/macOS and Rust-product
-Windows/macOS/Ubuntu matrix. The existing controlled VS Code MCP result is unchanged
-because this patch affects only provider planning/transport, not the MCP adapter.
+live-green. Exact implementation `5b8d226` passed Node on Windows/macOS in Actions
+run `30867433664` and the real Rust-kernel/TypeScript product on
+Windows/macOS/Ubuntu in run `30867433674`. Increment 3 is accepted and ready to
+merge. The existing controlled VS Code MCP result is unchanged because this patch
+affects only provider planning/transport, not the MCP adapter.
