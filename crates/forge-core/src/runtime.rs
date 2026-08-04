@@ -1,5 +1,3 @@
-use sha2::{Digest, Sha256};
-
 use crate::context::{compile_context, required_context_bytes};
 use crate::contracts::{
     ApprovalDecision, ApprovalFacts, ApprovalOutcome, CapabilityCall, CapabilityContext,
@@ -460,7 +458,7 @@ impl RunState {
                 snapshot_id: self.request.snapshot.id.clone(),
                 context_plan_id: context_plan.id.clone(),
                 prior_call_ids,
-                prior_observations_sha256: format!("{:x}", Sha256::digest(encoded)),
+                prior_observations_sha256: crate::change_set_v2::sha256(&encoded),
             },
             prior_observations: self.capability_observations.clone(),
         })

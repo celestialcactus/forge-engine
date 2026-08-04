@@ -11,7 +11,6 @@ use forge_core::{
     RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceFile, WorkspaceSnapshot,
 };
 use serde_json::json;
-use sha2::{Digest, Sha256};
 
 fn workspace() -> WorkspaceSnapshot {
     WorkspaceSnapshot {
@@ -388,15 +387,12 @@ fn binds_approval_and_invocation_to_the_same_ordered_prior_context() {
             .iter()
             .all(|observation| observation.call.id != "call-context-2")
     );
-    let expected_digest = format!(
-        "{:x}",
-        Sha256::digest(
-            serde_json::to_vec(
-                &serde_json::to_value(&second.prior_observations)
-                    .expect("prior observations should canonicalize"),
-            )
-            .expect("prior observations should serialize")
+    let expected_digest = forge_core::sha256(
+        &serde_json::to_vec(
+            &serde_json::to_value(&second.prior_observations)
+                .expect("prior observations should canonicalize"),
         )
+        .expect("prior observations should serialize"),
     );
     assert_eq!(second.basis.prior_observations_sha256, expected_digest);
     let basis = artifact
