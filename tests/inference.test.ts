@@ -298,6 +298,7 @@ test('runs a provider tool call and final response through the canonical Forge r
   });
   service.close();
   assert.equal(artifact.status, 'completed');
+  assert.equal(artifact.outcome.status, 'not_evaluated');
   assert.equal(artifact.output, 'The README evidence was returned by Forge.');
   assert.equal(artifact.capabilityResults.length, 1);
   assert.equal(artifact.capabilityResults[0]?.success, true);
@@ -322,6 +323,7 @@ test('runs a provider tool call and final response through the canonical Forge r
     'approval.decided',
     'capability.completed',
     'inference.completed',
+    'outcome.assessed',
     'run.completed',
   ]);
   const toolResult = observed[1]?.messages.find((message) => message.role === 'tool');

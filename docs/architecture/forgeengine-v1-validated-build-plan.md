@@ -120,7 +120,7 @@ broader V1 slices remain authoritative capability goals.
    acceptance is recorded under increment 3. **Exit achieved:** hosted Windows/macOS/Ubuntu,
    exact-kernel product, live local text/tool, cancellation/error conformance, and
    controlled VS Code gates pass.
-3. **Live CLI loop - accepted at implementation `5b8d226` on `feature/cli-live-loop`; ready to merge.**
+3. **Live CLI loop — accepted and merged as PR #17 (`0441d865`; implementation `5b8d226`).**
    Validated provider text streams in human mode, canonical Rust lifecycle status
    remains authoritative, --json stays terminal-only, and Ctrl+C/deadline
    cancellation share one abort path. Ollama now declares an 8K context, uses
@@ -142,11 +142,18 @@ broader V1 slices remain authoritative capability goals.
    Windows/macOS (Actions run `30867433664`) and the real Rust-kernel/TypeScript
    product on Windows/macOS/Ubuntu (Actions run `30867433674`). Credentialed
    synthetic OpenAI text, bounded-read, and search-to-read gates pass. Increment 3
-   is accepted and ready to merge before increment 4 begins on a new branch.
-4. **Developer capability pack.** Bounded read/search, patch/edit, process/test,
+   is accepted and merged; increment 4 now proceeds on its own feature branch.
+4. **Developer capability pack — increment 4A accepted on `feature/cli-outcome-verification`.** Bounded read/search, patch/edit, process/test,
    Git status/diff, and verification over the accepted authority. Add an explicit
    outcome-verification state that distinguishes a valid terminal planner turn from
    an evidence-grounded accepted result; do not infer correctness from model prose.
+   The 4A foundation now adds Rust-authoritative bounded outcome contracts,
+   RunArtifact v2, bridge v4, and explicit `not_evaluated` / `verified` / `unmet`
+   states. Exact-head hosted Windows/macOS/Ubuntu, 39/39 local hybrid, product
+   smoke, and controlled one-call VS Code gates are green at `be2069a`. Increment
+   4B edit/process composition is next. See
+   [CLI ship lane 4](../tasks/SLICE-CLI4-developer-capabilities.md) and
+   [ADR-0022](../decisions/ADRs/ADR-0022-rust-authoritative-outcome-contract.md).
    **Exit:** a representative change is proposed, reviewed, verified, accepted or
    discarded, and fully attributed without generic raw powers; unsupported claims
    cannot silently inherit an accepted verification state.
@@ -403,13 +410,13 @@ license rather than being inferred from package metadata.
 
 ## Core completion and delivery forecast
 
-**Forecast date:** 2026-08-03. Completion is measured by accepted behavioral gates,
+**Forecast date:** 2026-08-04. Completion is measured by accepted behavioral gates,
 not source volume or the number of abstractions present.
 
 | Scope | Estimated complete | Remaining critical path |
 | --- | ---: | --- |
 | Core runtime and dependable local change machinery | 98% | Kernel convergence is merged on `develop`; native restricted execution remains a separately gated hardening boundary. |
-| Shippable standalone CLI alpha | 76% | The explicit provider path is accepted; the live interactive loop, Qwen hardening, measured local model floor, controlled VS Code, and hosted cross-platform gates pass. The live OpenAI credential gate, recovery UX, packaging, and clean-install smoke remain open. |
+| Shippable standalone CLI alpha | 82% | Live Qwen and credentialed OpenAI flows, the interactive loop, outcome authority, hosted cross-platform gates, and controlled VS Code pass. Edit/process composition, recovery UX, packaging, and clean-install smoke remain open. |
 | Broader V1 platform | 28% | Context quality gates, durable projections, reviewed skills/memory, symmetric host integrations, restricted execution, connectors, and release hardening. |
 
 Assuming one focused implementation lane, working hosted CI, and no material scope
@@ -417,6 +424,7 @@ expansion, the current planning ranges are:
 
 - accepted kernel/change machinery on `develop`: **complete at merged PR #15 (`1fcab25`)**;
 - first real-inference, evidence-backed CLI demonstration: **accepted and merged through PR #16 at `e865de5`**;
+- interactive live CLI and credentialed OpenAI multi-turn flow: **accepted and merged through PR #17 at `0441d865`**;
 - shippable standalone CLI alpha: **3–5 weeks**;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
@@ -453,7 +461,9 @@ representative change set through the public CLI on Windows/macOS/Ubuntu. Slice 
 through Slice 2F-2b are accepted, while raw host assertions still fail closed.
 CLI and MCP now use that one Rust authority. The real-inference feature passes
 hosted, exact-kernel product, and controlled VS Code gates and is merged on
-`develop` through PR #16. The live CLI loop is now the active ship-lane increment.
+`develop` through PR #16. The live CLI and credentialed OpenAI multi-turn gates
+are merged through PR #17 at `0441d865`. The developer capability pack is now the
+active ship-lane increment.
 `restricted` remains fail-closed until a
 separately proven Windows/macOS backend passes adversarial gates; the trusted developer alpha must name that
 limitation.

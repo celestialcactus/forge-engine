@@ -120,6 +120,83 @@ test('Rust and TypeScript runtimes produce contract-equivalent Slice 0 artifacts
     await assertParity(successfulOptions, () => baseRequest('hybrid-success'));
   });
 
+  await t.test('verified caller-authored outcome', async () => {
+    await assertParity(successfulOptions, () => ({
+      ...baseRequest('hybrid-outcome-verified'),
+      outcomeContract: {
+        schemaVersion: 1,
+        requirements: [
+          {
+            id: 'required-capability',
+            kind: 'capability_succeeded',
+            capabilityId: 'workspace.inventory',
+            minimumInvocations: 1,
+          },
+          { id: 'expected-output', kind: 'output_equals', expected: 'Workspace inspected.' },
+        ],
+      },
+    }));
+  });
+
+  await t.test('unmet caller-authored outcome remains a completed lifecycle', async () => {
+    await assertParity(successfulOptions, () => ({
+      ...baseRequest('hybrid-outcome-unmet'),
+      outcomeContract: {
+        schemaVersion: 1,
+        requirements: [{
+          id: 'missing-capability',
+          kind: 'capability_succeeded',
+          capabilityId: 'workspace.read',
+          minimumInvocations: 1,
+        }],
+      },
+    }));
+  });
+
+  for (const [name, output] of [['byte-order-mark', '\ufeff'], ['next-line', '\u0085']] as const) {
+    await t.test('Unicode whitespace parity: ' + name, async () => {
+      await assertParity(() => ({
+        planner: new ScriptedPlanner([{ kind: 'complete', output }]),
+        approvalPolicy: allowAll,
+        capabilities: [],
+      }), () => ({
+        ...baseRequest('hybrid-unicode-' + name),
+        maxTurns: 1,
+        outcomeContract: {
+          schemaVersion: 1,
+          requirements: [{ id: 'output', kind: 'output_non_empty' }],
+        },
+      }));
+    });
+  }
+
+  await t.test('mismatched capability result call ID is not credited', async () => {
+    await assertParity(() => ({
+      planner: new ScriptedPlanner([
+        { kind: 'call', call: inspectCall },
+        { kind: 'complete', output: 'Workspace inspected.' },
+      ]),
+      approvalPolicy: allowAll,
+      capabilities: [{
+        id: 'workspace.inventory',
+        async invoke() {
+          return { callId: 'call-other', success: true, content: 'Mismatched fixture result.' };
+        },
+      }],
+    }), () => ({
+      ...baseRequest('hybrid-mismatched-result'),
+      outcomeContract: {
+        schemaVersion: 1,
+        requirements: [{
+          id: 'required-capability',
+          kind: 'capability_succeeded',
+          capabilityId: 'workspace.inventory',
+          minimumInvocations: 1,
+        }],
+      },
+    }));
+  });
+
   await t.test('denied capability', async () => {
     await assertParity(() => ({
       ...successfulOptions(),

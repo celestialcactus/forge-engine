@@ -43,7 +43,7 @@ test('requires complete explicit defaults and does not contact discovery when th
 });
 
 test('runs repeated prompts and session controls without creating another runtime contract', async () => {
-  const inputs = ['/status', 'Inspect the workspace.', '/model ollama alternate-coder:7b', 'Inspect again.', '/clear', '/exit'];
+  const inputs = ['/status', 'Inspect the workspace.', '/status', '/model ollama alternate-coder:7b', 'Inspect again.', '/clear', '/exit'];
   const output: string[] = [];
   let cleared = 0;
   let closed = 0;
@@ -63,7 +63,7 @@ test('runs repeated prompts and session controls without creating another runtim
     io,
     runTask: async (task, route) => {
       runs.push({ task, route });
-      return { runId: 'run:' + runs.length, status: 'completed' };
+      return { runId: 'run:' + runs.length, status: 'completed', outcome: 'not_evaluated' };
     },
   });
   assert.deepEqual(runs, [
@@ -73,5 +73,6 @@ test('runs repeated prompts and session controls without creating another runtim
   assert.equal(cleared, 1);
   assert.equal(closed, 1);
   assert.ok(output.some((line) => line.includes('Each prompt creates a new evidence run')));
+  assert.ok(output.some((line) => line.includes('status=completed, outcome=not_evaluated')));
   assert.ok(output.some((line) => line.includes('route changed: ollama/alternate-coder:7b (session)')));
 });

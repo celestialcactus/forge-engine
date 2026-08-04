@@ -4,6 +4,7 @@ import { access } from 'node:fs/promises';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { isDeepStrictEqual } from 'node:util';
 import type {
   ApprovalFacts,
   Capability,
@@ -17,7 +18,7 @@ import type {
   WorkspaceSnapshot,
 } from '../slice0/contracts.js';
 
-export const rustKernelProtocolVersion = 'forge.kernel.bridge.v3';
+export const rustKernelProtocolVersion = 'forge.kernel.bridge.v4';
 
 
 export interface ApprovalFactsProvider {
@@ -41,6 +42,20 @@ const cancelled = Symbol('cancelled');
 
 const isObject = (value: unknown): value is JsonObject =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isOutcomeAssessment = (value: unknown): boolean => {
+  if (!isObject(value)
+    || value.schemaVersion !== 1
+    || !['not_evaluated', 'verified', 'unmet'].includes(String(value.status))
+    || typeof value.reason !== 'string'
+    || !Array.isArray(value.checks)
+  ) return false;
+  return value.checks.every((check) => isObject(check)
+    && typeof check.id === 'string'
+    && ['output_non_empty', 'output_equals', 'capability_succeeded'].includes(String(check.kind))
+    && typeof check.satisfied === 'boolean'
+    && typeof check.explanation === 'string');
+};
 
 const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
@@ -74,10 +89,12 @@ const validateArtifact = (
   streamedEvents: readonly RunEvent[],
 ): RunArtifact => {
   if (!isObject(candidate)
-    || candidate.schemaVersion !== 1
+    || candidate.schemaVersion !== 2
     || candidate.runId !== request.runId
     || !Array.isArray(candidate.events)
     || !Array.isArray(candidate.capabilityResults)
+    || !isOutcomeAssessment(candidate.outcome)
+    || !isDeepStrictEqual(candidate.outcomeContract, request.outcomeContract)
   ) {
     throw new Error('Rust kernel returned an invalid RunArtifact envelope.');
   }
@@ -296,6 +313,7 @@ export class RustKernelRuntime {
           snapshot: request.snapshot,
           contextBudgetBytes: request.contextBudgetBytes,
           maxTurns: request.maxTurns,
+          ...(request.outcomeContract === undefined ? {} : { outcomeContract: request.outcomeContract }),
         },
         capabilityIds: [...this.#capabilities.keys()],
         ...(signal.aborted ? { initialCancellationReason: cancellationReason(signal) } : {}),

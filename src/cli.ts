@@ -366,7 +366,7 @@ try {
         const presenter = new LiveCliPresenter();
         const { artifact } = await executeProviderTask(task, route, maxTurns, timeoutMs, presenter);
         presenter.printSummary(artifact);
-        return { runId: artifact.runId, status: artifact.status };
+        return { runId: artifact.runId, status: artifact.status, outcome: artifact.outcome.status };
       },
     });
   } else if (command === 'run') {
@@ -383,7 +383,7 @@ try {
     );
     if (presenter === undefined) printArtifact(artifact);
     else presenter.printSummary(artifact);
-    if (artifact.status !== 'completed') {
+    if (artifact.status !== 'completed' || artifact.outcome.status === 'unmet') {
       process.exitCode = artifact.status === 'cancelled'
         ? cancellationSource === 'sigint'
           ? 130

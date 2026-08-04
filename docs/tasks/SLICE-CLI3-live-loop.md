@@ -1,6 +1,6 @@
 # CLI ship lane 3: live CLI loop
 
-**Status:** accepted at implementation `5b8d226`; ready to merge into `develop`
+**Status:** accepted and merged through PR #17 at `0441d865` (implementation `5b8d226`)
 **Branch:** `feature/cli-live-loop`
 **Base:** merged real-inference `develop` at `e865de5`
 

@@ -46,13 +46,15 @@ test('official MCP client preserves the seven-tool compact contract over the Rus
     const summary = structuredPayload<{
       readonly runId: string;
       readonly snapshotId: string;
-      readonly status: string;
+      readonly runStatus: string;
+      readonly outcome: { readonly status: string };
       readonly evidence: { readonly files: readonly string[]; readonly totalFiles: number; readonly truncated: boolean };
       readonly events: ReadonlyArray<{ readonly sequence: number; readonly type: string }>;
     }>(summaryResult);
     assert.match(summary.runId, /^run:/u);
     assert.match(summary.snapshotId, /^workspace:/u);
-    assert.equal(summary.status, 'completed');
+    assert.equal(summary.runStatus, 'completed');
+    assert.equal(summary.outcome.status, 'verified');
     assert.deepEqual(summary.evidence, { files: ['README.md'], totalFiles: 2, truncated: true });
     assert.deepEqual(summary.events, [
       { sequence: 1, type: 'run.started' },
@@ -60,7 +62,8 @@ test('official MCP client preserves the seven-tool compact contract over the Rus
       { sequence: 3, type: 'capability.requested' },
       { sequence: 4, type: 'approval.decided' },
       { sequence: 5, type: 'capability.completed' },
-      { sequence: 6, type: 'run.completed' },
+      { sequence: 6, type: 'outcome.assessed' },
+      { sequence: 7, type: 'run.completed' },
     ]);
     assert.ok(Buffer.byteLength(JSON.stringify(summaryResult), 'utf8') < 5_000);
 
@@ -101,6 +104,7 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
   ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment });
   const payload = JSON.parse(stdout) as {
     readonly status: string;
+    readonly outcome: { readonly status: string };
     readonly task: string;
     readonly evidence: {
       readonly snapshotId: string;
@@ -111,6 +115,7 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
     };
   };
   assert.equal(payload.status, 'completed');
+  assert.equal(payload.outcome.status, 'verified');
   assert.equal(payload.task, 'Inspect the opened workspace.');
   assert.match(payload.evidence.snapshotId, /^workspace:/u);
   assert.equal(payload.evidence.rootLabel, 'slice1-workspace');
@@ -145,6 +150,6 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
   assert.match(report.kernel.source, /^source-(debug|release)$/u);
   assert.match(report.kernel.path, /forge-kernel(?:\.exe)?$/u);
   assert.equal(report.kernel.version, '0.1.0');
-  assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v3');
+  assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v4');
   assert.equal(report.kernel.protocols.sovereignChange, 'forge.kernel.changeset.v2');
 });

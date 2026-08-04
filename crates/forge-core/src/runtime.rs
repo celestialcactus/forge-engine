@@ -2,8 +2,10 @@ use crate::context::{compile_context, required_context_bytes};
 use crate::contracts::{
     ApprovalDecision, ApprovalFacts, ApprovalOutcome, CapabilityCall, CapabilityResult,
     ContextItemKind, ContextPlan, HostPolicyPosture, InferenceCostStatus, InferenceEvidence,
-    InferenceFinishReason, InferenceLocality, PlannerRequest, PlannerTurn, RunArtifact, RunEvent,
-    RunEventData, RunRequest, RunStatus, UserConsentStatus, WorkspaceSnapshot,
+    InferenceFinishReason, InferenceLocality, OutcomeAssessment, OutcomeCheck, OutcomeContract,
+    OutcomeRequirement, OutcomeRequirementKind, OutcomeStatus, PlannerRequest, PlannerTurn,
+    RunArtifact, RunEvent, RunEventData, RunRequest, RunStatus, UserConsentStatus,
+    WorkspaceSnapshot,
 };
 
 fn valid_usd_amount(amount: &str) -> bool {
@@ -111,6 +113,145 @@ fn inference_validation_error(turn: &PlannerTurn) -> Option<String> {
             )
         }
         _ => None,
+    }
+}
+
+fn not_evaluated_outcome(reason: &str) -> OutcomeAssessment {
+    OutcomeAssessment {
+        schema_version: 1,
+        status: OutcomeStatus::NotEvaluated,
+        reason: reason.to_owned(),
+        checks: Vec::new(),
+    }
+}
+
+fn outcome_contract_error(contract: &OutcomeContract) -> Option<String> {
+    if contract.schema_version != 1 {
+        return Some("Outcome contract schemaVersion must be 1.".to_owned());
+    }
+    if contract.requirements.is_empty() || contract.requirements.len() > 32 {
+        return Some("Outcome contract must contain between 1 and 32 requirements.".to_owned());
+    }
+    let mut ids = std::collections::HashSet::new();
+    for requirement in &contract.requirements {
+        let (id, field_error) = match requirement {
+            OutcomeRequirement::OutputNonEmpty { id } => (id, None),
+            OutcomeRequirement::OutputEquals { id, expected } => (
+                id,
+                (expected.chars().count() > 65_536)
+                    .then_some("Outcome expected output exceeds 65536 characters."),
+            ),
+            OutcomeRequirement::CapabilitySucceeded {
+                id,
+                capability_id,
+                minimum_invocations,
+            } => (
+                id,
+                if capability_id.trim().is_empty() || capability_id.chars().count() > 200 {
+                    Some("Outcome capabilityId has an invalid length.")
+                } else if !(1..=64).contains(minimum_invocations) {
+                    Some("Outcome minimumInvocations must be between 1 and 64.")
+                } else {
+                    None
+                },
+            ),
+        };
+        if let Some(message) = field_error {
+            return Some(message.to_owned());
+        }
+        if id.trim().is_empty() || id.chars().count() > 100 {
+            return Some("Outcome requirement id has an invalid length.".to_owned());
+        }
+        if !ids.insert(id) {
+            return Some(format!("Outcome requirement id is duplicated: {id}."));
+        }
+    }
+    None
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CapabilityAttempt {
+    capability_id: String,
+    success: bool,
+}
+
+fn assess_outcome(
+    contract: Option<&OutcomeContract>,
+    output: &str,
+    attempts: &[CapabilityAttempt],
+) -> OutcomeAssessment {
+    let Some(contract) = contract else {
+        return not_evaluated_outcome(
+            "No caller-authored outcome contract was supplied; completed denotes only a valid terminal planner turn.",
+        );
+    };
+    let checks = contract
+        .requirements
+        .iter()
+        .map(|requirement| match requirement {
+            OutcomeRequirement::OutputNonEmpty { id } => {
+                let characters = output.chars().count();
+                let satisfied = !output.trim().is_empty();
+                OutcomeCheck {
+                    id: id.clone(),
+                    kind: OutcomeRequirementKind::OutputNonEmpty,
+                    satisfied,
+                    explanation: format!(
+                        "Planner output contained {characters} characters and {} non-whitespace content.",
+                        if satisfied { "included" } else { "did not include" }
+                    ),
+                }
+            }
+            OutcomeRequirement::OutputEquals { id, expected } => {
+                let satisfied = output == expected;
+                OutcomeCheck {
+                    id: id.clone(),
+                    kind: OutcomeRequirementKind::OutputEquals,
+                    satisfied,
+                    explanation: if satisfied {
+                        "Planner output matched the caller-authored expected value.".to_owned()
+                    } else {
+                        "Planner output did not match the caller-authored expected value.".to_owned()
+                    },
+                }
+            }
+            OutcomeRequirement::CapabilitySucceeded {
+                id,
+                capability_id,
+                minimum_invocations,
+            } => {
+                let successful = attempts
+                    .iter()
+                    .filter(|attempt| {
+                        attempt.capability_id == *capability_id && attempt.success
+                    })
+                    .count();
+                let satisfied = successful >= *minimum_invocations as usize;
+                OutcomeCheck {
+                    id: id.clone(),
+                    kind: OutcomeRequirementKind::CapabilitySucceeded,
+                    satisfied,
+                    explanation: format!(
+                        "Observed {successful} successful {capability_id} invocation(s); required at least {minimum_invocations}."
+                    ),
+                }
+            }
+        })
+        .collect::<Vec<_>>();
+    let verified = checks.iter().all(|check| check.satisfied);
+    OutcomeAssessment {
+        schema_version: 1,
+        status: if verified {
+            OutcomeStatus::Verified
+        } else {
+            OutcomeStatus::Unmet
+        },
+        reason: if verified {
+            "All caller-authored outcome requirements were satisfied.".to_owned()
+        } else {
+            "One or more caller-authored outcome requirements were not satisfied.".to_owned()
+        },
+        checks,
     }
 }
 
@@ -233,7 +374,9 @@ struct RunState {
     status: RunStatus,
     context_plan: Option<ContextPlan>,
     capability_results: Vec<CapabilityResult>,
+    capability_attempts: Vec<CapabilityAttempt>,
     inference_evidence: Vec<InferenceEvidence>,
+    outcome: OutcomeAssessment,
     output: Option<String>,
     events: Vec<RunEvent>,
     sequence: u64,
@@ -246,7 +389,11 @@ impl RunState {
             status: RunStatus::Running,
             context_plan: None,
             capability_results: Vec::new(),
+            capability_attempts: Vec::new(),
             inference_evidence: Vec::new(),
+            outcome: not_evaluated_outcome(
+                "Outcome assessment did not run because the runtime did not reach a terminal planner turn.",
+            ),
             output: None,
             events: Vec::new(),
             sequence: 0,
@@ -266,7 +413,7 @@ impl RunState {
 
     fn artifact(&self) -> RunArtifact {
         RunArtifact {
-            schema_version: 1,
+            schema_version: 2,
             run_id: self.request.run_id.clone(),
             task: self.request.task.clone(),
             snapshot: self.request.snapshot.clone(),
@@ -278,6 +425,8 @@ impl RunState {
             } else {
                 Some(self.inference_evidence.clone())
             },
+            outcome_contract: self.request.outcome_contract.clone(),
+            outcome: self.outcome.clone(),
             output: self.output.clone(),
             events: self.events.clone(),
         }
@@ -298,6 +447,15 @@ impl Slice0Runtime<'_> {
             },
             self.event_sink,
         );
+
+        if let Some(message) = state
+            .request
+            .outcome_contract
+            .as_ref()
+            .and_then(outcome_contract_error)
+        {
+            return self.fail(&mut state, "invalid_outcome_contract", message);
+        }
 
         let context_plan = match compile_context(
             &state.request.task,
@@ -372,6 +530,17 @@ impl Slice0Runtime<'_> {
             match next {
                 PlannerTurn::Complete { output, .. } => {
                     state.output = Some(output.clone());
+                    state.outcome = assess_outcome(
+                        state.request.outcome_contract.as_ref(),
+                        &output,
+                        &state.capability_attempts,
+                    );
+                    state.emit(
+                        RunEventData::OutcomeAssessed {
+                            assessment: state.outcome.clone(),
+                        },
+                        self.event_sink,
+                    );
                     state.status = RunStatus::Completed;
                     state.emit(RunEventData::RunCompleted { output }, self.event_sink);
                     return state.artifact();
@@ -425,6 +594,10 @@ impl Slice0Runtime<'_> {
                 success: false,
                 content: format!("{outcome}: {}", decision.reason),
             };
+            state.capability_attempts.push(CapabilityAttempt {
+                capability_id: call.capability_id,
+                success: result.success,
+            });
             state.capability_results.push(result.clone());
             state.emit(
                 RunEventData::CapabilityCompleted { result },
@@ -450,6 +623,22 @@ impl Slice0Runtime<'_> {
                 },
             }
         };
+        let result = if result.call_id == call.id {
+            result
+        } else {
+            CapabilityResult {
+                call_id: call.id.clone(),
+                success: false,
+                content: format!(
+                    "Capability result call ID {} does not match {}.",
+                    result.call_id, call.id
+                ),
+            }
+        };
+        state.capability_attempts.push(CapabilityAttempt {
+            capability_id: call.capability_id,
+            success: result.success,
+        });
         state.capability_results.push(result.clone());
         state.emit(
             RunEventData::CapabilityCompleted { result },

@@ -6,6 +6,31 @@
  */
 export type RunStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'budget_exhausted';
 export type ApprovalOutcome = 'allow' | 'ask' | 'deny';
+export type OutcomeStatus = 'not_evaluated' | 'verified' | 'unmet';
+
+export type OutcomeRequirement =
+  | { readonly id: string; readonly kind: 'output_non_empty' }
+  | { readonly id: string; readonly kind: 'output_equals'; readonly expected: string }
+  | { readonly id: string; readonly kind: 'capability_succeeded'; readonly capabilityId: string; readonly minimumInvocations: number };
+
+export interface OutcomeContract {
+  readonly schemaVersion: 1;
+  readonly requirements: readonly OutcomeRequirement[];
+}
+
+export interface OutcomeCheck {
+  readonly id: string;
+  readonly kind: OutcomeRequirement['kind'];
+  readonly satisfied: boolean;
+  readonly explanation: string;
+}
+
+export interface OutcomeAssessment {
+  readonly schemaVersion: 1;
+  readonly status: OutcomeStatus;
+  readonly reason: string;
+  readonly checks: readonly OutcomeCheck[];
+}
 
 export interface ApprovalFacts {
   readonly schemaVersion: 1;
@@ -99,6 +124,7 @@ export type RunEventData =
   | { readonly type: 'approval.decided'; readonly callId: string; readonly outcome: ApprovalOutcome; readonly reason: string; readonly facts?: ApprovalFacts }
   | { readonly type: 'capability.completed'; readonly result: CapabilityResult }
   | { readonly type: 'inference.completed'; readonly evidence: InferenceEvidence }
+  | { readonly type: 'outcome.assessed'; readonly assessment: OutcomeAssessment }
   | { readonly type: 'run.completed'; readonly output: string }
   | { readonly type: 'run.failed'; readonly code: string; readonly message: string }
   | { readonly type: 'run.cancelled'; readonly reason: string }
@@ -110,7 +136,7 @@ export type RunEvent = RunEventData & {
 };
 
 export interface RunArtifact {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly runId: string;
   readonly task: string;
   readonly snapshot: WorkspaceSnapshot;
@@ -118,6 +144,8 @@ export interface RunArtifact {
   readonly contextPlan?: ContextPlan;
   readonly capabilityResults: readonly CapabilityResult[];
   readonly inferenceEvidence?: readonly InferenceEvidence[];
+  readonly outcomeContract?: OutcomeContract;
+  readonly outcome: OutcomeAssessment;
   readonly output?: string;
   readonly events: readonly RunEvent[];
 }
@@ -128,6 +156,7 @@ export interface RunRequest {
   readonly snapshot: WorkspaceSnapshot;
   readonly contextBudgetBytes: number;
   readonly maxTurns: number;
+  readonly outcomeContract?: OutcomeContract;
   readonly signal?: AbortSignal;
 }
 

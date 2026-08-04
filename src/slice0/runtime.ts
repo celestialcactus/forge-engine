@@ -1,4 +1,10 @@
 import { compileContext, requiredContextBytes } from './context.js';
+import {
+  assessOutcome,
+  notEvaluatedOutcome,
+  outcomeContractError,
+  type OutcomeCapabilityAttempt,
+} from './outcome.js';
 import type {
   ApprovalPolicy,
   Capability,
@@ -101,10 +107,14 @@ export class TypeScriptConformanceRuntime {
     const signal = request.signal ?? new AbortController().signal;
     const events: RunEvent[] = [];
     const results: CapabilityResult[] = [];
+    const attempts: OutcomeCapabilityAttempt[] = [];
     const inferenceEvidence: InferenceEvidence[] = [];
     let sequence = 0;
     let status: RunStatus = 'running';
     let contextPlan: ContextPlan | undefined;
+    let outcome = notEvaluatedOutcome(
+      'Outcome assessment did not run because the runtime did not reach a terminal planner turn.',
+    );
     let output: string | undefined;
 
     const emit = (data: RunEventData): void => {
@@ -114,7 +124,7 @@ export class TypeScriptConformanceRuntime {
     };
 
     const artifact = (): RunArtifact => ({
-      schemaVersion: 1,
+      schemaVersion: 2,
       runId: request.runId,
       task: request.task,
       snapshot: request.snapshot,
@@ -122,6 +132,8 @@ export class TypeScriptConformanceRuntime {
       ...(contextPlan === undefined ? {} : { contextPlan }),
       capabilityResults: results,
       ...(inferenceEvidence.length === 0 ? {} : { inferenceEvidence }),
+      ...(request.outcomeContract === undefined ? {} : { outcomeContract: request.outcomeContract }),
+      outcome,
       ...(output === undefined ? {} : { output }),
       events,
     });
@@ -129,6 +141,14 @@ export class TypeScriptConformanceRuntime {
     try {
       signal.throwIfAborted();
       emit({ type: 'run.started', task: request.task, snapshotId: request.snapshot.id });
+      if (request.outcomeContract !== undefined) {
+        const contractError = outcomeContractError(request.outcomeContract);
+        if (contractError !== undefined) {
+          status = 'failed';
+          emit({ type: 'run.failed', code: 'invalid_outcome_contract', message: contractError });
+          return artifact();
+        }
+      }
       contextPlan = compileContext(request.task, request.snapshot, request.contextBudgetBytes);
       emit({ type: 'context.planned', plan: contextPlan });
 
@@ -154,11 +174,15 @@ export class TypeScriptConformanceRuntime {
         }
         if (next.kind === 'complete') {
           output = next.output;
+          outcome = assessOutcome(request.outcomeContract, output, attempts);
+          emit({ type: 'outcome.assessed', assessment: outcome });
           status = 'completed';
           emit({ type: 'run.completed', output });
           return artifact();
         }
-        results.push(await this.#execute(next.call, request, signal, emit));
+        const result = await this.#execute(next.call, request, signal, emit);
+        attempts.push({ capabilityId: next.call.capabilityId, success: result.success });
+        results.push(result);
       }
 
       status = 'failed';
@@ -192,7 +216,14 @@ export class TypeScriptConformanceRuntime {
       return result;
     }
     try {
-      const result = await capability.invoke(call, request.snapshot, signal);
+      const invoked = await capability.invoke(call, request.snapshot, signal);
+      const result = invoked.callId === call.id
+        ? invoked
+        : {
+            callId: call.id,
+            success: false,
+            content: `Capability result call ID ${invoked.callId} does not match ${call.id}.`,
+          };
       emit({ type: 'capability.completed', result });
       return result;
     } catch (error) {

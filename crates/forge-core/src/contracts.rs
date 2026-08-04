@@ -12,6 +12,62 @@ pub enum RunStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutcomeStatus {
+    NotEvaluated,
+    Verified,
+    Unmet,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutcomeRequirementKind {
+    OutputNonEmpty,
+    OutputEquals,
+    CapabilitySucceeded,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all_fields = "camelCase", deny_unknown_fields)]
+pub enum OutcomeRequirement {
+    #[serde(rename = "output_non_empty")]
+    OutputNonEmpty { id: String },
+    #[serde(rename = "output_equals")]
+    OutputEquals { id: String, expected: String },
+    #[serde(rename = "capability_succeeded")]
+    CapabilitySucceeded {
+        id: String,
+        capability_id: String,
+        minimum_invocations: u32,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OutcomeContract {
+    pub schema_version: u8,
+    pub requirements: Vec<OutcomeRequirement>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OutcomeCheck {
+    pub id: String,
+    pub kind: OutcomeRequirementKind,
+    pub satisfied: bool,
+    pub explanation: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OutcomeAssessment {
+    pub schema_version: u8,
+    pub status: OutcomeStatus,
+    pub reason: String,
+    pub checks: Vec<OutcomeCheck>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ApprovalOutcome {
     Allow,
@@ -173,6 +229,8 @@ pub enum RunEventData {
     CapabilityCompleted { result: CapabilityResult },
     #[serde(rename = "inference.completed")]
     InferenceCompleted { evidence: InferenceEvidence },
+    #[serde(rename = "outcome.assessed")]
+    OutcomeAssessed { assessment: OutcomeAssessment },
     #[serde(rename = "run.completed")]
     RunCompleted { output: String },
     #[serde(rename = "run.failed")]
@@ -210,6 +268,9 @@ pub struct RunArtifact {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference_evidence: Option<Vec<InferenceEvidence>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub outcome_contract: Option<OutcomeContract>,
+    pub outcome: OutcomeAssessment,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<String>,
     pub events: Vec<RunEvent>,
 }
@@ -222,6 +283,8 @@ pub struct RunRequest {
     pub snapshot: WorkspaceSnapshot,
     pub context_budget_bytes: u64,
     pub max_turns: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outcome_contract: Option<OutcomeContract>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
