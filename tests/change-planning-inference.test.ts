@@ -59,6 +59,7 @@ test('runs a governed provider edit inside one open Forge lifecycle', async () =
           name: 'forge_workspace_read',
           argumentsDelta: JSON.stringify({ path: 'README.md', startLine: 1, maxLines: 200 }),
         };
+        yield { type: 'usage', inputTokens: 20, outputTokens: 4 };
         yield { type: 'response.completed', finishReason: 'tool_call' };
         return;
       }
@@ -72,10 +73,12 @@ test('runs a governed provider edit inside one open Forge lifecycle', async () =
             changes: [{ path: 'README.md', content: replacementText }],
           }),
         };
+        yield { type: 'usage', inputTokens: 20, outputTokens: 4 };
         yield { type: 'response.completed', finishReason: 'tool_call' };
         return;
       }
       yield { type: 'text.delta', text: 'Forge verified and promoted the reviewed README change.' };
+      yield { type: 'usage', inputTokens: 30, outputTokens: 5 };
       yield { type: 'response.completed', finishReason: 'stop' };
     },
   };

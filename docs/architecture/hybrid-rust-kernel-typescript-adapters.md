@@ -1,6 +1,6 @@
 # Hybrid runtime candidate: Rust kernel and TypeScript adapters
 
-**Status:** accepted hybrid boundary; protocol v5 and the governed edit lifecycle are exact-head validated on Windows, macOS, Ubuntu, live Qwen, and controlled VS Code
+**Status:** accepted hybrid boundary; protocol v5 and the governed edit lifecycle are exact-head validated on Windows, macOS, Ubuntu, live Qwen, and controlled VS Code. Protocol v6 / RunArtifact v4 execution budgets are locally validated and await hosted and live acceptance.
 **Date:** 2026-07-22
 **Updated:** 2026-08-04
 
@@ -20,12 +20,12 @@ VS Code / MCP / future provider SDK / TypeScript compiler
        tools, workflow definitions, presentation,
            provider/compiler/host integration
                          |
-            forge.kernel.bridge.v5 over NDJSON
+            forge.kernel.bridge.v6 over NDJSON
                          |
                  Rust kernel authority
      validate -> authorize -> schedule -> invoke -> record
                          |
-                   RunArtifact v3
+                   RunArtifact v4
 ```
 
 The bridge is a local child-process protocol for the spike. It is not a public
@@ -45,15 +45,18 @@ network service and does not introduce a second persistence boundary.
 FFI/N-API is intentionally deferred. It would optimize a boundary before proving
 that the boundary is correct.
 
-## Bridge protocol v5
+## Bridge protocol v6
 
 Every message is one UTF-8 JSON object followed by LF. Every message carries
-`protocolVersion: "forge.kernel.bridge.v5"` and a caller-selected `requestId`.
-Version 5 adds the Rust-authored capability context/basis and bounded typed
-capability evidence. Version 4 added a caller-supplied outcome contract and
-Rust-produced assessment, version 3 added normalized inference evidence, and
-version 2 replaced adapter-computed approval decisions with attributable facts.
-Earlier versions remain historical evidence intentionally rejected by a v5 peer.
+`protocolVersion: "forge.kernel.bridge.v6"` and a caller-selected `requestId`.
+Version 6 adds Rust-owned capability-call and provider-reported token budgets,
+exact terminal usage, and fail-closed behavior when an enabled token ceiling
+cannot be measured. Version 5 added the Rust-authored capability context/basis
+and bounded typed capability evidence. Version 4 added a caller-supplied outcome
+contract and Rust-produced assessment, version 3 added normalized inference
+evidence, and version 2 replaced adapter-computed approval decisions with
+attributable facts. Earlier versions remain historical evidence intentionally
+rejected by a v6 peer.
 
 ### Host to kernel
 
@@ -116,10 +119,13 @@ validates schema version, non-empty provenance, and exact call/capability identi
 applies host-deny and user-decline precedence; resolves `ask`; and produces the
 only final `ApprovalDecision`. The authoritative `approval.decided` event retains
 those structured facts as an optional backward-compatible evidence extension.
-The approval-facts meaning is retained. RunArtifact v3 adds a compact
-`CapabilityContextBasis` to each approval event and optional bounded typed
-capability evidence to results. v2 and older artifacts are not accepted as current
-bridge results.
+The approval-facts meaning is retained. RunArtifact v4 retains the v3 compact
+`CapabilityContextBasis` on each approval event and optional bounded typed
+capability evidence on results, and adds the applied `ExecutionBudget` and exact
+`ExecutionUsage`. v3 and older artifacts are not accepted as current bridge
+results. Capability calls are stopped before an over-budget admission; provider
+responses are recorded before token-overage termination, so token limits control
+continuation rather than pre-empting an in-flight request.
 
 `RunStatus.completed` records that the planner produced a valid terminal turn. It
 does not certify that the developer objective was achieved. When a caller supplies
@@ -142,7 +148,7 @@ does not pursue a future all-Rust rewrite.
 ## Compatibility strategy
 
 The TypeScript conformance runtime is the differential oracle for RunArtifact
-schema version 3; it is not a selectable product runtime.
+schema version 4; it is not a selectable product runtime.
 Canonical fixture artifacts must deep-match structurally, including ordered event
 and evidence arrays. The NDJSON bridge is deterministic, but JSON object member
 order is not an architectural contract.

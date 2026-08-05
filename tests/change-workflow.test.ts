@@ -36,7 +36,7 @@ const planEvidence: ChangeProposalArtifact = {
 };
 
 const artifact = (overrides: Partial<RunArtifact> = {}): RunArtifact => ({
-  schemaVersion: 3,
+  schemaVersion: 4,
   runId: 'run:plan',
   task: 'Change value to two.',
   snapshot: {
@@ -46,6 +46,8 @@ const artifact = (overrides: Partial<RunArtifact> = {}): RunArtifact => ({
   },
   status: 'completed',
   contextPlan: { id: 'context:test', budgetBytes: 1024, selected: [], omitted: [] },
+  executionBudget: { schemaVersion: 1, maxCapabilityCalls: 6, maxReportedInputTokens: 262_144, maxReportedOutputTokens: 32_768 },
+  executionUsage: { schemaVersion: 1, capabilityCalls: 1, inferenceTurns: 0, reportedInputTokens: 0, reportedOutputTokens: 0 },
   capabilityResults: [{
     callId: 'call:read',
     success: true,

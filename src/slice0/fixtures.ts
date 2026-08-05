@@ -3,11 +3,19 @@ import type {
   Capability,
   CapabilityCall,
   CapabilityResult,
+  ExecutionBudget,
   PlannerRequest,
   PlannerTurn,
   TaskPlanner,
   WorkspaceSnapshot,
 } from './contracts.js';
+
+export const fixtureExecutionBudget = {
+  schemaVersion: 1,
+  maxCapabilityCalls: 6,
+  maxReportedInputTokens: 262_144,
+  maxReportedOutputTokens: 32_768,
+} as const satisfies ExecutionBudget;
 
 export const slice0Workspace: WorkspaceSnapshot = {
   id: 'workspace:fixture-1',

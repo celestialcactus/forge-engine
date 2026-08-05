@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   equivalentTrace,
   type CapabilityContext,
+  type InferenceEvidence,
   type OutcomeContract,
 } from '../src/slice0/contracts.js';
 import {
@@ -11,6 +12,7 @@ import {
   denyAll,
   explodingCapability,
   ScriptedPlanner,
+  fixtureExecutionBudget,
   slice0Workspace,
   workspaceInventory,
 } from '../src/slice0/fixtures.js';
@@ -45,10 +47,10 @@ test('produces the Slice 0 golden trace for a successful read-only run', async (
     task: 'Inspect the workspace.',
     snapshot: slice0Workspace,
     contextBudgetBytes: 200,
-    maxTurns: 2,
+    maxTurns: 2, executionBudget: fixtureExecutionBudget,
   });
 
-  assert.equal(artifact.schemaVersion, 3);
+  assert.equal(artifact.schemaVersion, 4);
   assert.equal(artifact.status, 'completed');
   assert.equal(artifact.outcome.status, 'not_evaluated');
   assert.equal(artifact.output, 'Workspace inspected.');
@@ -111,7 +113,7 @@ test('binds approval and invocation to the same ordered prior capability context
     task: 'Inspect capability context.',
     snapshot: slice0Workspace,
     contextBudgetBytes: 200,
-    maxTurns: 3,
+    maxTurns: 3, executionBudget: fixtureExecutionBudget,
   });
 
   assert.equal(artifact.status, 'completed');
@@ -158,7 +160,7 @@ test('fails closed on invalid structured capability evidence and duplicate call 
     task: 'Inspect invalid evidence.',
     snapshot: slice0Workspace,
     contextBudgetBytes: 200,
-    maxTurns: 2,
+    maxTurns: 2, executionBudget: fixtureExecutionBudget,
   });
   assert.equal(invalidEvidence.capabilityResults[0]?.success, false);
   assert.equal(invalidEvidence.capabilityResults[0]?.evidence, undefined);
@@ -176,7 +178,7 @@ test('fails closed on invalid structured capability evidence and duplicate call 
     task: 'Reject duplicate calls.',
     snapshot: slice0Workspace,
     contextBudgetBytes: 200,
-    maxTurns: 2,
+    maxTurns: 2, executionBudget: fixtureExecutionBudget,
   });
   assert.equal(duplicate.status, 'failed');
   const terminal = duplicate.events.at(-1);
@@ -215,7 +217,7 @@ test('fails closed before approval when prior capability context exceeds 4 MiB',
     task: 'Reject oversized prior context.',
     snapshot: slice0Workspace,
     contextBudgetBytes: 200,
-    maxTurns: 2,
+    maxTurns: 2, executionBudget: fixtureExecutionBudget,
   });
   assert.equal(artifact.status, 'failed');
   assert.equal(approvalCount, 1);
@@ -232,7 +234,7 @@ test('verifies only explicit caller-authored requirements', async () => {
     task: 'Inspect the workspace.',
     snapshot: slice0Workspace,
     contextBudgetBytes: 200,
-    maxTurns: 2,
+    maxTurns: 2, executionBudget: fixtureExecutionBudget,
     outcomeContract: outcomeContract('workspace.inventory'),
   });
   assert.equal(verified.status, 'completed');
@@ -246,7 +248,7 @@ test('verifies only explicit caller-authored requirements', async () => {
     task: 'Inspect the workspace.',
     snapshot: slice0Workspace,
     contextBudgetBytes: 200,
-    maxTurns: 2,
+    maxTurns: 2, executionBudget: fixtureExecutionBudget,
     outcomeContract: outcomeContract('workspace.read'),
   });
   assert.equal(unmet.status, 'completed');
@@ -264,7 +266,7 @@ test('uses Rust Unicode whitespace semantics for non-empty output checks', async
     task: 'Check output.',
     snapshot: slice0Workspace,
     contextBudgetBytes: 200,
-    maxTurns: 1,
+    maxTurns: 1, executionBudget: fixtureExecutionBudget,
     outcomeContract: { schemaVersion: 1, requirements: [{ id: 'output', kind: 'output_non_empty' }] },
   });
   assert.equal((await runOutput('byte-order-mark-output', '\ufeff')).outcome.status, 'verified');
@@ -277,7 +279,7 @@ test('rejects invalid outcome contracts before planner work', async () => {
     task: 'Inspect the workspace.',
     snapshot: slice0Workspace,
     contextBudgetBytes: 200,
-    maxTurns: 2,
+    maxTurns: 2, executionBudget: fixtureExecutionBudget,
     outcomeContract: { schemaVersion: 1, requirements: [] },
   });
   assert.equal(artifact.status, 'failed');
@@ -304,7 +306,7 @@ test('does not credit a capability result for a different call ID', async () => 
     task: 'Inspect the workspace.',
     snapshot: slice0Workspace,
     contextBudgetBytes: 200,
-    maxTurns: 2,
+    maxTurns: 2, executionBudget: fixtureExecutionBudget,
     outcomeContract: outcomeContract('workspace.inventory'),
   });
   assert.equal(artifact.status, 'completed');
@@ -322,7 +324,7 @@ test('produces an equivalent ordered trace for identical fixture inputs', async 
     task: 'Inspect the workspace.',
     snapshot: slice0Workspace,
     contextBudgetBytes: 200,
-    maxTurns: 2,
+    maxTurns: 2, executionBudget: fixtureExecutionBudget,
   };
   const first = await successfulRuntime().run(request);
   const second = await successfulRuntime().run(request);
@@ -337,7 +339,7 @@ test('records a denied capability as inspectable tool evidence and continues', a
     capabilities: [workspaceInventory],
   });
   const artifact = await runtime.run({
-    runId: 'denied-run', task: 'Inspect the workspace.', snapshot: slice0Workspace, contextBudgetBytes: 200, maxTurns: 2,
+    runId: 'denied-run', task: 'Inspect the workspace.', snapshot: slice0Workspace, contextBudgetBytes: 200, maxTurns: 2, executionBudget: fixtureExecutionBudget,
   });
 
   assert.equal(artifact.status, 'completed');
@@ -357,7 +359,7 @@ test('records a capability failure without corrupting the terminal run state', a
     capabilities: [explodingCapability],
   });
   const artifact = await runtime.run({
-    runId: 'capability-failure-run', task: 'Inspect the workspace.', snapshot: slice0Workspace, contextBudgetBytes: 200, maxTurns: 2,
+    runId: 'capability-failure-run', task: 'Inspect the workspace.', snapshot: slice0Workspace, contextBudgetBytes: 200, maxTurns: 2, executionBudget: fixtureExecutionBudget,
   });
 
   assert.equal(artifact.status, 'completed');
@@ -367,7 +369,7 @@ test('records a capability failure without corrupting the terminal run state', a
 
 test('stops transparently when the developer task cannot fit the context budget', async () => {
   const artifact = await successfulRuntime().run({
-    runId: 'budget-run', task: 'Inspect the workspace.', snapshot: slice0Workspace, contextBudgetBytes: 1, maxTurns: 2,
+    runId: 'budget-run', task: 'Inspect the workspace.', snapshot: slice0Workspace, contextBudgetBytes: 1, maxTurns: 2, executionBudget: fixtureExecutionBudget,
   });
 
   assert.equal(artifact.status, 'budget_exhausted');
@@ -379,16 +381,216 @@ test('records cancellation before work and leaves a completed run unchanged afte
   const cancelled = new AbortController();
   cancelled.abort(new Error('Fixture cancelled before start.'));
   const cancelledArtifact = await successfulRuntime().run({
-    runId: 'cancelled-run', task: 'Inspect the workspace.', snapshot: slice0Workspace, contextBudgetBytes: 200, maxTurns: 2, signal: cancelled.signal,
+    runId: 'cancelled-run', task: 'Inspect the workspace.', snapshot: slice0Workspace, contextBudgetBytes: 200, maxTurns: 2, executionBudget: fixtureExecutionBudget, signal: cancelled.signal,
   });
   assert.equal(cancelledArtifact.status, 'cancelled');
   assert.deepEqual(cancelledArtifact.events.map((event) => event.type), ['run.cancelled']);
 
   const completed = await successfulRuntime().run({
-    runId: 'completed-run', task: 'Inspect the workspace.', snapshot: slice0Workspace, contextBudgetBytes: 200, maxTurns: 2,
+    runId: 'completed-run', task: 'Inspect the workspace.', snapshot: slice0Workspace, contextBudgetBytes: 200, maxTurns: 2, executionBudget: fixtureExecutionBudget,
   });
   const afterCompletion = new AbortController();
   afterCompletion.abort(new Error('Too late.'));
   assert.equal(completed.status, 'completed');
   assert.equal(completed.events.at(-1)?.type, 'run.completed');
+});
+
+const measuredInference = (
+  finishReason: 'stop' | 'tool_call',
+  inputTokens: number | undefined,
+  outputTokens: number | undefined,
+  outputCharacters: number,
+): InferenceEvidence => ({
+  schemaVersion: 1,
+  requestId: `inference:${finishReason}:${inputTokens ?? 'missing'}:${outputTokens ?? 'missing'}`,
+  provider: 'ollama',
+  locality: 'local',
+  model: 'fixture-model',
+  finishReason,
+  durationMs: 10,
+  outputCharacters,
+  toolCallCount: finishReason === 'tool_call' ? 1 : 0,
+  usage: {
+    ...(inputTokens === undefined ? {} : { inputTokens }),
+    ...(outputTokens === undefined ? {} : { outputTokens }),
+  },
+  cost: { status: 'not_applicable' },
+  routing: {
+    requestedProvider: 'ollama',
+    selectedProvider: 'ollama',
+    requestedModel: 'fixture-model',
+    selectedModel: 'fixture-model',
+    fallbackUsed: false,
+  },
+});
+
+test('stops before a capability call that would cross the independent capability budget', async () => {
+  const secondCall = { ...inspectCall, id: 'call-2' };
+  const artifact = await new TypeScriptConformanceRuntime({
+    planner: new ScriptedPlanner([
+      { kind: 'call', call: inspectCall },
+      { kind: 'call', call: secondCall },
+    ]),
+    approvalPolicy: allowAll,
+    capabilities: [workspaceInventory],
+  }).run({
+    runId: 'capability-budget-run',
+    task: 'Inspect twice.',
+    snapshot: slice0Workspace,
+    contextBudgetBytes: 200,
+    maxTurns: 3,
+    executionBudget: { ...fixtureExecutionBudget, maxCapabilityCalls: 1 },
+  });
+
+  assert.equal(artifact.status, 'execution_budget_exhausted');
+  assert.equal(artifact.capabilityResults.length, 1);
+  assert.equal(artifact.executionUsage.capabilityCalls, 1);
+  assert.equal(artifact.events.filter((event) => event.type === 'capability.requested').length, 1);
+  const terminal = artifact.events.at(-1);
+  assert.deepEqual(terminal, {
+    runId: 'capability-budget-run',
+    sequence: 6,
+    type: 'run.execution_budget_exhausted',
+    dimension: 'capability_calls',
+    limit: 1,
+    observed: 2,
+    usage: {
+      schemaVersion: 1,
+      capabilityCalls: 1,
+      inferenceTurns: 0,
+      reportedInputTokens: 0,
+      reportedOutputTokens: 0,
+    },
+  });
+});
+
+test('allows an exact reported-token boundary and stops continuation after a crossing response', async () => {
+  const exact = await new TypeScriptConformanceRuntime({
+    planner: new ScriptedPlanner([{
+      kind: 'complete',
+      output: 'Done',
+      inference: measuredInference('stop', 12, 3, 4),
+    }]),
+    approvalPolicy: allowAll,
+    capabilities: [],
+  }).run({
+    runId: 'token-budget-exact',
+    task: 'Finish.',
+    snapshot: slice0Workspace,
+    contextBudgetBytes: 200,
+    maxTurns: 1,
+    executionBudget: {
+      ...fixtureExecutionBudget,
+      maxReportedInputTokens: 12,
+      maxReportedOutputTokens: 3,
+    },
+  });
+  assert.equal(exact.status, 'completed');
+  assert.deepEqual(exact.executionUsage, {
+    schemaVersion: 1,
+    capabilityCalls: 0,
+    inferenceTurns: 1,
+    reportedInputTokens: 12,
+    reportedOutputTokens: 3,
+  });
+
+  const crossed = await new TypeScriptConformanceRuntime({
+    planner: new ScriptedPlanner([{
+      kind: 'complete',
+      output: 'Done',
+      inference: measuredInference('stop', 12, 3, 4),
+    }]),
+    approvalPolicy: allowAll,
+    capabilities: [],
+  }).run({
+    runId: 'token-budget-crossed',
+    task: 'Finish.',
+    snapshot: slice0Workspace,
+    contextBudgetBytes: 200,
+    maxTurns: 1,
+    executionBudget: { ...fixtureExecutionBudget, maxReportedInputTokens: 11 },
+  });
+  assert.equal(crossed.status, 'execution_budget_exhausted');
+  assert.equal(crossed.output, undefined);
+  const terminal = crossed.events.at(-1);
+  assert.equal(terminal?.type, 'run.execution_budget_exhausted');
+  if (terminal?.type !== 'run.execution_budget_exhausted') throw new Error('Expected execution budget exhaustion.');
+  assert.equal(terminal.dimension, 'reported_input_tokens');
+  assert.equal(terminal.limit, 11);
+  assert.equal(terminal.observed, 12);
+
+  const outputCrossed = await new TypeScriptConformanceRuntime({
+    planner: new ScriptedPlanner([{
+      kind: 'complete',
+      output: 'Done',
+      inference: measuredInference('stop', 12, 3, 4),
+    }]),
+    approvalPolicy: allowAll,
+    capabilities: [],
+  }).run({
+    runId: 'output-token-budget-crossed',
+    task: 'Finish.',
+    snapshot: slice0Workspace,
+    contextBudgetBytes: 200,
+    maxTurns: 1,
+    executionBudget: { ...fixtureExecutionBudget, maxReportedOutputTokens: 2 },
+  });
+  assert.equal(outputCrossed.status, 'execution_budget_exhausted');
+  const outputTerminal = outputCrossed.events.at(-1);
+  assert.equal(outputTerminal?.type, 'run.execution_budget_exhausted');
+  if (outputTerminal?.type !== 'run.execution_budget_exhausted') throw new Error('Expected execution budget exhaustion.');
+  assert.equal(outputTerminal.dimension, 'reported_output_tokens');
+  assert.equal(outputTerminal.limit, 2);
+  assert.equal(outputTerminal.observed, 3);
+});
+
+test('fails closed when an enabled token ceiling cannot be measured', async () => {
+  const artifact = await new TypeScriptConformanceRuntime({
+    planner: new ScriptedPlanner([{
+      kind: 'complete',
+      output: 'Done',
+      inference: measuredInference('stop', undefined, 3, 4),
+    }]),
+    approvalPolicy: allowAll,
+    capabilities: [],
+  }).run({
+    runId: 'token-usage-missing',
+    task: 'Finish.',
+    snapshot: slice0Workspace,
+    contextBudgetBytes: 200,
+    maxTurns: 1,
+    executionBudget: fixtureExecutionBudget,
+  });
+  assert.equal(artifact.status, 'failed');
+  assert.equal(artifact.executionUsage.inferenceTurns, 1);
+  const terminal = artifact.events.at(-1);
+  assert.equal(terminal?.type === 'run.failed' ? terminal.code : undefined, 'inference_usage_unavailable');
+});
+
+test('rejects an unsupported execution-budget contract before planning', async () => {
+  const artifact = await successfulRuntime().run({
+    runId: 'invalid-execution-budget',
+    task: 'Inspect.',
+    snapshot: slice0Workspace,
+    contextBudgetBytes: 200,
+    maxTurns: 2,
+    executionBudget: { ...fixtureExecutionBudget, schemaVersion: 2 as 1 },
+  });
+  assert.equal(artifact.status, 'failed');
+  assert.deepEqual(artifact.events.map((event) => event.type), ['run.started', 'run.failed']);
+  const terminal = artifact.events.at(-1);
+  assert.equal(terminal?.type === 'run.failed' ? terminal.code : undefined, 'invalid_execution_budget');
+});
+test('rejects a direct caller turn bound outside the kernel contract', async () => {
+  const artifact = await successfulRuntime().run({
+    runId: 'invalid-turn-limit',
+    task: 'Inspect.',
+    snapshot: slice0Workspace,
+    contextBudgetBytes: 200,
+    maxTurns: 0,
+    executionBudget: fixtureExecutionBudget,
+  });
+  assert.equal(artifact.status, 'failed');
+  const terminal = artifact.events.at(-1);
+  assert.equal(terminal?.type === 'run.failed' ? terminal.code : undefined, 'invalid_turn_limit');
 });

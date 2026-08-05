@@ -2,12 +2,34 @@ use crate::context::{compile_context, required_context_bytes};
 use crate::contracts::{
     ApprovalDecision, ApprovalFacts, ApprovalOutcome, CapabilityCall, CapabilityContext,
     CapabilityContextBasis, CapabilityObservation, CapabilityResult, ContextItemKind, ContextPlan,
-    HostPolicyPosture, InferenceCostStatus, InferenceEvidence, InferenceFinishReason,
-    InferenceLocality, OutcomeAssessment, OutcomeCapabilityAttempt, OutcomeCheck, OutcomeContract,
-    OutcomeRequirement, OutcomeRequirementKind, OutcomeStatus, PlannerRequest, PlannerTurn,
-    RunArtifact, RunEvent, RunEventData, RunRequest, RunStatus, UserConsentStatus,
-    WorkspaceSnapshot,
+    ExecutionBudget, ExecutionBudgetDimension, ExecutionUsage, HostPolicyPosture,
+    InferenceCostStatus, InferenceEvidence, InferenceFinishReason, InferenceLocality,
+    OutcomeAssessment, OutcomeCapabilityAttempt, OutcomeCheck, OutcomeContract, OutcomeRequirement,
+    OutcomeRequirementKind, OutcomeStatus, PlannerRequest, PlannerTurn, RunArtifact, RunEvent,
+    RunEventData, RunRequest, RunStatus, UserConsentStatus, WorkspaceSnapshot,
 };
+
+fn execution_budget_validation_error(budget: &ExecutionBudget) -> Option<String> {
+    if budget.schema_version != 1 {
+        return Some("Execution budget schemaVersion must be 1.".to_owned());
+    }
+    if budget.max_capability_calls > 64 {
+        return Some(
+            "Execution budget maxCapabilityCalls must be an integer from 0 to 64.".to_owned(),
+        );
+    }
+    for (label, value) in [
+        ("maxReportedInputTokens", budget.max_reported_input_tokens),
+        ("maxReportedOutputTokens", budget.max_reported_output_tokens),
+    ] {
+        if value > 1_000_000_000_000 {
+            return Some(format!(
+                "Execution budget {label} must be an integer from 0 to 1000000000000."
+            ));
+        }
+    }
+    None
+}
 
 fn valid_usd_amount(amount: &str) -> bool {
     let mut parts = amount.split('.');
@@ -400,6 +422,7 @@ struct RunState {
     capability_observations: Vec<CapabilityObservation>,
     capability_attempts: Vec<OutcomeCapabilityAttempt>,
     inference_evidence: Vec<InferenceEvidence>,
+    execution_usage: ExecutionUsage,
     outcome: OutcomeAssessment,
     output: Option<String>,
     events: Vec<RunEvent>,
@@ -416,6 +439,13 @@ impl RunState {
             capability_observations: Vec::new(),
             capability_attempts: Vec::new(),
             inference_evidence: Vec::new(),
+            execution_usage: ExecutionUsage {
+                schema_version: 1,
+                capability_calls: 0,
+                inference_turns: 0,
+                reported_input_tokens: 0,
+                reported_output_tokens: 0,
+            },
             outcome: not_evaluated_outcome(
                 "Outcome assessment did not run because the runtime did not reach a terminal planner turn.",
             ),
@@ -470,12 +500,14 @@ impl RunState {
 
     fn artifact(&self) -> RunArtifact {
         RunArtifact {
-            schema_version: 3,
+            schema_version: 4,
             run_id: self.request.run_id.clone(),
             task: self.request.task.clone(),
             snapshot: self.request.snapshot.clone(),
             status: self.status.clone(),
             context_plan: self.context_plan.clone(),
+            execution_budget: self.request.execution_budget.clone(),
+            execution_usage: self.execution_usage.clone(),
             capability_results: self.capability_results.clone(),
             inference_evidence: if self.inference_evidence.is_empty() {
                 None
@@ -504,6 +536,17 @@ impl Slice0Runtime<'_> {
             },
             self.event_sink,
         );
+
+        if !(1..=32).contains(&state.request.max_turns) {
+            return self.fail(
+                &mut state,
+                "invalid_turn_limit",
+                "Run maxTurns must be an integer from 1 to 32.".to_owned(),
+            );
+        }
+        if let Some(message) = execution_budget_validation_error(&state.request.execution_budget) {
+            return self.fail(&mut state, "invalid_execution_budget", message);
+        }
 
         if let Some(message) = state
             .request
@@ -579,10 +622,56 @@ impl Slice0Runtime<'_> {
             };
             if let Some(evidence) = inference {
                 state.inference_evidence.push(evidence.clone());
+                state.execution_usage.inference_turns =
+                    state.execution_usage.inference_turns.saturating_add(1);
                 state.emit(
-                    RunEventData::InferenceCompleted { evidence },
+                    RunEventData::InferenceCompleted {
+                        evidence: evidence.clone(),
+                    },
                     self.event_sink,
                 );
+                let (Some(input_tokens), Some(output_tokens)) =
+                    (evidence.usage.input_tokens, evidence.usage.output_tokens)
+                else {
+                    return self.fail(
+                        &mut state,
+                        "inference_usage_unavailable",
+                        "Execution token ceilings require provider-reported inputTokens and outputTokens."
+                            .to_owned(),
+                    );
+                };
+                state.execution_usage.reported_input_tokens = state
+                    .execution_usage
+                    .reported_input_tokens
+                    .saturating_add(input_tokens);
+                state.execution_usage.reported_output_tokens = state
+                    .execution_usage
+                    .reported_output_tokens
+                    .saturating_add(output_tokens);
+                if state.execution_usage.reported_input_tokens
+                    > state.request.execution_budget.max_reported_input_tokens
+                {
+                    let limit = state.request.execution_budget.max_reported_input_tokens;
+                    let observed = state.execution_usage.reported_input_tokens;
+                    return self.exhaust_execution_budget(
+                        &mut state,
+                        ExecutionBudgetDimension::ReportedInputTokens,
+                        limit,
+                        observed,
+                    );
+                }
+                if state.execution_usage.reported_output_tokens
+                    > state.request.execution_budget.max_reported_output_tokens
+                {
+                    let limit = state.request.execution_budget.max_reported_output_tokens;
+                    let observed = state.execution_usage.reported_output_tokens;
+                    return self.exhaust_execution_budget(
+                        &mut state,
+                        ExecutionBudgetDimension::ReportedOutputTokens,
+                        limit,
+                        observed,
+                    );
+                }
             }
             match next {
                 PlannerTurn::Complete { output, .. } => {
@@ -603,6 +692,17 @@ impl Slice0Runtime<'_> {
                     return state.artifact();
                 }
                 PlannerTurn::Call { call, .. } => {
+                    let attempted = state.execution_usage.capability_calls.saturating_add(1);
+                    if attempted > state.request.execution_budget.max_capability_calls {
+                        let limit = u64::from(state.request.execution_budget.max_capability_calls);
+                        return self.exhaust_execution_budget(
+                            &mut state,
+                            ExecutionBudgetDimension::CapabilityCalls,
+                            limit,
+                            u64::from(attempted),
+                        );
+                    }
+                    state.execution_usage.capability_calls = attempted;
                     if let Some(artifact) = self.execute(&mut state, call) {
                         return artifact;
                     }
@@ -751,6 +851,26 @@ impl Slice0Runtime<'_> {
             self.event_sink,
         );
         None
+    }
+
+    fn exhaust_execution_budget(
+        &mut self,
+        state: &mut RunState,
+        dimension: ExecutionBudgetDimension,
+        limit: u64,
+        observed: u64,
+    ) -> RunArtifact {
+        state.status = RunStatus::ExecutionBudgetExhausted;
+        state.emit(
+            RunEventData::RunExecutionBudgetExhausted {
+                dimension,
+                limit,
+                observed,
+                usage: state.execution_usage.clone(),
+            },
+            self.event_sink,
+        );
+        state.artifact()
     }
 
     fn cancel(&mut self, state: &mut RunState, reason: String) -> RunArtifact {

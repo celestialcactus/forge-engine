@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { TaskPlanner } from '../src/slice0/contracts.js';
-import { allowAll, slice0Workspace, workspaceInventory } from '../src/slice0/fixtures.js';
+import { allowAll, fixtureExecutionBudget, slice0Workspace, workspaceInventory } from '../src/slice0/fixtures.js';
 import { TypeScriptConformanceRuntime } from '../src/slice0/runtime.js';
 
 test('records cancellation that races with planner completion', async () => {
@@ -22,7 +22,7 @@ test('records cancellation that races with planner completion', async () => {
     task: 'Inspect the workspace.',
     snapshot: slice0Workspace,
     contextBudgetBytes: 200,
-    maxTurns: 1,
+    maxTurns: 1, executionBudget: fixtureExecutionBudget,
     signal: controller.signal,
   });
 

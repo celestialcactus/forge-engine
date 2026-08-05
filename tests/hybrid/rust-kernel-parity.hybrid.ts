@@ -4,12 +4,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { RustKernelRuntime, type ApprovalFactsProvider } from '../../src/hybrid/rust-kernel-runtime.js';
-import type { ApprovalFacts, CapabilityCall, RunRequest, TaskPlanner } from '../../src/slice0/contracts.js';
+import type { ApprovalFacts, CapabilityCall, InferenceEvidence, RunRequest, TaskPlanner } from '../../src/slice0/contracts.js';
 import {
   allowAll,
   denyAll,
   explodingCapability,
   ScriptedPlanner,
+  fixtureExecutionBudget,
   slice0Workspace,
   workspaceInventory,
 } from '../../src/slice0/fixtures.js';
@@ -24,7 +25,34 @@ const baseRequest = (runId: string): RunRequest => ({
   task: 'Inspect the workspace.',
   snapshot: slice0Workspace,
   contextBudgetBytes: 200,
-  maxTurns: 2,
+  maxTurns: 2, executionBudget: fixtureExecutionBudget,
+});
+
+const measuredInference = (
+  inputTokens: number | undefined,
+  outputTokens: number | undefined,
+): InferenceEvidence => ({
+  schemaVersion: 1,
+  requestId: 'inference:hybrid-budget',
+  provider: 'ollama',
+  locality: 'local',
+  model: 'fixture-model',
+  finishReason: 'stop',
+  durationMs: 10,
+  outputCharacters: 4,
+  toolCallCount: 0,
+  usage: {
+    ...(inputTokens === undefined ? {} : { inputTokens }),
+    ...(outputTokens === undefined ? {} : { outputTokens }),
+  },
+  cost: { status: 'not_applicable' },
+  routing: {
+    requestedProvider: 'ollama',
+    selectedProvider: 'ollama',
+    requestedModel: 'fixture-model',
+    selectedModel: 'fixture-model',
+    fallbackUsed: false,
+  },
 });
 
 const successfulOptions = (): TypeScriptConformanceRuntimeOptions => ({
@@ -161,7 +189,7 @@ test('Rust and TypeScript runtimes produce contract-equivalent Slice 0 artifacts
         capabilities: [],
       }), () => ({
         ...baseRequest('hybrid-unicode-' + name),
-        maxTurns: 1,
+        maxTurns: 1, executionBudget: fixtureExecutionBudget,
         outcomeContract: {
           schemaVersion: 1,
           requirements: [{ id: 'output', kind: 'output_non_empty' }],
@@ -229,7 +257,76 @@ test('Rust and TypeScript runtimes produce contract-equivalent Slice 0 artifacts
       capabilities: [workspaceInventory],
     }), () => ({
       ...baseRequest('hybrid-turn-limit'),
+      maxTurns: 1, executionBudget: fixtureExecutionBudget,
+    }));
+  });
+
+  await t.test('independent capability-call budget exhaustion', async () => {
+    await assertParity(() => ({
+      planner: new ScriptedPlanner([
+        { kind: 'call', call: inspectCall },
+        { kind: 'call', call: { ...inspectCall, id: 'call-2' } },
+      ]),
+      approvalPolicy: allowAll,
+      capabilities: [workspaceInventory],
+    }), () => ({
+      ...baseRequest('hybrid-capability-budget'),
+      maxTurns: 3,
+      executionBudget: { ...fixtureExecutionBudget, maxCapabilityCalls: 1 },
+    }));
+  });
+
+  await t.test('reported input-token budget exhaustion', async () => {
+    await assertParity(() => ({
+      planner: new ScriptedPlanner([{
+        kind: 'complete',
+        output: 'Done',
+        inference: measuredInference(12, 3),
+      }]),
+      approvalPolicy: allowAll,
+      capabilities: [],
+    }), () => ({
+      ...baseRequest('hybrid-input-token-budget'),
       maxTurns: 1,
+      executionBudget: { ...fixtureExecutionBudget, maxReportedInputTokens: 11 },
+    }));
+  });
+
+  await t.test('reported output-token budget exhaustion', async () => {
+    await assertParity(() => ({
+      planner: new ScriptedPlanner([{
+        kind: 'complete',
+        output: 'Done',
+        inference: measuredInference(12, 3),
+      }]),
+      approvalPolicy: allowAll,
+      capabilities: [],
+    }), () => ({
+      ...baseRequest('hybrid-output-token-budget'),
+      maxTurns: 1,
+      executionBudget: { ...fixtureExecutionBudget, maxReportedOutputTokens: 2 },
+    }));
+  });
+
+  await t.test('unreported usage fails closed', async () => {
+    await assertParity(() => ({
+      planner: new ScriptedPlanner([{
+        kind: 'complete',
+        output: 'Done',
+        inference: measuredInference(undefined, 3),
+      }]),
+      approvalPolicy: allowAll,
+      capabilities: [],
+    }), () => ({
+      ...baseRequest('hybrid-unreported-token-usage'),
+      maxTurns: 1,
+    }));
+  });
+
+  await t.test('direct caller turn-bound validation', async () => {
+    await assertParity(successfulOptions, () => ({
+      ...baseRequest('hybrid-invalid-turn-limit'),
+      maxTurns: 0,
     }));
   });
 

@@ -32,12 +32,24 @@ test('product CLI fails closed instead of selecting the TypeScript conformance r
     readonly ok: boolean;
     readonly runtime: string;
     readonly kernel: { readonly ready: boolean; readonly path: string | null; readonly message: string };
+    readonly executionDefaults: {
+      readonly schemaVersion: number;
+      readonly maxCapabilityCalls: number;
+      readonly maxReportedInputTokens: number;
+      readonly maxReportedOutputTokens: number;
+    };
   };
   assert.equal(report.ok, false);
   assert.equal(report.runtime, 'unavailable');
   assert.equal(report.kernel.ready, false);
   assert.equal(report.kernel.path, null);
   assert.match(report.kernel.message, /not an executable file/u);
+  assert.deepEqual(report.executionDefaults, {
+    schemaVersion: 1,
+    maxCapabilityCalls: 6,
+    maxReportedInputTokens: 262_144,
+    maxReportedOutputTokens: 32_768,
+  });
 });
 
 test('does not expose superseded candidate commands or fake task execution', () => {

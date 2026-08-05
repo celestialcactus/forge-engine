@@ -1,3 +1,25 @@
+# 2026-08-05 - Rust-owned execution budgets reach the local gate
+
+- Implemented [ADR-0027](ADRs/ADR-0027-rust-owned-execution-budgets.md):
+  RunArtifact v4 and `forge.kernel.bridge.v6` now carry a versioned execution
+  budget and exact admitted usage. Rust checks capability admission before policy
+  or invocation, stops continuation after cumulative reported token usage crosses
+  a ceiling, fails closed when reported usage is unavailable, and validates the
+  direct-caller turn bound. Context exhaustion remains a separate state.
+- The product defaults require no added startup ceremony and can be overridden
+  with explicit capability/input/output ceiling flags. Documentation states that
+  reported-token ceilings are post-response continuation controls, not provider
+  transport or billing caps.
+- Local typecheck, 86/86 tests, production build, Rust formatting, and dependency
+  audit pass. A fresh advisory refresh exposed five MCP-tree findings; the locked
+  MCP SDK/transitive graph was updated and the clean-install audit returned zero.
+  The workstation lacks the MSVC linker, so native Rust correctness is
+  explicitly pending hosted Windows/macOS/Ubuntu acceptance rather than inferred
+  from TypeScript. See [Checkpoint 68](checkpoints/2026-08-05-68-execution-budget-local-gate.md).
+- Added the source-backed [CLI harness comparison](../audit/2026-08-05-cli-harness-core-comparison.md).
+  Forge is calibrated as a credible narrow evidence/transaction core, not a mature
+  product peer. The alpha critical path is 5B acceptance, 5C policy UX, minimum
+  outer-run recovery, native packaging/license, and a developer test kit.
 # 2026-08-04 - Approval cancellation hardening accepted
 
 - Merged accepted Rust-owned governed lifecycle convergence through PR #20; remote
