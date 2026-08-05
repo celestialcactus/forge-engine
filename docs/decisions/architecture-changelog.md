@@ -16,6 +16,12 @@
   The workstation lacks the MSVC linker, so native Rust correctness is
   explicitly pending hosted Windows/macOS/Ubuntu acceptance rather than inferred
   from TypeScript. See [Checkpoint 68](checkpoints/2026-08-05-68-execution-budget-local-gate.md).
+- Exact implementation `3f2774b` passes hosted Node Windows/macOS and full hybrid
+  Windows/macOS/Ubuntu. The retained Windows kernel passes product doctor/smoke,
+  live Qwen 7B one-read evidence, and a Qwen 0.5B tiny-budget termination. The
+  OpenAI credential is not inherited by this process and VS Code opened the new
+  worktree in Restricted Mode, so both gates remain explicitly pending. See
+  [Checkpoint 69](checkpoints/2026-08-05-69-execution-budget-hosted-and-live-qwen-gate.md).
 - Added the source-backed [CLI harness comparison](../audit/2026-08-05-cli-harness-core-comparison.md).
   Forge is calibrated as a credible narrow evidence/transaction core, not a mature
   product peer. The alpha critical path is 5B acceptance, 5C policy UX, minimum
