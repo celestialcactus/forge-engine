@@ -1,3 +1,16 @@
+# 2026-08-05 - Product approval profiles accepted cross-platform
+
+- Accepted increment 5C at exact implementation `2941948` after all five hosted
+  jobs passed: Node on Windows/macOS and the real Rust-kernel/TypeScript product on
+  Windows/macOS/Ubuntu.
+- GitHub Actions run `31031189599` covers Node; run `31031189868` covers the hybrid
+  matrix. The complete envelope also includes local 91/91 Node and 54/54 retained-
+  kernel hybrid tests, zero audit findings, live Qwen 1.5B grant/decline behavior,
+  and the final one-call controlled VS Code regression.
+- This closes CLI ship-lane increment 5. It does not close outer-run recovery,
+  packaging/license, the alpha test kit, OS containment, organization policy
+  distribution, or MCP host-interactive approval.
+- See [Checkpoint 72](checkpoints/2026-08-05-72-policy-profile-hosted-acceptance.md).
 # 2026-08-05 - Product approval profiles reach the local/live/VS Code gate
 
 - Implemented [ADR-0028](ADRs/ADR-0028-product-approval-profiles.md): one

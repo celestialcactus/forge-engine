@@ -1,6 +1,6 @@
 # ADR-0028: Product approval profiles over Rust-owned policy
 
-- **Status:** Implemented; local, live-provider, and controlled VS Code gates pass; hosted acceptance pending
+- **Status:** Accepted at implementation `2941948`
 - **Date:** 2026-08-05
 - **Scope:** CLI ship lane increment 5C, standalone CLI, embedded service, MCP posture
 
@@ -92,6 +92,9 @@ traces in tests; product execution does not use it.
 - hosted Node Windows/macOS and hybrid Windows/macOS/Ubuntu;
 - controlled VS Code regression with exactly seven Forge tools and one read-only
   summary call.
+
+Acceptance is recorded in
+[Checkpoint 72](../checkpoints/2026-08-05-72-policy-profile-hosted-acceptance.md).
 
 ## Deferred
 

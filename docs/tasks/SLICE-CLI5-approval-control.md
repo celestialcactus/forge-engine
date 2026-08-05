@@ -1,6 +1,6 @@
 # CLI ship lane 5: approval and control
 
-**Status:** active; 5A and 5B accepted, 5C implemented with hosted acceptance pending
+**Status:** accepted; 5A, 5B, and 5C gates closed
 **Branch:** `feature/cli-policy-profiles`
 **Base:** merged `develop` at `74308ca` (PR #22)
 
@@ -95,7 +95,7 @@ Hosted and live Qwen evidence is recorded in
 [Checkpoint 69](../decisions/checkpoints/2026-08-05-69-execution-budget-hosted-and-live-qwen-gate.md).
 Credentialed OpenAI and controlled VS Code acceptance is recorded in
 [Checkpoint 70](../decisions/checkpoints/2026-08-05-70-execution-budget-openai-and-vscode-acceptance.md).
-All 5B gates are closed. 5C is implemented and remains at its exact-head hosted acceptance gate.
+All 5B gates are closed. 5C is accepted at implementation `2941948` after the complete local/live/VS Code/hosted envelope.
 
 ## Increment 5C: policy posture and host callback conformance
 
@@ -131,10 +131,11 @@ without a future host handshake fails closed instead of corrupting transport byt
 - [x] live Qwen 1.5B review grant and decline behavior is recorded;
 - [x] controlled VS Code retains exactly seven Forge tools and completes one
       summary call without a built-in tool or mutation;
-- [ ] exact-head hosted Node Windows/macOS and hybrid Windows/macOS/Ubuntu pass.
+- [x] exact-head hosted Node Windows/macOS and hybrid Windows/macOS/Ubuntu pass.
 
 The local/live/VS Code evidence and the Qwen 0.5B continuation gap are recorded in
-[Checkpoint 71](../decisions/checkpoints/2026-08-05-71-policy-profile-and-host-callback-local-gate.md).
+[Checkpoint 71](../decisions/checkpoints/2026-08-05-71-policy-profile-and-host-callback-local-gate.md). Hosted Windows/macOS/Ubuntu acceptance is recorded in
+[Checkpoint 72](../decisions/checkpoints/2026-08-05-72-policy-profile-hosted-acceptance.md).
 
 ## Whole-lane exit
 
