@@ -1,8 +1,8 @@
 # Hybrid runtime candidate: Rust kernel and TypeScript adapters
 
-**Status:** accepted hybrid boundary; protocol v5 and the governed edit lifecycle are exact-head validated on Windows, macOS, Ubuntu, live Qwen, and controlled VS Code. Protocol v6 / RunArtifact v4 execution budgets pass hosted Windows/macOS/Ubuntu and live Qwen; conservative OpenAI and controlled VS Code acceptance remain pending.
+**Status:** accepted hybrid boundary; protocol v5 and the governed edit lifecycle are exact-head validated on Windows, macOS, Ubuntu, live Qwen, and controlled VS Code. Protocol v6 / RunArtifact v4 execution budgets are accepted after hosted Windows/macOS/Ubuntu, live Qwen, conservative credentialed OpenAI, and controlled VS Code gates.
 **Date:** 2026-07-22
-**Updated:** 2026-08-04
+**Updated:** 2026-08-05
 
 ## Architectural claim
 

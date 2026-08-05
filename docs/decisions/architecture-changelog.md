@@ -1,3 +1,18 @@
+# 2026-08-05 - Rust-owned execution budgets accepted
+
+- Closed the two remaining 5B gates without broadening the implementation. A
+  conservative credentialed `openai/gpt-5.6` request completed under one turn,
+  zero capability calls, and explicit reported-token ceilings with exact expected
+  output. The run recorded 768 input and 12 output tokens.
+- In a trusted fresh VS Code Agent chat with exactly seven Forge tools selected,
+  Copilot made one `Forge Workspace Summary` call and no built-in call. It
+  preserved the run/snapshot IDs, `outcome.status=verified`,
+  `runStatus=completed`, and all seven ordered events.
+- Accepted 5B at implementation `3f2774b`. Product policy posture and embedded
+  host callback conformance remain 5C; outer-run recovery, native packaging,
+  licensing, and OS containment are still open.
+- See [Checkpoint 70](checkpoints/2026-08-05-70-execution-budget-openai-and-vscode-acceptance.md).
+
 # 2026-08-05 - Rust-owned execution budgets reach the local gate
 
 - Implemented [ADR-0027](ADRs/ADR-0027-rust-owned-execution-budgets.md):

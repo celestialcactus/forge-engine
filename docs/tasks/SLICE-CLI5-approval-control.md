@@ -1,6 +1,6 @@
 # CLI ship lane 5: approval and control
 
-**Status:** active; 5A accepted, 5B hosted/Qwen conditional pass with OpenAI/VS Code gates pending, 5C open
+**Status:** active; 5A and 5B accepted, 5C open
 **Branch:** `feature/cli-execution-budgets`
 **Base:** merged `develop` at `2a5fe3e` (PR #21)
 
@@ -85,14 +85,17 @@ remain separate.
 - [x] Rust/TypeScript hybrid parity fixtures cover the new terminal paths;
 - [x] hosted Rust fmt/clippy/test/build and hybrid parity pass on Windows/macOS/Ubuntu at `3f2774b`;
 - [x] live Qwen 7B normal and Qwen 0.5B tiny-budget gates pass against the exact hosted Windows kernel;
-- [ ] conservative credentialed OpenAI normal gate passes;
-- [ ] controlled VS Code still exposes exactly seven read-only Forge tools.
+- [x] conservative credentialed OpenAI normal gate passes;
+- [x] controlled VS Code still exposes exactly seven read-only Forge tools and
+      completes the one-call summary regression without a built-in tool.
 
 Local evidence and the missing local MSVC linker are recorded in
 [Checkpoint 68](../decisions/checkpoints/2026-08-05-68-execution-budget-local-gate.md).
 Hosted and live Qwen evidence is recorded in
 [Checkpoint 69](../decisions/checkpoints/2026-08-05-69-execution-budget-hosted-and-live-qwen-gate.md).
-5B is not accepted until the unchecked OpenAI and VS Code gates close.
+Credentialed OpenAI and controlled VS Code acceptance is recorded in
+[Checkpoint 70](../decisions/checkpoints/2026-08-05-70-execution-budget-openai-and-vscode-acceptance.md).
+All 5B gates are closed; 5C is the only open increment in this lane.
 
 ## Increment 5C: policy posture and host callback conformance
 
