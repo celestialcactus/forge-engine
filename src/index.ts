@@ -1,4 +1,5 @@
 export * from './runtime.js';
+export * from './approval-profile.js';
 export * from './hybrid/rust-kernel-runtime.js';
 export * from './hybrid/host-authority-transcript.js';
 export * from './hybrid/verification-configuration.js';

@@ -15,11 +15,13 @@ A useful calibration is:
 | Scope | Current confidence | Honest meaning |
 | --- | ---: | --- |
 | Rust lifecycle and verified local-change machinery | 8 / 10 | Strong design and adversarial fixtures; 5B Rust and hybrid parity now pass hosted Windows/macOS/Ubuntu. It still lacks power-loss coverage for the outer run. |
-| Standalone CLI product | 5 / 10 | Live Ollama/OpenAI and a basic interactive loop work, but installation, session resume, policy UX, and general developer-tool breadth are not alpha-grade yet. |
+| Standalone CLI product | 5 / 10 | Live Ollama/OpenAI, an interactive loop, and explicit developer/review/locked profiles work, but installation, session resume, and general developer-tool breadth are not alpha-grade yet. |
 | Enterprise-ready harness | 3 / 10 | The contracts point in the right direction, but distribution, sandboxing, administration, durable audit export, and operating evidence are unfinished. |
 | Overall parity with mature CLI harnesses | 4 / 10 | Forge is ahead in a few narrow evidence/transaction semantics and behind across most product surfaces. |
 
-These scores are engineering judgment, not benchmark results.
+These scores are engineering judgment, not benchmark results. Completing a narrow
+approval-profile seam does not by itself raise the overall parity score; recovery,
+packaging, capability breadth, containment, and field evidence still dominate it.
 
 ## Comparison matrix
 
@@ -29,7 +31,7 @@ These scores are engineering judgment, not benchmark results.
 | Evidence/provenance | Per-run ordered events, snapshot/context IDs, capability results, approval basis, inference evidence, outcome assessment, and verified transaction evidence. | Public docs describe session rollouts, sandbox/approval state, and programmatic output, but not Forge's exact per-capability evidence envelope. | JSONL sessions, checkpoints, permission events, and hook inputs; checkpoint recovery intentionally excludes Bash/external changes. | Session event logs, workspace artifacts, plans, checkpoints, and JSONL output are documented. | SQLite sessions retain messages, tool calls/results, model configuration, token counts, and lineage. |
 | Mutation safety | High-level governed change: complete-file evidence, digest binding, isolated candidate, verification, second promotion decision, durable recovery. No generic write/shell MCP tools. | General edits and shell execution under sandbox and approval policy. | General edit and Bash tools under permissions; file-edit checkpoints support rewind. | General edit, patch, file, shell, URL, MCP, and subagent tools with allow/deny controls. | General terminal/file tools with approval and optional container backends. |
 | OS containment | **Absent.** Process-tree ownership and minimized verifier environment are not a sandbox. | OS-enforced local sandbox; public docs cover macOS, Linux, and Windows mechanisms. | OS sandbox for Bash on macOS, Linux, and WSL2; native Windows sandbox is documented as planned. File tools use permissions rather than the Bash sandbox. | Local and cloud sandboxes are public preview; local support is macOS/Linux and Windows Insider builds. | Optional hardened Docker/Singularity/remote backends; local execution otherwise inherits the host boundary. |
-| Approval/control | Rust resolves versioned host-policy and user-consent facts. Cancellation/deadline paths are proven. 5B call/token budgets pass local, hosted, Qwen, OpenAI, and controlled VS Code gates; product policy profiles and embedded-host callback conformance remain 5C. | Configurable sandbox and approval policies, granular approval categories, managed settings, and review flows. | Layered allow/ask/deny permissions, managed settings, hooks, and sandbox policy. | Tool/path/URL allow/deny, persisted permissions, hooks, admin restrictions, and autopilot continuation limits. | Dangerous-command approval, file-write controls, platform authorization, and container policy. |
+| Approval/control | Rust resolves every final decision and owns call/token budgets. TypeScript exposes developer/review/locked as attributable facts, with exact-context embedded review callbacks and fail-closed unresolved asks. 5C passes local/live/VS Code and hosted Windows/macOS/Ubuntu gates. No central policy distribution exists. | Configurable sandbox and approval policies, granular approval categories, managed settings, and review flows. | Layered allow/ask/deny permissions, managed settings, hooks, and sandbox policy. | Tool/path/URL allow/deny, persisted permissions, hooks, admin restrictions, and autopilot continuation limits. | Dangerous-command approval, file-write controls, platform authorization, and container policy. |
 | Run/session recovery | Durable ChangeSet/candidate recovery exists. **Conversation and outer RunArtifact resume do not.** | Saved chats can be resumed; noninteractive and app/server surfaces are mature. | Continuous local sessions, resume/branch/export, and edit checkpoints that persist with sessions. | Local session event logs/artifacts, resume/continue, checkpoints, and optional cloud sandbox snapshots. | Full SQLite session persistence, resume/search, lineage, and cross-surface history. |
 | Context management | Deterministic byte-bounded manifest and compact tool evidence. The planned mixed-method context compiler is not built. | Compaction, skills, subagents, MCP scoping, and durable repository guidance are product features. | `/compact`, `/context`, session branching, skills, scoped subagents, and tool-result management are mature. | Automatic compaction, resumable sessions, instructions, skills, plugins, agents, and tool availability controls. | Dual compression, pluggable context engines, FTS5 session search, memory providers, and explicit context references. |
 | Provider/local model choice | Explicit Ollama and direct OpenAI transports; no fallback. Live Qwen and credentialed OpenAI gates exist. | Primarily OpenAI with configurable model providers in the maintained Rust CLI. | Claude-first with supported cloud deployment integrations. | BYOK supports OpenAI-compatible endpoints including Ollama, Azure OpenAI, and Anthropic. | Broad provider/endpoints model including local or OpenAI-compatible routes. |
@@ -49,13 +51,14 @@ Forge must **not** currently claim mature standalone-agent parity, enterprise re
 
 ## Immediate alpha critical path
 
-The fastest defensible path is not more intelligence features. It is:
+The fastest defensible path is not more intelligence features. Increment 5C is
+accepted without adding another policy engine. The remaining path is:
 
-1. Implement 5C as a small product policy profile over the existing fact contract; do not add another policy engine.
-2. Add minimum outer-run recovery: append the canonical events/artifact, resume only idempotent work, and surface retained non-idempotent transactions without replaying them.
-3. Package the native kernel with the TypeScript CLI for clean Windows and macOS installation; add `doctor`, effective configuration, and upgrade smoke tests.
-4. Resolve the root open-source license with owner/legal review and add contribution/security guidance.
-5. Ship an alpha test kit: five representative prompts, expected evidence, known limitations, issue template, and telemetry that is local/opt-in.
+1. Add minimum outer-run recovery: append the canonical events/artifact, resume only idempotent work, and surface retained non-idempotent transactions without replaying them.
+2. Package the native kernel with the TypeScript CLI for clean Windows and macOS installation; add `doctor`, effective configuration, and upgrade smoke tests.
+3. Resolve the root open-source license with owner/legal review and add contribution/security guidance.
+4. Ship an alpha test kit: five representative prompts, expected evidence, known limitations, issue template, and telemetry that is local/opt-in.
+5. Add bounded recovery guidance for malformed tiny-model tool continuations. Qwen 0.5B is not a general tool-use floor; Forge must preserve call identity rather than guessing through a malformed stream.
 
 A focused implementation lane can plausibly reach an externally shareable developer alpha in **2–4 weeks**. That estimate assumes the root license decision is made quickly, hosted CI remains healthy, and OS sandboxing stays clearly deferred. A small internal source-based preview can happen earlier; it must not be presented as the installable alpha.
 

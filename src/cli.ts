@@ -12,6 +12,7 @@ import {
   createNodeInteractiveIo,
   resolveInteractiveRoute,
   runInteractiveSession,
+  type InteractiveSessionIo,
 } from './interactive-cli.js';
 import type { InferenceRoute } from './inference/contracts.js';
 import { createRunCancellation, LiveCliPresenter } from './live-cli.js';
@@ -30,6 +31,10 @@ import {
 } from './hybrid/rust-sovereign-change-runtime.js';
 import { artifactPayload, defaultExecutionBudget, ForgeWorkspaceService, type ForgeWorkspaceServiceOptions } from './v1/service.js';
 import { parseTrustedVerificationPolicy, selectVerificationCheckIds } from './verification-policy.js';
+import {
+  parseProductApprovalProfile,
+  type ProductApprovalConfiguration,
+} from './approval-profile.js';
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -56,6 +61,7 @@ const { positionals, values } = parseArgs({
     provider: { type: 'string' },
     model: { type: 'string' },
     'engine-root': { type: 'string' },
+    'approval-profile': { type: 'string' },
     approve: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
   },
@@ -63,11 +69,47 @@ const { positionals, values } = parseArgs({
 
 const command = values.help ? 'help' : positionals[0] ?? 'interactive';
 const workspaceRoot = resolve(values.workspace ?? process.cwd());
+const approvalProfileRaw = values['approval-profile'] ?? process.env.FORGE_APPROVAL_PROFILE;
+const approvalProfile = parseProductApprovalProfile(approvalProfileRaw);
+const approvalProfileSource = values['approval-profile'] !== undefined
+  ? 'command-line'
+  : process.env.FORGE_APPROVAL_PROFILE !== undefined
+    ? 'environment'
+    : 'default';
 const kernelResolution = resolveForgeKernelBinary();
 const kernelProbe = command === 'doctor' ? await probeForgeKernelBinary(kernelResolution) : undefined;
 const requireKernel = (): string => requireForgeKernelBinary(kernelResolution);
-const productServiceOptions = (): ForgeWorkspaceServiceOptions => ({
+let approvalIo: InteractiveSessionIo | undefined;
+const interactiveIo = (): InteractiveSessionIo => {
+  approvalIo ??= createNodeInteractiveIo();
+  return approvalIo;
+};
+const approvedChoice = (value: string | undefined): boolean =>
+  ['y', 'yes', 'approve'].includes(value?.trim().toLowerCase() ?? '');
+const approvalConfiguration = (interactiveConsent = true): ProductApprovalConfiguration => {
+  if (approvalProfile !== 'review') return { profile: approvalProfile };
+  if (!interactiveConsent) return { profile: 'review' };
+  return {
+    profile: 'review',
+    async requestConsent(request, signal) {
+      const answer = await interactiveIo().question(
+        `[forge] review ${request.call.capabilityId} (${request.call.id}, snapshot=${request.context.basis.snapshotId}) [y/N] `,
+        signal,
+      );
+      const granted = approvedChoice(answer);
+      return {
+        status: granted ? 'granted' : 'declined',
+        source: 'forge.cli.approval-prompt',
+        reason: granted
+          ? 'Developer granted this exact model-requested capability call.'
+          : 'Developer declined this exact model-requested capability call.',
+      };
+    },
+  };
+};
+const productServiceOptions = (interactiveConsent = true): ForgeWorkspaceServiceOptions => ({
   runtime: { kind: 'rust_kernel', kernel: { binaryPath: requireKernel() } },
+  approval: approvalConfiguration(interactiveConsent),
 });
 let service: ForgeWorkspaceService | undefined;
 
@@ -257,6 +299,7 @@ const printChangeArtifact = (artifact: unknown): void => {
 };
 
 const printArtifact = (artifact: RunArtifact): void => {
+  if (artifact.status !== 'completed' || artifact.outcome.status === 'unmet') process.exitCode = 1;
   const payload = artifactPayload(artifact);
   if (values.json) {
     console.log(JSON.stringify(payload, null, 2));
@@ -275,6 +318,9 @@ const printArtifact = (artifact: RunArtifact): void => {
 
 
 try {
+  if (values.json && approvalProfile === 'review' && command !== 'doctor' && command !== 'help') {
+    throw new Error('--json cannot be combined with --approval-profile review because consent prompts require human-mode output.');
+  }
   if (command === 'doctor') {
     const report = {
       ok: kernelProbe?.ready === true,
@@ -299,6 +345,12 @@ try {
       workspaceRoot,
       engineRoot: engineRoot(),
       executionDefaults: defaultExecutionBudget,
+      approval: {
+        profile: approvalProfile,
+        source: approvalProfileSource,
+        decisionAuthority: 'rust-kernel',
+        scope: 'registered capabilities; governed mutations retain exact-change approval',
+      },
       readOnlyFeatures: ['summary', 'search', 'read', 'symbols', 'typescript-diagnostics', 'git-status', 'git-diff'],
       changeFlow: kernelProbe?.ready === true ? 'forge.kernel.changeset.v3' : 'unavailable',
       isolation: 'trusted verification; process lifecycle owned; no Forge-enforced OS sandbox',
@@ -306,7 +358,7 @@ try {
     if (!report.ok) process.exitCode = 1;
     console.log(values.json
       ? JSON.stringify(report)
-      : `ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}\nNode: ${report.node}\nRuntime: ${report.runtime}\nKernel: ${report.kernel.path ?? report.kernel.message}\nMCP: ${report.mcp}\nExecution defaults: calls=${report.executionDefaults.maxCapabilityCalls}, input=${report.executionDefaults.maxReportedInputTokens}, output=${report.executionDefaults.maxReportedOutputTokens}\nChange flow: ${report.changeFlow}\nIsolation: ${report.isolation}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
+      : `ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}\nNode: ${report.node}\nRuntime: ${report.runtime}\nKernel: ${report.kernel.path ?? report.kernel.message}\nMCP: ${report.mcp}\nExecution defaults: calls=${report.executionDefaults.maxCapabilityCalls}, input=${report.executionDefaults.maxReportedInputTokens}, output=${report.executionDefaults.maxReportedOutputTokens}\nApproval profile: ${report.approval.profile} (${report.approval.source}); authority=${report.approval.decisionAuthority}\nChange flow: ${report.changeFlow}\nIsolation: ${report.isolation}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
   } else if (command === 'inspect') {
     printArtifact(await workspaceService().inspect(integerOption(values['max-files'], 200, '--max-files')));
   } else if (command === 'search') {
@@ -407,10 +459,11 @@ try {
       : await loadVerificationPolicy(verificationPolicyPath);
     const checkIds = verificationChecks.length === 0 ? [] : selectedChecks(verificationChecks);
     const governedChanges = verificationChecks.length > 0;
-    const io = createNodeInteractiveIo();
+    const io = interactiveIo();
     await runInteractiveSession({
       workspaceRoot,
       initialRoute: selection,
+      approvalProfile,
       io,
       notices: [governedChanges
         ? `changes: governed inside the Rust run; verification=${checkIds.join(', ')}`
@@ -463,7 +516,7 @@ try {
         : 1;
     }
   } else if (command === 'mcp') {
-    await startForgeMcpServer(workspaceRoot, productServiceOptions());
+    await startForgeMcpServer(workspaceRoot, productServiceOptions(false));
   } else if (command === 'help') {
     console.log([
       'ForgeEngine V1 — sovereign evidence runtime',
@@ -472,7 +525,8 @@ try {
       '  forge [--provider <ollama|openai> --model <model>] [--workspace <path>]',
       '    With no route flags, Forge auto-discovers an installed local Ollama model.',
       '    Add --policy <verification-policy.json> (or FORGE_VERIFICATION_POLICY) to enable reviewed, verified edits.',
-      '    Slash controls: /help, /status, /model, /clear, /exit.',
+      '    Select --approval-profile <developer|review|locked> (or FORGE_APPROVAL_PROFILE).',
+      '    Slash controls: /help, /status, /permissions, /model, /clear, /exit.',
       '',
       'Core change flow:',
       '  forge change propose <proposal.json> --policy <policy.json> --approve [--check <id,id>] [--json]',
@@ -490,7 +544,7 @@ try {
       '  forge git-status [--json]',
       '  forge git-diff [--staged] [--json] [--max-bytes <count>]',
       '  forge run <task> --provider <ollama|openai> --model <model> [--max-turns <count>] [--timeout-ms <ms>] [--json]',
-      '    Optional ceilings: --max-capability-calls, --max-input-tokens, --max-output-tokens.',
+      '    Optional controls: --approval-profile <developer|review|locked>, --max-capability-calls, --max-input-tokens, --max-output-tokens.',
       '    Token ceilings stop continuation after cumulative provider-reported usage crosses the limit.',
       '    Human mode streams validated assistant text and canonical run status; --json emits one terminal artifact.',
       '  forge mcp [--workspace <path>]',
@@ -510,4 +564,5 @@ try {
   process.exitCode = 1;
 } finally {
   service?.close();
+  approvalIo?.close();
 }

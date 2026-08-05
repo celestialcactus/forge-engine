@@ -32,6 +32,7 @@ test('product CLI fails closed instead of selecting the TypeScript conformance r
     readonly ok: boolean;
     readonly runtime: string;
     readonly kernel: { readonly ready: boolean; readonly path: string | null; readonly message: string };
+    readonly approval: { readonly profile: string; readonly source: string; readonly decisionAuthority: string };
     readonly executionDefaults: {
       readonly schemaVersion: number;
       readonly maxCapabilityCalls: number;
@@ -44,6 +45,12 @@ test('product CLI fails closed instead of selecting the TypeScript conformance r
   assert.equal(report.kernel.ready, false);
   assert.equal(report.kernel.path, null);
   assert.match(report.kernel.message, /not an executable file/u);
+  assert.deepEqual(report.approval, {
+    profile: 'developer',
+    source: 'default',
+    decisionAuthority: 'rust-kernel',
+    scope: 'registered capabilities; governed mutations retain exact-change approval',
+  });
   assert.deepEqual(report.executionDefaults, {
     schemaVersion: 1,
     maxCapabilityCalls: 6,
@@ -65,6 +72,28 @@ test('does not expose superseded candidate commands or fake task execution', () 
   });
   assert.equal(optionHelp.status, 0);
   assert.match(optionHelp.stdout, /With no route flags, Forge auto-discovers/u);
+  assert.match(optionHelp.stdout, /approval-profile <developer\|review\|locked>/u);
+
+  const invalidProfile = spawnSync(process.execPath, [...cli, 'help', '--approval-profile', 'yolo'], {
+    encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment,
+  });
+  assert.notEqual(invalidProfile.status, 0);
+  assert.match(invalidProfile.stderr, /developer, review, or locked/u);
+
+  const reviewJson = spawnSync(process.execPath, [
+    ...cli,
+    'run',
+    'fixture task',
+    '--provider',
+    'ollama',
+    '--model',
+    'fixture-model',
+    '--approval-profile',
+    'review',
+    '--json',
+  ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment });
+  assert.notEqual(reviewJson.status, 0);
+  assert.match(reviewJson.stderr, /cannot be combined.*consent prompts/iu);
 
   const interactive = spawnSync(process.execPath, cli, {
     encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment,

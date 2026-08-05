@@ -2,7 +2,7 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
-**Last groomed:** 2026-08-05 after full execution-budget acceptance
+**Last groomed:** 2026-08-05 after product approval-profile hosted acceptance
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
 
@@ -173,28 +173,30 @@ broader V1 slices remain authoritative capability goals.
    **Exit:** a representative change is proposed, reviewed, verified, accepted or
    discarded, and fully attributed without generic raw powers; unsupported claims
    cannot silently inherit an accepted verification state.
-5. **Approval and control - 5A and 5B accepted; 5C open.** Visible
-   allow/ask/deny, approval callbacks,
-   cancellation, timeouts, iteration/tool budgets, and honest execution posture.
-   Increment 5A is accepted at implementation `ae746ff` after 81 local tests,
-   hosted Node Windows/macOS, hosted hybrid Windows/macOS/Ubuntu, two live Windows
-   Qwen cancellation gates, and a controlled one-call seven-tool VS Code
-   regression. Increment 5B now adds RunArtifact v4, bridge v6, Rust-owned
+5. **Approval and control - accepted through 5C.** Visible
+   allow/ask/deny, approval callbacks, cancellation, timeouts, iteration/tool
+   budgets, and honest execution posture. Increment 5A proves cancellation-safe
+   human waits. Increment 5B adds RunArtifact v4, bridge v6, Rust-owned
    pre-admission capability ceilings, cumulative provider-reported input/output
    ceilings, exact usage counters, fail-closed missing usage, and direct-kernel
-   turn validation. The local typecheck, 86-test suite, build, fmt, and dependency
-   audit pass. Exact commit `3f2774b` passes hosted Rust/hybrid Windows/macOS/Ubuntu
-   plus live Qwen normal and tiny-budget gates. A conservative credentialed OpenAI
-   call and a one-call, seven-tool controlled VS Code regression also pass.
-   Explicit product policy/host callback conformance remains 5C.
+   turn validation; it is merged on `develop` through PR #22 at `74308ca`.
+   Increment 5C removes fixed product policy mappings and exposes exactly three
+   fact-producing profiles: developer, review, and locked. An embedded review
+   callback receives the exact call and Rust-authored context; missing callbacks
+   remain unresolved ask/no-invoke. Rust is still the only decision authority.
+   Local 91/91 tests, build, focused exact-kernel parity, live Qwen 1.5B grant and
+   decline, and a one-call seven-tool controlled VS Code regression pass. Exact
+   implementation `2941948` then passed hosted Node Windows/macOS and hybrid
+   Windows/macOS/Ubuntu, closing the 5C gate.
    See [CLI ship lane 5](../tasks/SLICE-CLI5-approval-control.md),
    [ADR-0026](../decisions/ADRs/ADR-0026-cancellation-safe-approval-callbacks.md),
    [ADR-0027](../decisions/ADRs/ADR-0027-rust-owned-execution-budgets.md),
-   [Checkpoint 68](../decisions/checkpoints/2026-08-05-68-execution-budget-local-gate.md),
-   [Checkpoint 69](../decisions/checkpoints/2026-08-05-69-execution-budget-hosted-and-live-qwen-gate.md),
-   and [Checkpoint 70](../decisions/checkpoints/2026-08-05-70-execution-budget-openai-and-vscode-acceptance.md).
-   **Exit:** denial, cancellation, timeout, and exhaustion are deterministic and
-   recoverable through CLI and embedded-host fixtures.
+   [ADR-0028](../decisions/ADRs/ADR-0028-product-approval-profiles.md), and
+   [Checkpoint 71](../decisions/checkpoints/2026-08-05-71-policy-profile-and-host-callback-local-gate.md), and
+   [Checkpoint 72](../decisions/checkpoints/2026-08-05-72-policy-profile-hosted-acceptance.md).
+   **Exit:** denial, cancellation, timeout, and exhaustion are deterministic through
+   CLI and embedded-host fixtures, and the exact head passes hosted Tier-1/Tier-2
+   conformance.
 6. **Recovery state.** Append-oriented local events/artifacts, idempotency and
    recovery, and resume without duplicating completed non-idempotent work.
    **Exit:** restart fixtures resume or report repair state without repeating an
@@ -450,8 +452,8 @@ not source volume or the number of abstractions present.
 | Gate group | State | Evidence or open condition |
 | --- | --- | --- |
 | Canonical runtime, real inference/live loop, governed change, cancellation-safe approvals | Accepted on `develop` through 5A | Cross-platform hosted, live-provider, and controlled VS Code evidence is recorded by the linked checkpoints. |
-| 5B execution controls | Accepted on feature commit `3f2774b` | Local, hosted Windows/macOS/Ubuntu, live Qwen, conservative credentialed OpenAI, and one-call controlled VS Code gates pass. See Checkpoints 68-70. |
-| 5C policy posture and host callback conformance | Open | Must remain a small profile over the existing Rust fact/decision contract. |
+| 5B execution controls | Accepted and merged on `develop` at `74308ca` | Local, hosted Windows/macOS/Ubuntu, live Qwen, conservative credentialed OpenAI, and one-call controlled VS Code gates pass. See Checkpoints 68-70. |
+| 5C policy posture and host callback conformance | Accepted at implementation `2941948` | One fact-producing profile layer serves CLI/service/MCP while Rust alone decides. Local, exact-kernel, live Qwen 1.5B, controlled VS Code, and hosted Windows/macOS/Ubuntu gates pass. See ADR-0028 and Checkpoints 71-72. |
 | Minimum outer-run recovery | Open | Append canonical events/artifact and resume without replaying completed non-idempotent work. Durable ChangeSet recovery alone is insufficient. |
 | Installable developer alpha | Open | Bundle the native kernel for clean Windows/macOS install/update, resolve the root license, publish effective config/doctor guidance, and ship the developer test kit. |
 | Broader V1 platform | Deferred | Context compiler, skills/memory, MCP client/mutation symmetry, connectors, automation, generalized UI, and restricted execution retain their roadmap gates. |
@@ -470,7 +472,8 @@ expansion, the current planning ranges are:
 - 4B-2 interactive edit composition: **accepted at implementation `bbf119e` with hosted Windows/macOS/Ubuntu, a full promoted Qwen flow, and controlled one-call VS Code evidence**;
 - 4B-3 Rust-owned lifecycle convergence: **accepted at implementation `1cc1e3f` after exact-head hosted Windows/macOS/Ubuntu, an exact-kernel live Qwen promoted transaction, and a controlled one-call seven-tool VS Code gate; merged through PR #20 at `2ff5669`**;
 - 5A cancellation-safe approvals: **accepted at implementation `ae746ff` after local 81-test/build, hosted Windows/macOS/Ubuntu, two live Qwen timeout/no-mutation gates, and a controlled one-call seven-tool VS Code gate**;
-- 5B Rust-owned execution budgets: **accepted at implementation `3f2774b` after local 86-test/build/audit, hosted Windows/macOS/Ubuntu, live Qwen normal and tiny-budget gates, conservative credentialed OpenAI, and a controlled one-call seven-tool VS Code gate**;
+- 5B Rust-owned execution budgets: **accepted at implementation `3f2774b` after local 86-test/build/audit, hosted Windows/macOS/Ubuntu, live Qwen normal and tiny-budget gates, conservative credentialed OpenAI, and a controlled one-call seven-tool VS Code gate; merged through PR #22 at `74308ca`**;
+- 5C product approval profiles: **accepted at implementation `2941948` after local 91-test/build, full 54-test retained-kernel hybrid, live Qwen 1.5B grant/decline, controlled one-call VS Code, and hosted Node/hybrid Windows/macOS/Ubuntu gates**;
 - shippable standalone CLI alpha: **2-4 focused weeks from 2026-08-05**, contingent on fast license resolution and keeping OS sandboxing outside the trusted-alpha gate;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
@@ -478,8 +481,9 @@ expansion, the current planning ranges are:
 The source-backed
 [CLI harness comparison](../audit/2026-08-05-cli-harness-core-comparison.md)
 calibrates Forge as a strong narrow evidence/transaction core rather than a mature
-CLI peer. It fixes the immediate post-5B order at 5C policy UX, minimum outer-run
-recovery, clean native packaging/license, and the developer alpha test kit.
+CLI peer. With 5C accepted, the next core order is minimum
+outer-run recovery, clean native packaging/license, and the developer alpha test
+kit.
 
 These are ranges, not promises. Host key provisioning, Windows/macOS containment
 mechanics, packaging/signing, or new boundary requirements move the dates. Every accepted
@@ -515,15 +519,14 @@ CLI and MCP now use that one Rust authority. The real-inference feature passes
 hosted, exact-kernel product, and controlled VS Code gates and is merged on
 `develop` through PR #16. The live CLI and credentialed OpenAI multi-turn gates
 are merged through PR #17 at `0441d865`. Rust-authoritative outcome contracts are
-merged through PR #18 at current `develop` head `742b8c8`. The prepared
-ChangeSet/approval boundary is accepted at `3262e3b` after exact-head hosted
-Windows/macOS/Ubuntu and exact Windows-kernel product gates. Increment 4B-2 is
-accepted at `bbf119e` after hosted cross-platform, full promoted Qwen, and
-controlled one-call VS Code gates. Increment 4B-3 is accepted at exact implementation `1cc1e3f` and merged through
-PR #20 at current `develop` head `2ff5669`: the governed
-transaction now completes before the authoritative Rust lifecycle terminates, and
-the exact head passed hosted Windows/macOS/Ubuntu, live Qwen promotion timing, and
-controlled one-call seven-tool VS Code gates.
+merged through PR #18 at `742b8c8`. The prepared ChangeSet/approval boundary is
+accepted at `3262e3b`; increments 4B-2 and 4B-3 passed hosted cross-platform, live
+promoted Qwen, and controlled VS Code gates before merging through PR #20 at
+`2ff5669`. Rust-owned execution budgets are accepted and current `develop` points
+at PR #22 merge `74308ca`. Increment 5C now has one product fact layer across CLI,
+service, and MCP, with Rust still resolving every final decision. Implementation
+`2941948` passed the local, exact-kernel, live Qwen 1.5B, controlled VS Code, and
+hosted Node/hybrid Windows/macOS/Ubuntu gates and is accepted as increment 5C.
 `restricted` remains fail-closed until a
 separately proven Windows/macOS backend passes adversarial gates; the trusted developer alpha must name that
 limitation.

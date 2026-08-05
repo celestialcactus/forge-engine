@@ -189,7 +189,7 @@ test('runs real workspace inventory through the accepted Forge run contract', as
   if (approval?.type !== 'approval.decided') throw new Error('Expected approval evidence.');
   assert.equal(approval.facts?.callId, 'call-1');
   assert.equal(approval.facts?.capabilityId, 'workspace.inventory');
-  assert.equal(approval.facts?.hostPolicy.source, 'forge.v1.read-only-policy');
+  assert.equal(approval.facts?.hostPolicy.source, 'forge.product.approval-profile.developer');
 });
 
 test('returns bounded attributable literal search evidence', async () => {

@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline';
 import type { OutcomeStatus, RunStatus } from './slice0/contracts.js';
 import type { InferenceFetch, InferenceRoute } from './inference/contracts.js';
+import type { ProductApprovalProfile } from './approval-profile.js';
 import { resolveInferenceRoute } from './inference/routing.js';
 
 type JsonRecord = Record<string, unknown>;
@@ -124,6 +125,7 @@ export interface InteractiveRunSummary {
 export interface InteractiveSessionOptions {
   readonly workspaceRoot: string;
   readonly initialRoute: InteractiveRouteSelection;
+  readonly approvalProfile: ProductApprovalProfile;
   readonly io: InteractiveSessionIo;
   readonly runTask: (task: string, route: InferenceRoute) => Promise<InteractiveRunSummary>;
   readonly validateRoute?: (route: InferenceRoute) => void | Promise<void>;
@@ -132,7 +134,8 @@ export interface InteractiveSessionOptions {
 
 const sessionHelp = [
   '/help                         Show this help',
-  '/status                       Show workspace, route, and last run',
+  '/status                       Show workspace, route, approval profile, and last run',
+  '/permissions                  Explain the active approval profile',
   '/model                        Show the active provider/model',
   '/model <ollama|openai> <name> Change the route for this session',
   '/clear                        Clear the terminal',
@@ -141,6 +144,14 @@ const sessionHelp = [
 
 const routeLabel = (selection: InteractiveRouteSelection): string =>
   selection.route.provider + '/' + selection.route.model + ' (' + selection.source + ')';
+
+const approvalDescription = (profile: ProductApprovalProfile): string => {
+  if (profile === 'developer') {
+    return 'registered capabilities are allowed; governed mutations still require exact-change and promotion approval';
+  }
+  if (profile === 'review') return 'every model-requested capability requires a visible decision';
+  return 'every model-requested capability is denied';
+};
 
 interface InteractiveLineWaiter {
   readonly resolve: (line: string | undefined) => void;
@@ -220,6 +231,7 @@ export async function runInteractiveSession(options: InteractiveSessionOptions):
   options.io.write('ForgeEngine alpha');
   options.io.write('workspace: ' + options.workspaceRoot);
   options.io.write('route: ' + routeLabel(selection));
+  options.io.write('approval: ' + options.approvalProfile + ' — ' + approvalDescription(options.approvalProfile));
   for (const notice of options.notices ?? []) options.io.write(notice);
   options.io.write('Each prompt creates a new evidence run. Type /help for controls.');
 
@@ -246,10 +258,14 @@ export async function runInteractiveSession(options: InteractiveSessionOptions):
       } else if (command === '/status') {
         options.io.write('workspace: ' + options.workspaceRoot);
         options.io.write('route: ' + routeLabel(selection));
+        options.io.write('approval: ' + options.approvalProfile + ' — ' + approvalDescription(options.approvalProfile));
         options.io.write(lastRun === undefined
           ? 'last run: none'
           : 'last run: ' + lastRun.runId + ' (status=' + lastRun.status + ', outcome=' + lastRun.outcome + ')');
         options.io.write('conversation: prompts are independent; tool turns within each run are preserved');
+      } else if (command === '/permissions') {
+        options.io.write('approval: ' + options.approvalProfile + ' — ' + approvalDescription(options.approvalProfile));
+        options.io.write('Change it by restarting Forge with --approval-profile <developer|review|locked>.');
       } else if (command === '/model') {
         if (argumentsList.length === 0) {
           options.io.write('route: ' + routeLabel(selection));

@@ -136,6 +136,7 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
   const report = JSON.parse(doctor.stdout) as {
     readonly ok: boolean;
     readonly runtime: string;
+    readonly approval: { readonly profile: string; readonly source: string; readonly decisionAuthority: string };
     readonly kernel: {
       readonly ready: boolean;
       readonly source: string;
@@ -152,4 +153,41 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
   assert.equal(report.kernel.version, '0.1.0');
   assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v6');
   assert.equal(report.kernel.protocols.sovereignChange, 'forge.kernel.changeset.v3');
+  assert.deepEqual(report.approval, {
+    profile: 'developer',
+    source: 'default',
+    decisionAuthority: 'rust-kernel',
+    scope: 'registered capabilities; governed mutations retain exact-change approval',
+  });
+
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      resolve('node_modules/tsx/dist/cli.mjs'),
+      resolve('src/cli.ts'),
+      'inspect',
+      '--workspace',
+      fixtureRoot,
+      '--approval-profile',
+      'locked',
+      '--json',
+    ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment }),
+    (error: unknown) => {
+      const failure = error as { readonly code: number; readonly stdout: string };
+      assert.equal(failure.code, 1);
+      const denied = JSON.parse(failure.stdout) as {
+        readonly status: string;
+        readonly outcome: { readonly status: string };
+        readonly capability: { readonly success: boolean };
+        readonly events: ReadonlyArray<Record<string, unknown>>;
+      };
+      assert.equal(denied.status, 'completed');
+      assert.equal(denied.outcome.status, 'unmet');
+      assert.equal(denied.capability.success, false);
+      const approval = denied.events.find((event) => event.type === 'approval.decided');
+      assert.equal(approval?.outcome, 'deny');
+      const facts = approval?.facts as { readonly hostPolicy: { readonly source: string } };
+      assert.equal(facts.hostPolicy.source, 'forge.product.approval-profile.locked');
+      return true;
+    },
+  );
 });

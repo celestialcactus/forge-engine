@@ -16,6 +16,11 @@ import type {
 import { TypeScriptConformanceRuntime } from '../slice0/runtime.js';
 import { RustKernelRuntime, type ApprovalFactsProvider } from '../hybrid/rust-kernel-runtime.js';
 import {
+  createProductApprovalFactsProvider,
+  defaultProductApprovalConfiguration,
+  type ProductApprovalConfiguration,
+} from '../approval-profile.js';
+import {
   createGovernedChangeCapability,
   type GovernedChangeCapabilityOptions,
 } from '../governed-change.js';
@@ -47,89 +52,28 @@ class SingleCapabilityPlanner implements TaskPlanner {
   }
 }
 
-const nonMutatingApprovalFacts = (call: CapabilityCall) => ({
-  schemaVersion: 1 as const,
-  callId: call.id,
-  capabilityId: call.capabilityId,
-  hostPolicy: {
-    posture: 'allow' as const,
-    source: 'forge.v1.read-only-policy',
-    reason: 'Forge permits registered non-mutating workspace evidence and change planning.',
-  },
-  userConsent: {
-    status: 'notRequired' as const,
-    source: 'forge.v1.read-only-policy',
-    reason: 'Registered non-mutating capabilities do not require interactive consent.',
+/**
+ * Adapter for the test-only TypeScript conformance oracle. Product execution sends
+ * the facts directly to Rust, which remains the decision authority.
+ */
+const typeScriptConformanceApprovalPolicy = (provider: ApprovalFactsProvider): ApprovalPolicy => ({
+  async decide(call, context) {
+    const facts = await provider.collect(call, new AbortController().signal, context);
+    if (facts.hostPolicy.posture === 'deny') {
+      return { outcome: 'deny', reason: facts.hostPolicy.reason, facts };
+    }
+    if (facts.userConsent.status === 'declined') {
+      return { outcome: 'deny', reason: facts.userConsent.reason, facts };
+    }
+    if (facts.hostPolicy.posture === 'allow') {
+      return { outcome: 'allow', reason: facts.hostPolicy.reason, facts };
+    }
+    if (facts.userConsent.status === 'granted') {
+      return { outcome: 'allow', reason: facts.userConsent.reason, facts };
+    }
+    return { outcome: 'ask', reason: facts.hostPolicy.reason, facts };
   },
 });
-
-const nonMutatingPolicy: ApprovalPolicy = {
-  async decide(call) {
-    return {
-      outcome: 'allow',
-      reason: 'Forge permits registered non-mutating workspace evidence and change planning.',
-      facts: nonMutatingApprovalFacts(call),
-    };
-  },
-};
-
-const nonMutatingApprovalFactsProvider: ApprovalFactsProvider = {
-  async collect(call, signal) {
-    signal.throwIfAborted();
-    return nonMutatingApprovalFacts(call);
-  },
-};
-
-const guardedChangeApprovalFacts = (call: CapabilityCall) => call.capabilityId === 'workspace.change.execute'
-  ? {
-      schemaVersion: 1 as const,
-      callId: call.id,
-      capabilityId: call.capabilityId,
-      hostPolicy: {
-        posture: 'allow' as const,
-        source: 'forge.cli.guarded-change-entry',
-        reason: 'The CLI may enter the registered guarded change workflow; exact mutation and promotion require visible developer decisions.',
-      },
-      userConsent: {
-        status: 'notRequired' as const,
-        source: 'forge.cli.guarded-change-entry',
-        reason: 'Entry does not itself authorize a mutation; the digest-bound ChangeSet asks before candidate execution and promotion.',
-      },
-    }
-  : nonMutatingApprovalFacts(call);
-
-const guardedChangePolicy: ApprovalPolicy = {
-  async decide(call) {
-    return {
-      outcome: 'allow',
-      reason: guardedChangeApprovalFacts(call).hostPolicy.reason,
-      facts: guardedChangeApprovalFacts(call),
-    };
-  },
-};
-
-const guardedChangeApprovalFactsProvider: ApprovalFactsProvider = {
-  async collect(call, signal) {
-    signal.throwIfAborted();
-    return guardedChangeApprovalFacts(call);
-  },
-};
-
-interface RuntimeApprovalBoundary {
-  readonly policy: ApprovalPolicy;
-  readonly facts: ApprovalFactsProvider;
-}
-
-const nonMutatingApprovalBoundary: RuntimeApprovalBoundary = {
-  policy: nonMutatingPolicy,
-  facts: nonMutatingApprovalFactsProvider,
-};
-
-const guardedChangeApprovalBoundary: RuntimeApprovalBoundary = {
-  policy: guardedChangePolicy,
-  facts: guardedChangeApprovalFactsProvider,
-};
-
 export interface SearchWorkspaceOptions {
   readonly maxMatches?: number;
   readonly caseSensitive?: boolean;
@@ -168,6 +112,7 @@ export interface ExecuteTaskOptions {
   readonly maxTurns?: number;
   readonly executionBudget?: ExecutionBudget;
   readonly outcomeContract?: OutcomeContract;
+  readonly approval?: ProductApprovalConfiguration;
   readonly onEvent?: (event: RunEvent) => void;
 }
 
@@ -202,6 +147,7 @@ export interface ForgeWorkspaceServiceOptions {
   readonly snapshotObserver?: WorkspaceChangeObserver;
   readonly snapshotMaxReuseMs?: number;
   readonly runIdFactory?: () => string;
+  readonly approval?: ProductApprovalConfiguration;
   readonly runtime: ForgeWorkspaceRuntimeConfiguration;
 }
 
@@ -209,6 +155,7 @@ export class ForgeWorkspaceService {
   readonly #snapshots: WorkspaceSnapshotCache;
   readonly #runIdFactory: () => string;
   readonly #runtime: ForgeWorkspaceRuntimeConfiguration;
+  readonly #approvalFacts: ApprovalFactsProvider;
   readonly #evidenceCapabilities: ReadonlyMap<string, Capability>;
 
   constructor(
@@ -223,6 +170,7 @@ export class ForgeWorkspaceService {
     });
     this.#runIdFactory = options.runIdFactory ?? (() => `run:${randomUUID()}`);
     this.#runtime = runtime;
+    this.#approvalFacts = createProductApprovalFactsProvider(options.approval ?? defaultProductApprovalConfiguration);
     const capabilities = createDeveloperEvidenceCapabilities(workspaceRoot);
     this.#evidenceCapabilities = new Map(capabilities.map((capability) => [capability.id, capability]));
     if (this.#evidenceCapabilities.size !== capabilities.length) throw new Error('Developer evidence capability IDs must be unique.');
@@ -265,7 +213,6 @@ export class ForgeWorkspaceService {
       [...this.#evidenceCapabilities.values(), createGovernedChangeCapability(this.workspaceRoot, capabilityOptions)],
       options,
       signal,
-      guardedChangeApprovalBoundary,
     );
   }
 
@@ -337,7 +284,6 @@ export class ForgeWorkspaceService {
     capabilities: readonly Capability[],
     options: ExecuteTaskOptions,
     signal?: AbortSignal,
-    approvalBoundary: RuntimeApprovalBoundary = nonMutatingApprovalBoundary,
   ): Promise<RunArtifact> {
     if (task.trim().length === 0) throw new Error('A Forge task must not be empty.');
     const contextBudgetBytes = options.contextBudgetBytes ?? 65_536;
@@ -374,7 +320,9 @@ export class ForgeWorkspaceService {
       options.outcomeContract,
       signal,
       options.onEvent,
-      approvalBoundary,
+      options.approval === undefined
+        ? this.#approvalFacts
+        : createProductApprovalFactsProvider(options.approval),
     );
   }
 
@@ -402,6 +350,8 @@ export class ForgeWorkspaceService {
       defaultExecutionBudget,
       outcomeContract,
       signal,
+      undefined,
+      this.#approvalFacts,
     );
   }
 
@@ -415,7 +365,7 @@ export class ForgeWorkspaceService {
     outcomeContract?: OutcomeContract,
     signal?: AbortSignal,
     onEvent?: (event: RunEvent) => void,
-    approvalBoundary: RuntimeApprovalBoundary = nonMutatingApprovalBoundary,
+    approvalFacts?: ApprovalFactsProvider,
   ): Promise<RunArtifact> {
     signal?.throwIfAborted();
     const snapshot = await this.#workspaceSnapshot();
@@ -423,13 +373,13 @@ export class ForgeWorkspaceService {
     const runtime = this.#runtime.kind === 'typescript_conformance_fixture'
       ? new TypeScriptConformanceRuntime({
           planner,
-          approvalPolicy: approvalBoundary.policy,
+          approvalPolicy: typeScriptConformanceApprovalPolicy(approvalFacts ?? this.#approvalFacts),
           capabilities,
           ...(onEvent === undefined ? {} : { onEvent }),
         })
       : new RustKernelRuntime({
           planner,
-          approvalFacts: approvalBoundary.facts,
+          approvalFacts: approvalFacts ?? this.#approvalFacts,
           capabilities,
           ...(onEvent === undefined ? {} : { onEvent }),
           kernelPath: this.#runtime.kernel.binaryPath,

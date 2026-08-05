@@ -1,6 +1,6 @@
 # ADR-0027: Rust-owned execution budgets and reported-usage semantics
 
-- **Status:** Implemented locally; hosted acceptance pending
+- **Status:** Accepted and merged through PR #22 at `74308ca`
 - **Date:** 2026-08-05
 - **Scope:** CLI ship lane increment 5B, run protocol, inference accounting
 
