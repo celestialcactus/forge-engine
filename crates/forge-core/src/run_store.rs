@@ -161,21 +161,21 @@ impl RunLedger {
         if self.events.len() >= MAX_RUN_STORE_EVENTS {
             return Err("Run event ledger exceeds the configured event limit.".to_owned());
         }
-        let encoded = encode_json(event, "run event")?;
-        if encoded.len() > MAX_EVENT_BYTES {
+        let mut frame = encode_json(event, "run event")?;
+        if frame.len() > MAX_EVENT_BYTES {
             return Err("Run event exceeds the configured byte limit.".to_owned());
         }
+        frame.push(b'\n');
         let current_bytes = self
             .events_file
             .metadata()
             .map_err(|error| format!("Cannot inspect run event ledger: {error}"))?
             .len();
-        if current_bytes.saturating_add(encoded.len() as u64 + 1) > MAX_EVENTS_BYTES {
+        if current_bytes.saturating_add(frame.len() as u64) > MAX_EVENTS_BYTES {
             return Err("Run event ledger exceeds the configured byte limit.".to_owned());
         }
         self.events_file
-            .write_all(&encoded)
-            .and_then(|()| self.events_file.write_all(b"\n"))
+            .write_all(&frame)
             .and_then(|()| self.events_file.sync_all())
             .map_err(|error| format!("Cannot durably append run event: {error}"))?;
         self.events.push(event.clone());
@@ -537,10 +537,15 @@ fn read_bounded(path: &Path, maximum_bytes: u64, label: &str) -> Result<Vec<u8>,
     if metadata.len() > maximum_bytes {
         return Err(format!("The {label} exceeds the configured byte limit."));
     }
-    let mut file = File::open(path).map_err(|error| format!("Cannot open {label}: {error}"))?;
-    let mut bytes = Vec::with_capacity(metadata.len() as usize);
-    file.read_to_end(&mut bytes)
+    let file = File::open(path).map_err(|error| format!("Cannot open {label}: {error}"))?;
+    let capacity = usize::try_from(metadata.len().min(maximum_bytes)).unwrap_or(usize::MAX);
+    let mut bytes = Vec::with_capacity(capacity);
+    file.take(maximum_bytes.saturating_add(1))
+        .read_to_end(&mut bytes)
         .map_err(|error| format!("Cannot read {label}: {error}"))?;
+    if bytes.len() as u64 > maximum_bytes {
+        return Err(format!("The {label} exceeds the configured byte limit."));
+    }
     Ok(bytes)
 }
 
@@ -593,6 +598,7 @@ mod tests {
     use std::fs::OpenOptions;
     use std::io::Write;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, Barrier};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use crate::{
@@ -742,6 +748,128 @@ mod tests {
     }
 
     #[test]
+    fn blocks_a_request_only_crash_window_before_the_first_event() {
+        let root = temporary_root();
+        let request = request("run:request-only");
+        let ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        let request_sha256 = ledger.request_sha256().to_owned();
+        drop(ledger);
+
+        let inspection = inspect_run(&root, &request.run_id).expect("inspect");
+        assert_eq!(inspection.state, RunRecordState::OpenOrInterrupted);
+        assert_eq!(
+            inspection.resume_disposition,
+            RunResumeDisposition::BlockedIncomplete
+        );
+        assert_eq!(inspection.event_count, 0);
+        assert_eq!(inspection.last_sequence, None);
+        assert_eq!(
+            inspection.request_sha256.as_deref(),
+            Some(request_sha256.as_str())
+        );
+        assert!(inspection.artifact.is_none());
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn treats_a_synced_temporary_artifact_without_publication_as_incomplete() {
+        let root = temporary_root();
+        let request = request("run:temporary-artifact");
+        let artifact = terminal_artifact(&request);
+        let mut ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        for event in &artifact.events {
+            ledger.append_event(event).expect("append");
+        }
+        let directory = ledger.directory.clone();
+        drop(ledger);
+        let artifact_bytes = encode_json(&artifact, "terminal run artifact").expect("encode");
+        write_new_synced(&directory.join("artifact.json.tmp"), &artifact_bytes)
+            .expect("temporary artifact");
+        sync_directory(&directory).expect("directory sync");
+
+        let inspection = inspect_run(&root, &request.run_id).expect("inspect");
+        assert_eq!(inspection.state, RunRecordState::OpenOrInterrupted);
+        assert_eq!(
+            inspection.resume_disposition,
+            RunResumeDisposition::BlockedIncomplete
+        );
+        assert_eq!(inspection.event_count, artifact.events.len() as u32);
+        assert_eq!(
+            inspection.last_sequence,
+            artifact.events.last().map(|event| event.sequence)
+        );
+        assert!(inspection.artifact.is_none());
+        assert!(directory.join("artifact.json.tmp").is_file());
+        assert!(!directory.join("artifact.json").exists());
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn allows_exactly_one_concurrent_creator_for_a_run_identity() {
+        let root = Arc::new(temporary_root());
+        let request = Arc::new(request("run:concurrent-duplicate"));
+        let barrier = Arc::new(Barrier::new(3));
+        let mut workers = Vec::new();
+        for _ in 0..2 {
+            let root = Arc::clone(&root);
+            let request = Arc::clone(&request);
+            let barrier = Arc::clone(&barrier);
+            workers.push(std::thread::spawn(move || {
+                barrier.wait();
+                RunLedger::create(root.as_path(), "test", request.as_ref(), &[])
+            }));
+        }
+        barrier.wait();
+        let outcomes: Vec<_> = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("worker"))
+            .collect();
+        assert_eq!(outcomes.iter().filter(|outcome| outcome.is_ok()).count(), 1);
+        let failure = outcomes
+            .iter()
+            .find_map(|outcome| outcome.as_ref().err())
+            .expect("one creator must lose");
+        assert!(failure.contains("cannot be executed again"));
+        drop(outcomes);
+
+        let inspection = inspect_run(root.as_path(), &request.run_id).expect("inspect");
+        assert_eq!(inspection.state, RunRecordState::OpenOrInterrupted);
+        assert_eq!(
+            inspection.resume_disposition,
+            RunResumeDisposition::BlockedIncomplete
+        );
+        fs::remove_dir_all(root.as_path()).expect("cleanup");
+    }
+
+    #[test]
+    fn classifies_request_content_tampering_as_repair_required() {
+        let root = temporary_root();
+        let request = request("run:request-tampering");
+        let ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        let request_path = ledger.directory.join("request.json");
+        drop(ledger);
+        let mut record: RunLedgerRequest =
+            serde_json::from_slice(&fs::read(&request_path).expect("read request"))
+                .expect("decode");
+        record.request.task = "tampered task".to_owned();
+        fs::write(
+            &request_path,
+            serde_json::to_vec(&record).expect("encode tampered request"),
+        )
+        .expect("write tampered request");
+
+        let inspection = inspect_run(&root, &request.run_id).expect("inspect");
+        assert_eq!(inspection.state, RunRecordState::RepairRequired);
+        assert_eq!(
+            inspection.resume_disposition,
+            RunResumeDisposition::RepairRequired
+        );
+        assert!(inspection.reason.contains("digest does not match"));
+        assert!(inspection.artifact.is_none());
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
     fn refuses_to_reopen_an_existing_run_identity() {
         let root = temporary_root();
         let request = request("run:duplicate");
@@ -864,6 +992,31 @@ mod tests {
                 .bytes()
                 .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
         }));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn classifies_reordered_event_frames_as_repair_required() {
+        let root = temporary_root();
+        let request = request("run:reordered-events");
+        let artifact = terminal_artifact(&request);
+        let ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        let directory = ledger.directory.clone();
+        drop(ledger);
+        let mut events = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(directory.join("events.jsonl"))
+            .expect("events");
+        for event in [&artifact.events[1], &artifact.events[0]] {
+            serde_json::to_writer(&mut events, event).expect("encode");
+            events.write_all(b"\n").expect("newline");
+        }
+        events.sync_all().expect("sync");
+
+        let inspection = inspect_run(&root, &request.run_id).expect("inspect");
+        assert_eq!(inspection.state, RunRecordState::RepairRequired);
+        assert!(inspection.reason.contains("sequence is invalid at event 1"));
         fs::remove_dir_all(root).expect("cleanup");
     }
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -118,7 +118,7 @@ test('terminal host result follows a validated durable artifact seal', async () 
     child.once('exit', resolveExit);
   });
   const timeout = setTimeout(() => child.kill(), 10_000);
-  child.stdin.write(JSON.stringify({
+  const startFrame = {
     type: 'run.start',
     protocolVersion: 'forge.kernel.bridge.v7',
     requestId,
@@ -137,7 +137,8 @@ test('terminal host result follows a validated durable artifact seal', async () 
     },
     capabilityIds: [],
     runStoreRoot,
-  }) + '\n');
+  } as const;
+  child.stdin.write(JSON.stringify(startFrame) + '\n');
 
   try {
     for await (const line of lines) {
@@ -166,6 +167,18 @@ test('terminal host result follows a validated durable artifact seal', async () 
     assert.equal(await exit, 0);
     assert.ok(terminalFrame, 'kernel must return a terminal frame');
     assert.equal(stderr, '');
+
+    const duplicate = spawnSync(kernelBinary, [], {
+      cwd: process.cwd(),
+      env: process.env,
+      input: JSON.stringify(startFrame) + '\n',
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    assert.equal(duplicate.status, 3);
+    assert.equal(duplicate.stdout, '');
+    assert.match(duplicate.stderr, /already has a durable ledger and cannot be executed again/u);
+    assert.doesNotMatch(duplicate.stdout, /planner\.next|run\.event|run\.result/u);
   } finally {
     clearTimeout(timeout);
     lines.close();

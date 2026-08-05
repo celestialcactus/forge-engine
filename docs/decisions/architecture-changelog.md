@@ -1,3 +1,22 @@
+# 2026-08-05 - Run-recovery validation sufficiency audit
+
+- Audited every CLI ship-lane 6A acceptance claim against executable evidence and
+  added direct regressions for the request-only crash window, unpublished
+  temporary artifact, concurrent duplicate creation, request tampering, literal
+  event reordering, and end-to-end duplicate `run.start` rejection.
+- Hardened bounded ledger reads against concurrent file growth and writes each
+  JSONL event frame through one buffer before synchronization.
+- Replaced a flaky fixed-delay Windows process-ownership fixture with explicit
+  readiness-based cancellation; it passed three repeated stress runs and the full
+  workspace gate.
+- Current local validation passes 91/91 Node tests, Rust format and zero-warning
+  Clippy, the full Rust workspace, 14/14 focused run-store cases, 2/2 live bridge
+  cases, and 56/56 exact-kernel hybrid product tests with zero skips.
+- This is sufficient for local 6A acceptance, not hosted cross-platform
+  acceptance. Hosted Windows/macOS/Ubuntu remains pending, and 6B continuation is
+  still deliberately unimplemented.
+- See [Checkpoint 75](checkpoints/2026-08-05-75-run-recovery-validation-audit.md)
+  and [CLI ship lane 6](../tasks/SLICE-CLI6-run-recovery.md).
 # 2026-08-05 - Durable outer-run ledger passes the controlled VS Code gate
 
 - Validated exact implementation `88501dc` in a newly trusted VS Code worktree.
