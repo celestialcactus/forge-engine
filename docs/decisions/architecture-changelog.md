@@ -1,3 +1,20 @@
+# 2026-08-05 - Durable outer-run ledger passes the controlled VS Code gate
+
+- Validated exact implementation `88501dc` in a newly trusted VS Code worktree.
+  The workspace MCP server reached `Running`, discovered exactly seven tools, and
+  exactly those seven were selected.
+- One fresh Agent chat made one `Forge Workspace Summary` call in three seconds,
+  used no built-in or mutation tool, and returned the complete seven-event
+  projection for run `run:586c51b7-aaa8-4a13-a130-39df602110df`.
+- A separate CLI process then inspected the default durable store and returned the
+  same run as `terminal` / `return_terminal_artifact`, with seven events and
+  terminal status `completed`, without re-executing planner, provider, approval,
+  or capability work.
+- Hosted Windows/macOS Node and Windows/macOS/Ubuntu hybrid gates remain pending
+  because the feature branch is not yet published. Increment 6B remains blocked
+  behind that acceptance gate.
+- See [Checkpoint 74](checkpoints/2026-08-05-74-durable-run-ledger-vscode-gate.md)
+  and [CLI ship lane 6](../tasks/SLICE-CLI6-run-recovery.md).
 # 2026-08-05 - Durable outer-run ledger reaches the local gate
 
 - Implemented [ADR-0029](ADRs/ADR-0029-append-before-notify-run-ledger.md):

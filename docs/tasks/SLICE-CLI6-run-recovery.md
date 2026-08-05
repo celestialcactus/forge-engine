@@ -1,6 +1,6 @@
 # CLI ship lane 6: outer-run recovery
 
-**Status:** 6A local gate passed; hosted/controlled VS Code pending; 6B not started
+**Status:** 6A local and controlled VS Code gates passed; hosted pending; 6B not started
 **Branch:** `feature/cli-run-recovery`
 **Base:** merged `develop` at `e09826a` (PR #23)
 
@@ -67,7 +67,7 @@ one of:
 - [x] incomplete inspection explicitly blocks automatic continuation;
 - [x] CLI `forge runs inspect <run-id>` and `doctor` expose the effective store;
 - [ ] local, hosted Windows/macOS/Ubuntu, and controlled VS Code gates pass.
-      Local Windows is green; hosted and controlled VS Code remain pending.
+      Local Windows and controlled VS Code are green; hosted remains pending.
 
 Local evidence is recorded in
 [Checkpoint 73](../decisions/checkpoints/2026-08-05-73-durable-run-ledger-local-gate.md):
@@ -75,6 +75,12 @@ Local evidence is recorded in
 56/56 retained-kernel hybrid tests, nine adversarial store regressions, and live
 append-before-notify/seal-before-result ordering tests pass. The full hybrid gate
 caught and drove a correction to partial token-usage validation before checkpoint.
+
+[Checkpoint 74](../decisions/checkpoints/2026-08-05-74-durable-run-ledger-vscode-gate.md)
+records the controlled host proof at exact implementation `88501dc`: VS Code
+discovered and selected exactly seven Forge tools, one fresh chat made one summary
+call in three seconds, and a separate CLI process returned that exact run as a
+validated seven-event terminal artifact without executing work.
 
 ## Increment 6B: safe continuation transcript
 
