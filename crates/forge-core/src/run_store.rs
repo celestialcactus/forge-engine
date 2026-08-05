@@ -1,8 +1,20 @@
+mod continuation;
+
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+pub use continuation::{
+    CapabilityDescriptor, CapabilityReplaySafety, InteractionReplaySafety, RecordedRunInteraction,
+    RunContinuationDisposition, RunContinuationInspection, RunContinuationReplay,
+    RunInteractionKind,
+};
+use continuation::{
+    ContinuationWriter, build_replay, create_continuation, normalize_capability_descriptors,
+    project_continuation, read_continuation, resume_continuation,
+};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{OutcomeStatus, RunArtifact, RunEvent, RunEventData, RunRequest, RunStatus};
 
@@ -35,6 +47,8 @@ pub enum RunRecordState {
 #[serde(rename_all = "snake_case")]
 pub enum RunResumeDisposition {
     ReturnTerminalArtifact,
+    ResumeAvailable,
+    RetryAuthorizationRequired,
     BlockedIncomplete,
     RepairRequired,
 }
@@ -53,6 +67,8 @@ pub struct RunStoreInspection {
     pub request_sha256: Option<String>,
     pub reason: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub continuation: Option<RunContinuationInspection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub artifact: Option<RunArtifact>,
 }
 
@@ -63,10 +79,59 @@ struct RunLedgerSubject<'a> {
     capability_ids: &'a [String],
 }
 
+pub struct RunExecutionLock {
+    file: File,
+}
+
+impl RunExecutionLock {
+    pub fn acquire(root: &Path, run_id: &str) -> Result<Self, String> {
+        validate_root(root)?;
+        validate_run_id(run_id)?;
+        fs::create_dir_all(root)
+            .map_err(|error| format!("Cannot create run store root for execution lock: {error}"))?;
+        let canonical_root = root
+            .canonicalize()
+            .map_err(|error| format!("Cannot canonicalize run store root: {error}"))?;
+        let directory = run_directory(&canonical_root, run_id);
+        fs::create_dir_all(&directory)
+            .map_err(|error| format!("Cannot create run execution directory: {error}"))?;
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(directory.join("execution.lock"))
+            .map_err(|error| format!("Cannot open run execution lock: {error}"))?;
+        file.try_lock().map_err(|error| {
+            format!("Run {run_id} already has a live execution or resume owner: {error}")
+        })?;
+        Ok(Self { file })
+    }
+}
+
+impl Drop for RunExecutionLock {
+    fn drop(&mut self) {
+        let _ = self.file.unlock();
+    }
+}
+
+pub enum RunResumeOpen {
+    Terminal {
+        request: RunRequest,
+        artifact: RunArtifact,
+        recovered_temporary_artifact: bool,
+    },
+    Continue {
+        ledger: RunLedger,
+        replay: RunContinuationReplay,
+    },
+}
+
 pub struct RunLedger {
     directory: PathBuf,
     request: RunRequest,
     request_sha256: String,
+    continuation: ContinuationWriter,
     events_file: File,
     events: Vec<RunEvent>,
     sealed: bool,
@@ -77,22 +142,19 @@ impl RunLedger {
         root: &Path,
         bridge_protocol_version: &str,
         request: &RunRequest,
-        capability_ids: &[String],
+        capability_descriptors: &[CapabilityDescriptor],
     ) -> Result<Self, String> {
         validate_root(root)?;
         validate_run_id(&request.run_id)?;
         if bridge_protocol_version.trim().is_empty() {
             return Err("Run ledger bridge protocol version must not be empty.".to_owned());
         }
-        let mut normalized_capability_ids = capability_ids.to_vec();
-        normalized_capability_ids.sort();
-        normalized_capability_ids.dedup();
-        if normalized_capability_ids
+        let normalized_capability_descriptors =
+            normalize_capability_descriptors(capability_descriptors)?;
+        let normalized_capability_ids = normalized_capability_descriptors
             .iter()
-            .any(|id| id.trim().is_empty())
-        {
-            return Err("Run ledger capability IDs must not be empty.".to_owned());
-        }
+            .map(|descriptor| descriptor.id.clone())
+            .collect::<Vec<_>>();
         fs::create_dir_all(root)
             .map_err(|error| format!("Cannot create run store root: {error}"))?;
         let canonical_root = root
@@ -124,6 +186,12 @@ impl RunLedger {
                 format!("Cannot persist run ledger request: {error}")
             }
         })?;
+        let continuation = create_continuation(
+            &directory,
+            &request.run_id,
+            bridge_protocol_version,
+            &normalized_capability_descriptors,
+        )?;
         let events_file = OpenOptions::new()
             .create_new(true)
             .append(true)
@@ -138,10 +206,129 @@ impl RunLedger {
             directory,
             request: request.clone(),
             request_sha256,
+            continuation,
             events_file,
             events: Vec::new(),
             sealed: false,
         })
+    }
+
+    pub fn open_for_resume(
+        root: &Path,
+        run_id: &str,
+        bridge_protocol_version: &str,
+    ) -> Result<RunResumeOpen, String> {
+        validate_root(root)?;
+        validate_run_id(run_id)?;
+        if !root.exists() {
+            return Err(format!("Run store root does not exist: {}", root.display()));
+        }
+        let canonical_root = root
+            .canonicalize()
+            .map_err(|error| format!("Cannot canonicalize run store root: {error}"))?;
+        let directory = run_directory(&canonical_root, run_id);
+        if !directory.is_dir() {
+            return Err(format!("Run ledger was not found: {run_id}"));
+        }
+        let record: RunLedgerRequest = read_bounded_json(
+            &directory.join("request.json"),
+            MAX_REQUEST_BYTES,
+            "run ledger request",
+        )?;
+        validate_request_record(&record, run_id)?;
+        if record.bridge_protocol_version != bridge_protocol_version {
+            return Err(format!(
+                "Run {run_id} uses bridge protocol {} and cannot resume under {bridge_protocol_version}.",
+                record.bridge_protocol_version
+            ));
+        }
+        let events = read_events(&directory.join("events.jsonl"), run_id)?;
+        let validated = read_continuation(&directory, &record)?;
+        let artifact_path = directory.join("artifact.json");
+        let temporary_artifact_path = directory.join("artifact.json.tmp");
+        if artifact_path.exists() || temporary_artifact_path.exists() {
+            let recovered_temporary_artifact = !artifact_path.exists();
+            let source = if recovered_temporary_artifact {
+                &temporary_artifact_path
+            } else {
+                &artifact_path
+            };
+            let artifact: RunArtifact =
+                read_bounded_json(source, MAX_ARTIFACT_BYTES, "terminal run artifact")?;
+            validate_terminal_artifact(&record.request, &events, &artifact)?;
+            if recovered_temporary_artifact {
+                fs::rename(&temporary_artifact_path, &artifact_path).map_err(|error| {
+                    format!("Cannot publish validated temporary run artifact: {error}")
+                })?;
+                sync_directory(&directory)?;
+            }
+            return Ok(RunResumeOpen::Terminal {
+                request: record.request,
+                artifact,
+                recovered_temporary_artifact,
+            });
+        }
+        let validated = validated.ok_or_else(|| {
+            "Run predates the continuation transcript and cannot be resumed safely.".to_owned()
+        })?;
+        let replay = build_replay(&validated);
+        let continuation = resume_continuation(&directory, &validated)?;
+        let events_file = OpenOptions::new()
+            .append(true)
+            .open(directory.join("events.jsonl"))
+            .map_err(|error| format!("Cannot reopen run event ledger: {error}"))?;
+        Ok(RunResumeOpen::Continue {
+            ledger: Self {
+                directory,
+                request: record.request,
+                request_sha256: record.request_sha256,
+                continuation,
+                events_file,
+                events,
+                sealed: false,
+            },
+            replay,
+        })
+    }
+    pub fn record_interaction_intent(
+        &mut self,
+        interaction_id: &str,
+        kind: RunInteractionKind,
+        replay_safety: InteractionReplaySafety,
+        payload: Value,
+    ) -> Result<(), String> {
+        if self.sealed {
+            return Err("A sealed run ledger cannot accept interaction intents.".to_owned());
+        }
+        self.continuation
+            .record_intent(interaction_id, kind, replay_safety, payload)
+    }
+
+    pub fn record_interaction_retry_intent(
+        &mut self,
+        interaction_id: &str,
+        kind: RunInteractionKind,
+        replay_safety: InteractionReplaySafety,
+        payload: Value,
+    ) -> Result<(), String> {
+        if self.sealed {
+            return Err("A sealed run ledger cannot accept interaction retries.".to_owned());
+        }
+        self.continuation
+            .record_retry_intent(interaction_id, kind, replay_safety, payload)
+    }
+
+    pub fn record_interaction_completion(
+        &mut self,
+        interaction_id: &str,
+        kind: RunInteractionKind,
+        payload: Value,
+    ) -> Result<(), String> {
+        if self.sealed {
+            return Err("A sealed run ledger cannot accept interaction completions.".to_owned());
+        }
+        self.continuation
+            .record_completion(interaction_id, kind, payload)
     }
 
     pub fn append_event(&mut self, event: &RunEvent) -> Result<(), String> {
@@ -204,6 +391,14 @@ impl RunLedger {
     pub fn request_sha256(&self) -> &str {
         &self.request_sha256
     }
+
+    pub fn request(&self) -> &RunRequest {
+        &self.request
+    }
+
+    pub fn durable_events(&self) -> &[RunEvent] {
+        &self.events
+    }
 }
 
 pub fn inspect_run(root: &Path, run_id: &str) -> Result<RunStoreInspection, String> {
@@ -244,19 +439,64 @@ pub fn inspect_run(root: &Path, run_id: &str) -> Result<RunStoreInspection, Stri
             ));
         }
     };
+    let continuation = match read_continuation(&directory, &request) {
+        Ok(continuation) => continuation,
+        Err(reason) => {
+            return Ok(repair_required(
+                run_id,
+                events.len() as u32,
+                events.last().map(|event| event.sequence),
+                Some(request.request_sha256),
+                reason,
+            ));
+        }
+    };
     let event_count = events.len() as u32;
     let last_sequence = events.last().map(|event| event.sequence);
     let artifact_path = directory.join("artifact.json");
     if !artifact_path.exists() {
+        let continuation = project_continuation(continuation, false);
+        let temporary_artifact_exists = directory.join("artifact.json.tmp").exists();
+        let (resume_disposition, reason) = if temporary_artifact_exists {
+            (
+                RunResumeDisposition::BlockedIncomplete,
+                "An unpublished temporary artifact exists; continuation is blocked pending explicit recovery."
+                    .to_owned(),
+            )
+        } else {
+            match continuation.as_ref().map(|item| &item.disposition) {
+            Some(RunContinuationDisposition::SafeBoundary) => (
+                RunResumeDisposition::ResumeAvailable,
+                "The durable interaction boundary is complete and can resume through deterministic same-runtime replay."
+                    .to_owned(),
+            ),
+            Some(RunContinuationDisposition::RetryableCapability) => (
+                RunResumeDisposition::RetryAuthorizationRequired,
+                "The unresolved capability is explicitly read-only; continuation requires deliberate retry authorization."
+                    .to_owned(),
+            ),
+            Some(_) => (
+                RunResumeDisposition::BlockedIncomplete,
+                "The continuation frontier is ambiguous or unsafe and cannot resume automatically."
+                    .to_owned(),
+            ),
+                None => (
+                    RunResumeDisposition::BlockedIncomplete,
+                    "The run predates the continuation transcript and cannot resume safely."
+                        .to_owned(),
+                ),
+            }
+        };
         return Ok(RunStoreInspection {
             schema_version: RUN_STORE_SCHEMA_VERSION,
             run_id: run_id.to_owned(),
             state: RunRecordState::OpenOrInterrupted,
-            resume_disposition: RunResumeDisposition::BlockedIncomplete,
+            resume_disposition,
             event_count,
             last_sequence,
             request_sha256: Some(request.request_sha256),
-            reason: "The run has durable request/event evidence but no terminal artifact. Automatic continuation is blocked until an exact continuation boundary is proven.".to_owned(),
+            reason,
+            continuation,
             artifact: None,
         });
     }
@@ -290,7 +530,8 @@ pub fn inspect_run(root: &Path, run_id: &str) -> Result<RunStoreInspection, Stri
         event_count,
         last_sequence,
         request_sha256: Some(request.request_sha256),
-        reason: "The durable terminal artifact passed request and event-ledger validation; callers may return it without replaying the run.".to_owned(),
+        reason: "The durable terminal artifact passed request, event-ledger, and continuation validation; callers may return it without replaying the run.".to_owned(),
+        continuation: project_continuation(continuation, true),
         artifact: Some(artifact),
     })
 }
@@ -589,6 +830,7 @@ fn repair_required(
         last_sequence,
         request_sha256,
         reason,
+        continuation: None,
         artifact: None,
     }
 }
@@ -700,6 +942,13 @@ mod tests {
         .run(request.clone())
     }
 
+    fn open_continuation(root: &Path, request: &RunRequest) -> (RunLedger, RunContinuationReplay) {
+        match RunLedger::open_for_resume(root, &request.run_id, "test").expect("resume open") {
+            RunResumeOpen::Continue { ledger, replay } => (ledger, replay),
+            RunResumeOpen::Terminal { .. } => panic!("expected an open continuation"),
+        }
+    }
+
     #[test]
     fn returns_a_valid_terminal_artifact_without_replay() {
         let root = temporary_root();
@@ -709,7 +958,10 @@ mod tests {
             &root,
             "forge.kernel.bridge.test",
             &request,
-            &["workspace.read".to_owned()],
+            &[CapabilityDescriptor {
+                id: "workspace.read".to_owned(),
+                replay_safety: CapabilityReplaySafety::ReadOnlyRetryable,
+            }],
         )
         .expect("ledger");
         for event in &artifact.events {
@@ -740,7 +992,7 @@ mod tests {
         assert_eq!(inspection.state, RunRecordState::OpenOrInterrupted);
         assert_eq!(
             inspection.resume_disposition,
-            RunResumeDisposition::BlockedIncomplete
+            RunResumeDisposition::ResumeAvailable
         );
         assert_eq!(inspection.event_count, 1);
         assert!(inspection.artifact.is_none());
@@ -759,7 +1011,7 @@ mod tests {
         assert_eq!(inspection.state, RunRecordState::OpenOrInterrupted);
         assert_eq!(
             inspection.resume_disposition,
-            RunResumeDisposition::BlockedIncomplete
+            RunResumeDisposition::ResumeAvailable
         );
         assert_eq!(inspection.event_count, 0);
         assert_eq!(inspection.last_sequence, None);
@@ -801,6 +1053,28 @@ mod tests {
         assert!(inspection.artifact.is_none());
         assert!(directory.join("artifact.json.tmp").is_file());
         assert!(!directory.join("artifact.json").exists());
+
+        match RunLedger::open_for_resume(&root, &request.run_id, "test")
+            .expect("explicit terminal recovery")
+        {
+            RunResumeOpen::Terminal {
+                artifact: recovered,
+                recovered_temporary_artifact,
+                ..
+            } => {
+                assert!(recovered_temporary_artifact);
+                assert_eq!(recovered, artifact);
+            }
+            RunResumeOpen::Continue { .. } => panic!("temporary terminal artifact must not replay"),
+        }
+        assert!(!directory.join("artifact.json.tmp").exists());
+        assert!(directory.join("artifact.json").is_file());
+        assert_eq!(
+            inspect_run(&root, &request.run_id)
+                .expect("terminal inspect")
+                .state,
+            RunRecordState::Terminal
+        );
         fs::remove_dir_all(root).expect("cleanup");
     }
 
@@ -836,7 +1110,7 @@ mod tests {
         assert_eq!(inspection.state, RunRecordState::OpenOrInterrupted);
         assert_eq!(
             inspection.resume_disposition,
-            RunResumeDisposition::BlockedIncomplete
+            RunResumeDisposition::ResumeAvailable
         );
         fs::remove_dir_all(root.as_path()).expect("cleanup");
     }
@@ -1067,6 +1341,453 @@ mod tests {
         let inspection = inspect_run(&root, &request.run_id).expect("inspect");
         assert_eq!(inspection.state, RunRecordState::RepairRequired);
         assert!(inspection.reason.contains("final durable event"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn classifies_each_unresolved_interaction_by_explicit_replay_safety() {
+        let cases = [
+            (
+                "planner",
+                RunInteractionKind::Planner,
+                InteractionReplaySafety::NeverRetry,
+                RunContinuationDisposition::BlockedAmbiguousPlanner,
+                Vec::new(),
+            ),
+            (
+                "approval",
+                RunInteractionKind::Approval,
+                InteractionReplaySafety::NeverRetry,
+                RunContinuationDisposition::BlockedAmbiguousApproval,
+                Vec::new(),
+            ),
+            (
+                "read",
+                RunInteractionKind::Capability,
+                InteractionReplaySafety::ReadOnlyRetryable,
+                RunContinuationDisposition::RetryableCapability,
+                vec![CapabilityDescriptor {
+                    id: "workspace.read".to_owned(),
+                    replay_safety: CapabilityReplaySafety::ReadOnlyRetryable,
+                }],
+            ),
+            (
+                "change",
+                RunInteractionKind::Capability,
+                InteractionReplaySafety::NonIdempotent,
+                RunContinuationDisposition::BlockedNonIdempotent,
+                vec![CapabilityDescriptor {
+                    id: "workspace.change.execute".to_owned(),
+                    replay_safety: CapabilityReplaySafety::NonIdempotent,
+                }],
+            ),
+        ];
+
+        for (name, kind, safety, expected, descriptors) in cases {
+            let root = temporary_root();
+            let request = request(&format!("run:pending-{name}"));
+            let mut ledger =
+                RunLedger::create(&root, "test", &request, &descriptors).expect("ledger");
+            ledger
+                .record_interaction_intent(
+                    &format!("{name}:1"),
+                    kind.clone(),
+                    safety.clone(),
+                    serde_json::json!({ "request": name }),
+                )
+                .expect("intent");
+            drop(ledger);
+
+            let continuation = inspect_run(&root, &request.run_id)
+                .expect("inspect")
+                .continuation
+                .expect("continuation");
+            assert_eq!(continuation.disposition, expected, "case {name}");
+            assert_eq!(continuation.pending_kind, Some(kind), "case {name}");
+            assert_eq!(
+                continuation.pending_replay_safety,
+                Some(safety),
+                "case {name}"
+            );
+            fs::remove_dir_all(root).expect("cleanup");
+        }
+    }
+
+    #[test]
+    fn requires_a_provider_checkpoint_at_a_completed_planner_boundary() {
+        for (name, checkpoint, expected) in [
+            (
+                "missing",
+                None,
+                RunContinuationDisposition::BlockedPlannerCheckpointUnavailable,
+            ),
+            (
+                "present",
+                Some(serde_json::json!({
+                    "schemaVersion": 1,
+                    "plannerId": "provider:ollama:fixture",
+                    "state": { "messages": [] }
+                })),
+                RunContinuationDisposition::SafeBoundary,
+            ),
+        ] {
+            let root = temporary_root();
+            let request = request(&format!("run:planner-boundary-{name}"));
+            let mut ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+            ledger
+                .record_interaction_intent(
+                    "planner:1",
+                    RunInteractionKind::Planner,
+                    InteractionReplaySafety::NeverRetry,
+                    serde_json::json!({ "request": { "turn": 1 } }),
+                )
+                .expect("intent");
+            let mut completion = serde_json::json!({
+                "type": "planner.turn",
+                "protocolVersion": "test",
+                "requestId": "bridge:test",
+                "turn": { "kind": "complete", "output": "done" }
+            });
+            if let Some(checkpoint) = checkpoint {
+                completion
+                    .as_object_mut()
+                    .expect("object")
+                    .insert("plannerCheckpoint".to_owned(), checkpoint);
+            }
+            ledger
+                .record_interaction_completion("planner:1", RunInteractionKind::Planner, completion)
+                .expect("completion");
+            drop(ledger);
+
+            let continuation = inspect_run(&root, &request.run_id)
+                .expect("inspect")
+                .continuation
+                .expect("continuation");
+            assert_eq!(continuation.disposition, expected, "case {name}");
+            assert_eq!(continuation.interaction_frame_count, 2);
+            assert_eq!(continuation.completed_interaction_count, 1);
+            fs::remove_dir_all(root).expect("cleanup");
+        }
+    }
+
+    #[test]
+    fn rejects_overlapping_or_mismatched_interaction_transitions() {
+        let root = temporary_root();
+        let request = request("run:interaction-transitions");
+        let mut ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        ledger
+            .record_interaction_intent(
+                "planner:1",
+                RunInteractionKind::Planner,
+                InteractionReplaySafety::NeverRetry,
+                serde_json::json!({ "request": { "turn": 1 } }),
+            )
+            .expect("intent");
+        assert!(
+            ledger
+                .record_interaction_intent(
+                    "planner:2",
+                    RunInteractionKind::Planner,
+                    InteractionReplaySafety::NeverRetry,
+                    serde_json::json!({ "request": { "turn": 2 } }),
+                )
+                .expect_err("overlap must fail")
+                .contains("second interaction")
+        );
+        assert!(
+            ledger
+                .record_interaction_completion(
+                    "approval:wrong",
+                    RunInteractionKind::Approval,
+                    serde_json::json!({ "type": "approval.facts" }),
+                )
+                .expect_err("mismatch must fail")
+                .contains("does not match")
+        );
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn classifies_tampered_or_partial_interaction_ledgers_as_repair_required() {
+        for (name, partial) in [("tampered", false), ("partial", true)] {
+            let root = temporary_root();
+            let request = request(&format!("run:interaction-{name}"));
+            let mut ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+            ledger
+                .record_interaction_intent(
+                    "planner:1",
+                    RunInteractionKind::Planner,
+                    InteractionReplaySafety::NeverRetry,
+                    serde_json::json!({ "request": "original" }),
+                )
+                .expect("intent");
+            let directory = ledger.directory.clone();
+            drop(ledger);
+            let path = directory.join("interactions.jsonl");
+            if partial {
+                let mut interactions = OpenOptions::new().append(true).open(&path).expect("open");
+                interactions
+                    .write_all(b"{\"partial\":true}")
+                    .expect("append");
+                interactions.sync_all().expect("sync");
+            } else {
+                let encoded = fs::read_to_string(&path).expect("read");
+                let tampered = encoded.replace("original", "modified");
+                assert_ne!(encoded, tampered);
+                fs::write(&path, tampered).expect("tamper");
+            }
+
+            let inspection = inspect_run(&root, &request.run_id).expect("inspect");
+            assert_eq!(
+                inspection.state,
+                RunRecordState::RepairRequired,
+                "case {name}"
+            );
+            assert_eq!(
+                inspection.resume_disposition,
+                RunResumeDisposition::RepairRequired
+            );
+            assert!(inspection.continuation.is_none());
+            fs::remove_dir_all(root).expect("cleanup");
+        }
+    }
+
+    #[test]
+    fn detects_replay_safety_manifest_tampering() {
+        let root = temporary_root();
+        let request = request("run:continuation-manifest-tamper");
+        let ledger = RunLedger::create(
+            &root,
+            "test",
+            &request,
+            &[CapabilityDescriptor {
+                id: "workspace.read".to_owned(),
+                replay_safety: CapabilityReplaySafety::ReadOnlyRetryable,
+            }],
+        )
+        .expect("ledger");
+        let path = ledger.directory.join("continuation.json");
+        drop(ledger);
+        let encoded = fs::read_to_string(&path).expect("read");
+        let tampered = encoded.replace("read_only_retryable", "non_idempotent");
+        assert_ne!(encoded, tampered);
+        fs::write(path, tampered).expect("tamper");
+
+        let inspection = inspect_run(&root, &request.run_id).expect("inspect");
+        assert_eq!(inspection.state, RunRecordState::RepairRequired);
+        assert!(inspection.reason.contains("digest does not match"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn serializes_live_execution_ownership_with_an_os_released_lock() {
+        let root = temporary_root();
+        let first = RunExecutionLock::acquire(&root, "run:locked").expect("first lock");
+        let error = RunExecutionLock::acquire(&root, "run:locked")
+            .err()
+            .expect("second owner must fail");
+        assert!(error.contains("live execution or resume owner"));
+        drop(first);
+        let reacquired = RunExecutionLock::acquire(&root, "run:locked").expect("reacquire");
+        drop(reacquired);
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn reopens_a_safe_boundary_with_exact_recorded_completions() {
+        let root = temporary_root();
+        let request = request("run:replay-boundary");
+        let mut ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        ledger
+            .record_interaction_intent(
+                "planner:1",
+                RunInteractionKind::Planner,
+                InteractionReplaySafety::NeverRetry,
+                serde_json::json!({ "request": { "turn": 1 } }),
+            )
+            .expect("intent");
+        ledger
+            .record_interaction_completion(
+                "planner:1",
+                RunInteractionKind::Planner,
+                serde_json::json!({
+                    "type": "planner.turn",
+                    "protocolVersion": "test",
+                    "requestId": "bridge:test",
+                    "turn": { "kind": "complete", "output": "done" },
+                    "plannerCheckpoint": {
+                        "schemaVersion": 1,
+                        "plannerId": "fixture:resume",
+                        "state": { "messages": [] }
+                    }
+                }),
+            )
+            .expect("completion");
+        drop(ledger);
+
+        let (ledger, replay) = open_continuation(&root, &request);
+        assert_eq!(ledger.request(), &request);
+        assert_eq!(
+            replay.inspection.disposition,
+            RunContinuationDisposition::SafeBoundary
+        );
+        assert_eq!(replay.interactions.len(), 1);
+        assert!(replay.interactions[0].completion_payload.is_some());
+        assert_eq!(
+            replay
+                .planner_checkpoint
+                .as_ref()
+                .and_then(|value| value.get("plannerId"))
+                .and_then(Value::as_str),
+            Some("fixture:resume")
+        );
+        drop(ledger);
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn blocks_a_read_after_its_single_retry_is_interrupted() {
+        let root = temporary_root();
+        let request = request("run:retry-exhausted");
+        let descriptors = [CapabilityDescriptor {
+            id: "workspace.read".to_owned(),
+            replay_safety: CapabilityReplaySafety::ReadOnlyRetryable,
+        }];
+        let payload = serde_json::json!({ "call": { "id": "call:read" } });
+        let mut ledger = RunLedger::create(&root, "test", &request, &descriptors).expect("ledger");
+        ledger
+            .record_interaction_intent(
+                "capability:call:read",
+                RunInteractionKind::Capability,
+                InteractionReplaySafety::ReadOnlyRetryable,
+                payload.clone(),
+            )
+            .expect("intent");
+        drop(ledger);
+        let (mut ledger, _) = open_continuation(&root, &request);
+        ledger
+            .record_interaction_retry_intent(
+                "capability:call:read",
+                RunInteractionKind::Capability,
+                InteractionReplaySafety::ReadOnlyRetryable,
+                payload.clone(),
+            )
+            .expect("single retry");
+        drop(ledger);
+
+        let inspection = inspect_run(&root, &request.run_id).expect("inspect");
+        assert_eq!(
+            inspection.resume_disposition,
+            RunResumeDisposition::BlockedIncomplete
+        );
+        assert_eq!(
+            inspection.continuation.expect("continuation").disposition,
+            RunContinuationDisposition::BlockedRetryExhausted
+        );
+        let (mut ledger, _) = open_continuation(&root, &request);
+        assert!(
+            ledger
+                .record_interaction_retry_intent(
+                    "capability:call:read",
+                    RunInteractionKind::Capability,
+                    InteractionReplaySafety::ReadOnlyRetryable,
+                    payload,
+                )
+                .expect_err("second retry must fail")
+                .contains("already consumed")
+        );
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn records_an_authorized_read_retry_before_its_completion() {
+        let root = temporary_root();
+        let request = request("run:retry-attempt");
+        let descriptors = [CapabilityDescriptor {
+            id: "workspace.read".to_owned(),
+            replay_safety: CapabilityReplaySafety::ReadOnlyRetryable,
+        }];
+        let payload = serde_json::json!({ "call": { "id": "call:read" } });
+        let mut ledger = RunLedger::create(&root, "test", &request, &descriptors).expect("ledger");
+        ledger
+            .record_interaction_intent(
+                "capability:call:read",
+                RunInteractionKind::Capability,
+                InteractionReplaySafety::ReadOnlyRetryable,
+                payload.clone(),
+            )
+            .expect("intent");
+        drop(ledger);
+
+        let (mut ledger, replay) = open_continuation(&root, &request);
+        assert_eq!(
+            replay.inspection.disposition,
+            RunContinuationDisposition::RetryableCapability
+        );
+        ledger
+            .record_interaction_retry_intent(
+                "capability:call:read",
+                RunInteractionKind::Capability,
+                InteractionReplaySafety::ReadOnlyRetryable,
+                payload,
+            )
+            .expect("retry intent");
+        ledger
+            .record_interaction_completion(
+                "capability:call:read",
+                RunInteractionKind::Capability,
+                serde_json::json!({
+                    "type": "capability.result",
+                    "protocolVersion": "test",
+                    "requestId": "bridge:test",
+                    "result": { "callId": "call:read", "success": true, "content": "ok" }
+                }),
+            )
+            .expect("retry completion");
+        drop(ledger);
+
+        let continuation = inspect_run(&root, &request.run_id)
+            .expect("inspect")
+            .continuation
+            .expect("continuation");
+        assert_eq!(
+            continuation.disposition,
+            RunContinuationDisposition::SafeBoundary
+        );
+        assert_eq!(continuation.interaction_frame_count, 3);
+        assert_eq!(continuation.completed_interaction_count, 1);
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn preserves_pending_interaction_evidence_on_a_terminal_failure() {
+        let root = temporary_root();
+        let request = request("run:terminal-with-pending");
+        let artifact = terminal_artifact(&request);
+        let mut ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        ledger
+            .record_interaction_intent(
+                "planner:1",
+                RunInteractionKind::Planner,
+                InteractionReplaySafety::NeverRetry,
+                serde_json::json!({ "request": { "turn": 1 } }),
+            )
+            .expect("intent");
+        for event in &artifact.events {
+            ledger.append_event(event).expect("event");
+        }
+        ledger.seal(&artifact).expect("seal");
+        drop(ledger);
+
+        let continuation = inspect_run(&root, &request.run_id)
+            .expect("inspect")
+            .continuation
+            .expect("continuation");
+        assert_eq!(
+            continuation.disposition,
+            RunContinuationDisposition::Terminal
+        );
+        assert_eq!(continuation.pending_kind, Some(RunInteractionKind::Planner));
         fs::remove_dir_all(root).expect("cleanup");
     }
 

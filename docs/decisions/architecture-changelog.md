@@ -1,3 +1,39 @@
+# 2026-08-05 - Safe continuation exact-head local gate
+
+- Implemented bridge v9 durable interaction intents/completions, bounded planner
+  checkpoints, explicit capability replay safety, OS-owned per-run locks, and
+  deterministic continuation through the existing `Slice0Runtime`.
+- Completed responses replay without host work; one unresolved explicitly
+  retryable evidence call may be deliberately retried once total. Ambiguous
+  planner/approval work and unresolved non-idempotent capabilities block.
+- `forge runs inspect` and `forge runs resume` expose the same Rust store contract;
+  terminal resume returns the existing artifact without provider work.
+- Exact local validation passes: zero-warning full Rust gate, 92/92 Node tests and
+  build, 59 retained-kernel hybrid scenarios, and packaged CLI smoke.
+- Controlled VS Code initially exposed a stale pre-v9 MCP process, then passed a
+  fresh one-call/four-second gate after explicit server restart with all seven tools.
+- Hosted Windows/macOS/Ubuntu, outer ChangeSet cross-linkage, and the earliest
+  run-record initialization crash window remain open.
+- See [Checkpoint 76](checkpoints/2026-08-05-76-safe-run-continuation-local-gate.md),
+  [ADR-0030](ADRs/ADR-0030-durable-interaction-transcript-and-safe-continuation.md),
+  and [CLI ship lane 6](../tasks/SLICE-CLI6-run-recovery.md).
+# 2026-08-05 - Safe continuation uses deterministic replay through one runtime
+
+- Accepted [ADR-0030](ADRs/ADR-0030-durable-interaction-transcript-and-safe-continuation.md)
+  for CLI ship-lane 6B.
+- Rust will persist planner, approval, and capability intents before host dispatch
+  and validated completions before runtime use. Provider turns carry a bounded
+  restorable message/tool-call checkpoint.
+- Resume re-enters the existing `Slice0Runtime`, consumes recorded completions,
+  verifies its reproduced events against the durable prefix, and appends only at
+  the new frontier. No recovery runtime or child logical run is introduced.
+- Unresolved provider or approval work and non-idempotent capabilities remain
+  blocked. Evidence capabilities require explicit `read_only_retryable` metadata;
+  missing metadata fails closed.
+- Delivery is split into 6B-1 transcript/classification and 6B-2 deterministic
+  replay/live continuation so the first increment cannot accidentally market
+  classification as working resume.
+- See [CLI ship lane 6](../tasks/SLICE-CLI6-run-recovery.md).
 # 2026-08-05 - Run-recovery validation sufficiency audit
 
 - Audited every CLI ship-lane 6A acceptance claim against executable evidence and

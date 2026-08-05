@@ -7,8 +7,36 @@ export const rustRunStoreProtocolVersion = 'forge.kernel.run-store.v1';
 export type RunRecordState = 'terminal' | 'open_or_interrupted' | 'repair_required';
 export type RunResumeDisposition =
   | 'return_terminal_artifact'
+  | 'resume_available'
+  | 'retry_authorization_required'
   | 'blocked_incomplete'
   | 'repair_required';
+
+export type RunContinuationDisposition =
+  | 'terminal'
+  | 'safe_boundary'
+  | 'retryable_capability'
+  | 'blocked_ambiguous_planner'
+  | 'blocked_ambiguous_approval'
+  | 'blocked_non_idempotent'
+  | 'blocked_retry_exhausted'
+  | 'blocked_planner_checkpoint_unavailable';
+
+export interface RunContinuationInspection {
+  readonly schemaVersion: 1;
+  readonly disposition: RunContinuationDisposition;
+  readonly interactionFrameCount: number;
+  readonly completedInteractionCount: number;
+  readonly lastSequence?: number;
+  readonly pendingInteractionId?: string;
+  readonly pendingKind?: 'planner' | 'approval' | 'capability';
+  readonly pendingReplaySafety?: 'never_retry' | 'read_only_retryable' | 'non_idempotent';
+  readonly capabilityDescriptors: readonly {
+    readonly id: string;
+    readonly replaySafety: 'read_only_retryable' | 'non_idempotent';
+  }[];
+  readonly reason: string;
+}
 
 export interface RunStoreInspection {
   readonly schemaVersion: 1;
@@ -19,6 +47,7 @@ export interface RunStoreInspection {
   readonly lastSequence?: number;
   readonly requestSha256?: string;
   readonly reason: string;
+  readonly continuation?: RunContinuationInspection;
   readonly artifact?: RunArtifact;
 }
 
@@ -39,6 +68,65 @@ const object = (value: unknown): JsonObject | undefined =>
     ? value as JsonObject
     : undefined;
 
+const validateContinuation = (candidate: unknown): RunContinuationInspection => {
+  const value = object(candidate);
+  const disposition = value?.disposition;
+  const frameCount = value?.interactionFrameCount;
+  const completedCount = value?.completedInteractionCount;
+  const lastSequence = value?.lastSequence;
+  const pendingId = value?.pendingInteractionId;
+  const pendingKind = value?.pendingKind;
+  const pendingSafety = value?.pendingReplaySafety;
+  const descriptors = value?.capabilityDescriptors;
+  const pendingDisposition = [
+    'retryable_capability',
+    'blocked_ambiguous_planner',
+    'blocked_ambiguous_approval',
+    'blocked_non_idempotent',
+    'blocked_retry_exhausted',
+  ].includes(String(disposition));
+  const pendingEvidenceExpected = pendingDisposition
+    || (disposition === 'terminal' && pendingId !== undefined);
+  if (value?.schemaVersion !== 1
+    || ![
+      'terminal',
+      'safe_boundary',
+      'retryable_capability',
+      'blocked_ambiguous_planner',
+      'blocked_ambiguous_approval',
+      'blocked_non_idempotent',
+      'blocked_retry_exhausted',
+      'blocked_planner_checkpoint_unavailable',
+    ].includes(String(disposition))
+    || !Number.isSafeInteger(frameCount)
+    || Number(frameCount) < 0
+    || !Number.isSafeInteger(completedCount)
+    || Number(completedCount) < 0
+    || Number(completedCount) * 2 > Number(frameCount)
+    || (Number(frameCount) === 0
+      ? lastSequence !== undefined
+      : !Number.isSafeInteger(lastSequence) || Number(lastSequence) !== Number(frameCount))
+    || !Array.isArray(descriptors)
+    || descriptors.some((descriptor, index) => {
+      const item = object(descriptor);
+      const previous = index === 0 ? undefined : object(descriptors[index - 1]);
+      return typeof item?.id !== 'string'
+        || item.id.length === 0
+        || item.id.length > 512
+        || !['read_only_retryable', 'non_idempotent'].includes(String(item.replaySafety))
+        || (typeof previous?.id === 'string' && previous.id >= item.id);
+    })
+    || typeof value.reason !== 'string'
+    || (pendingEvidenceExpected
+      ? typeof pendingId !== 'string'
+        || pendingId.length === 0
+        || !['planner', 'approval', 'capability'].includes(String(pendingKind))
+        || !['never_retry', 'read_only_retryable', 'non_idempotent'].includes(String(pendingSafety))
+      : pendingId !== undefined || pendingKind !== undefined || pendingSafety !== undefined)
+  ) throw new Error('Rust kernel returned an invalid run continuation assessment.');
+  return candidate as RunContinuationInspection;
+};
+
 const validateInspection = (candidate: unknown, runId: string): RunStoreInspection => {
   const value = object(candidate);
   const state = value?.state;
@@ -46,10 +134,13 @@ const validateInspection = (candidate: unknown, runId: string): RunStoreInspecti
   const eventCount = value?.eventCount;
   const lastSequence = value?.lastSequence;
   const artifact = object(value?.artifact);
+  const continuation = value?.continuation === undefined
+    ? undefined
+    : validateContinuation(value.continuation);
   if (value?.schemaVersion !== 1
     || value.runId !== runId
     || !['terminal', 'open_or_interrupted', 'repair_required'].includes(String(state))
-    || !['return_terminal_artifact', 'blocked_incomplete', 'repair_required'].includes(String(disposition))
+    || !['return_terminal_artifact', 'resume_available', 'retry_authorization_required', 'blocked_incomplete', 'repair_required'].includes(String(disposition))
     || !Number.isSafeInteger(eventCount)
     || Number(eventCount) < 0
     || (Number(eventCount) === 0
@@ -74,12 +165,21 @@ const validateInspection = (candidate: unknown, runId: string): RunStoreInspecti
         return item?.runId !== runId || item.sequence !== index + 1 || typeof item.type !== 'string';
       })
       || typeof value.requestSha256 !== 'string'
+      || (continuation !== undefined && continuation.disposition !== 'terminal')
     ) throw new Error('Rust kernel returned an invalid terminal run-store inspection.');
   } else if (artifact !== undefined || disposition === 'return_terminal_artifact') {
     throw new Error('Rust kernel exposed a terminal artifact for a non-terminal run record.');
-  } else if ((state === 'open_or_interrupted' && disposition !== 'blocked_incomplete')
+  } else if ((state === 'open_or_interrupted'
+      && !['resume_available', 'retry_authorization_required', 'blocked_incomplete'].includes(String(disposition)))
     || (state === 'repair_required' && disposition !== 'repair_required')
     || (state === 'open_or_interrupted' && typeof value.requestSha256 !== 'string')
+    || (state === 'open_or_interrupted' && continuation?.disposition === 'terminal')
+    || (disposition === 'resume_available' && continuation?.disposition !== 'safe_boundary')
+    || (disposition === 'retry_authorization_required'
+      && continuation?.disposition !== 'retryable_capability')
+    || (disposition === 'blocked_incomplete'
+      && ['safe_boundary', 'retryable_capability'].includes(String(continuation?.disposition)))
+    || (state === 'repair_required' && continuation !== undefined)
   ) {
     throw new Error('Rust kernel returned an inconsistent non-terminal run-store inspection.');
   }

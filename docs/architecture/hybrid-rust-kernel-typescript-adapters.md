@@ -1,6 +1,6 @@
 # Hybrid runtime candidate: Rust kernel and TypeScript adapters
 
-**Status:** accepted hybrid boundary through bridge v6; bridge v7 mandatory Rust run-ledger implementation has passed the local gate, with hosted Windows/macOS/Ubuntu and controlled VS Code acceptance pending.
+**Status:** bridge v9 is implemented and has passed the exact-head local and controlled VS Code gates for durable run storage and safe same-runtime continuation; hosted Windows/macOS/Ubuntu acceptance remains pending.
 **Date:** 2026-07-22
 **Updated:** 2026-08-05
 
@@ -20,7 +20,7 @@ VS Code / MCP / future provider SDK / TypeScript compiler
        tools, workflow definitions, presentation,
            provider/compiler/host integration
                          |
-            forge.kernel.bridge.v7 over NDJSON
+            forge.kernel.bridge.v9 over NDJSON
                          |
                  Rust kernel authority
      validate -> authorize -> schedule -> invoke -> record
@@ -29,7 +29,7 @@ VS Code / MCP / future provider SDK / TypeScript compiler
 ```
 
 The bridge is a local child-process protocol for the spike. It is not a public
-network service. Bridge v7 and the Rust run store form one run authority; the
+network service. Bridge v9 and the Rust run store form one run authority; the
 separate ChangeSet journals retain authority only for their mutation subject.
 
 ## Why a process protocol
@@ -46,26 +46,30 @@ separate ChangeSet journals retain authority only for their mutation subject.
 FFI/N-API is intentionally deferred. It would optimize a boundary before proving
 that the boundary is correct.
 
-## Bridge protocol v7
+## Bridge protocol v9
 
 Every message is one UTF-8 JSON object followed by LF. Every message carries
-`protocolVersion: "forge.kernel.bridge.v7"` and a caller-selected `requestId`.
-Version 7 requires one configured Rust run-store root, persists the immutable
-request before execution, synchronizes every canonical event before host
-notification, and seals the validated terminal artifact before host completion.
-Version 6 added Rust-owned capability-call and provider-reported token budgets,
+`protocolVersion: "forge.kernel.bridge.v9"` and a caller-selected `requestId`.
+Version 9 adds explicit replay-safety descriptors, the bounded durable interaction
+transcript, planner checkpoints, `run.resume`, deterministic prefix replay, and
+OS-owned per-run locking. The run store persists the immutable request before
+execution, synchronizes every canonical event before host notification, and seals
+the validated terminal artifact before host completion. Version 6 added Rust-owned
+capability-call and provider-reported token budgets,
 exact terminal usage, and fail-closed behavior when an enabled token ceiling
 cannot be measured. Version 5 added the Rust-authored capability context/basis
 and bounded typed capability evidence. Version 4 added a caller-supplied outcome
 contract and Rust-produced assessment, version 3 added normalized inference
 evidence, and version 2 replaced adapter-computed approval decisions with
 attributable facts. Earlier versions remain historical evidence intentionally
-rejected by a v7 peer.
+rejected by a v9 peer.
 
 ### Host to kernel
 
-- `run.start`: the immutable run request, registered capability IDs, mandatory
-  absolute run-store root, and an optional pre-start cancellation reason.
+- `run.start`: the immutable run request, registered capability descriptors,
+  mandatory absolute run-store root, and an optional pre-start cancellation reason.
+- `run.resume`: the existing run ID, matching capability descriptors, deliberate
+  retry authorization for one unresolved evidence call, and optional cancellation.
 - `planner.turn`: a complete output or one capability call in response to the
   kernel's matching planner request.
 - `approval.facts`: versioned host-policy and user-consent facts bound to the exact
@@ -79,7 +83,9 @@ rejected by a v7 peer.
 ### Kernel to host
 
 - `run.event`: the next authoritative logical event, sent only after the Rust
-  ledger synchronizes that event.
+  ledger synchronizes that event; reproduced durable-prefix events are suppressed.
+- `run.resume.ready`: the validated request and optional planner checkpoint the
+  TypeScript planner must restore before live continuation is accepted.
 - `planner.next`: the immutable task, context plan, prior capability results, and
   one-based turn number.
 - `approval.facts.request`: the exact capability call plus Rust-authored prior
@@ -93,15 +99,17 @@ rejected by a v7 peer.
 The spike supports one active run per process. Concurrency belongs in a later
 long-lived kernel service only after request isolation and backpressure are tested.
 
-### Run-store inspection v1
+### Run-store inspection v1 and continuation
 
 The separate one-shot inspection discriminator uses
 forge.kernel.run-store.v1. Rust hashes the run ID to locate the bounded record,
-validates request digest, exact event sequence, artifact projections, and terminal
-status, then returns terminal, open_or_interrupted, or repair_required.
-TypeScript never treats raw files as authority. Terminal inspection returns the
-existing artifact without planner, provider, approval, or capability execution;
-non-terminal records are inspect-only and never automatically replayed in 6A.
+validates request digest, exact event sequence, artifact projections, continuation
+manifest, and interaction transcript, then reports terminal, resumable, explicit
+retry authorization required, blocked incomplete, or repair required. TypeScript
+never treats raw files as authority. Terminal resume returns the existing artifact
+without planner, provider, approval, or capability execution. Non-terminal resume
+is permitted only after Rust classifies the exact frontier and the same runtime
+reproduces the durable prefix.
 
 ## State ownership
 
@@ -199,8 +207,9 @@ run IDs, snapshot IDs, or the seven-event single-capability sequence.
   and emits one `run.cancelled` event.
 - Cancellation after `run.result` cannot change the completed artifact.
 - A host process kill can prevent a terminal artifact because the authority can no
-  longer emit, but the synchronized prefix remains inspectable as
-  open_or_interrupted; automatic continuation remains blocked in 6A.
+  longer emit, but the synchronized prefix and interaction frontier remain
+  inspectable. Continuation is allowed only for a complete safe boundary or one
+  deliberately authorized retryable evidence call; all ambiguity fails closed.
 - A terminal artifact is published before run.result, so a lost terminal frame can
   be recovered by inspection without executing the run again.
 

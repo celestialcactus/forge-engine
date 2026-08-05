@@ -344,6 +344,130 @@ test('runs a provider tool call and final response through the canonical Forge r
   assert.doesNotMatch(developerContext?.content ?? '', /workspace:\/\//u);
 });
 
+test('restores provider conversation state without duplicating the completed inference turn', async () => {
+  let initialCalls = 0;
+  const initialProvider: InferenceProvider = {
+    id: 'ollama',
+    locality: 'local',
+    async *stream(): AsyncGenerator<NormalizedInferenceEvent> {
+      initialCalls++;
+      yield {
+        type: 'tool_call.delta',
+        index: 0,
+        id: 'provider-call-recovered',
+        name: 'forge_workspace_read',
+        argumentsDelta: '{"path":"README.md","startLine":1,"maxLines":2}',
+      };
+      yield { type: 'response.completed', finishReason: 'tool_call' };
+    },
+  };
+  const plannerRequest = {
+    task: 'Read the fixture README.',
+    contextPlan: {
+      id: 'context:recovery',
+      budgetBytes: 65_536,
+      selected: [],
+      omitted: [],
+    },
+    capabilityResults: [],
+    turn: 1,
+  } as const;
+  const original = new ProviderTaskPlanner({
+    provider: initialProvider,
+    route,
+    tools: developerEvidenceTools,
+    requestIdFactory: () => 'inference:before-restart',
+    now: fixedNow(0, 1),
+  });
+  const firstTurn = await original.next(plannerRequest, new AbortController().signal);
+  assert.equal(firstTurn.kind, 'call');
+  assert.equal(initialCalls, 1);
+  const checkpoint = original.checkpoint();
+
+  const resumedRequests: ProviderInferenceRequest[] = [];
+  const resumedProvider: InferenceProvider = {
+    id: 'ollama',
+    locality: 'local',
+    async *stream(next): AsyncGenerator<NormalizedInferenceEvent> {
+      resumedRequests.push(next);
+      yield { type: 'text.delta', text: 'Recovered from the durable tool boundary.' };
+      yield { type: 'response.completed', finishReason: 'stop' };
+    },
+  };
+  const resumed = new ProviderTaskPlanner({
+    provider: resumedProvider,
+    route,
+    tools: developerEvidenceTools,
+    requestIdFactory: () => 'inference:after-restart',
+    now: fixedNow(2, 3),
+  });
+  resumed.restore(checkpoint);
+  assert.equal(firstTurn.kind, 'call');
+  const finalTurn = await resumed.next({
+    ...plannerRequest,
+    turn: 2,
+    capabilityResults: [{
+      callId: firstTurn.call.id,
+      success: true,
+      content: 'path: README.md\n1: # Slice 1 fixture',
+    }],
+  }, new AbortController().signal);
+
+  assert.deepEqual(finalTurn.kind === 'complete' ? finalTurn.output : undefined,
+    'Recovered from the durable tool boundary.');
+  assert.equal(initialCalls, 1, 'the completed provider request must not be issued again');
+  assert.equal(resumedRequests.length, 1);
+  const resumedMessages = resumedRequests[0]?.messages ?? [];
+  assert.equal(resumedMessages.filter((message) => message.role === 'user').length, 1);
+  const assistant = resumedMessages.find((message) => message.role === 'assistant');
+  assert.equal(assistant?.role, 'assistant');
+  assert.equal(assistant?.role === 'assistant' ? assistant.toolCalls?.[0]?.id : undefined,
+    'provider-call-recovered');
+  const toolResult = resumedMessages.find((message) => message.role === 'tool');
+  assert.equal(toolResult?.role === 'tool' ? toolResult.toolCallId : undefined,
+    'provider-call-recovered');
+  assert.equal(toolResult?.role === 'tool' ? toolResult.name : undefined,
+    'forge_workspace_read');
+
+  const wrongModel = JSON.parse(JSON.stringify(checkpoint)) as {
+    schemaVersion: 1;
+    plannerId: string;
+    state: { model: string };
+  };
+  wrongModel.state.model = 'different-model';
+  const invalidTarget = new ProviderTaskPlanner({
+    provider: resumedProvider,
+    route,
+    tools: developerEvidenceTools,
+  });
+  assert.throws(() => invalidTarget.restore(wrongModel), /checkpoint state is invalid/u);
+
+  const wrongCorrelation = JSON.parse(JSON.stringify(checkpoint)) as {
+    schemaVersion: 1;
+    plannerId: string;
+    state: {
+      messages: Array<{
+        role: string;
+        toolCalls?: Array<{ id: string }>;
+      }>;
+    };
+  };
+  const toolCall = wrongCorrelation.state.messages
+    .find((message) => message.role === 'assistant')
+    ?.toolCalls?.[0];
+  assert.ok(toolCall);
+  toolCall.id = 'tampered-provider-call';
+  const correlationTarget = new ProviderTaskPlanner({
+    provider: resumedProvider,
+    route,
+    tools: developerEvidenceTools,
+  });
+  assert.throws(
+    () => correlationTarget.restore(wrongCorrelation),
+    /pending tool correlation is invalid/u,
+  );
+});
+
 test('fails closed when a provider prints a tool envelope as terminal text', async () => {
   const provider: InferenceProvider = {
     id: 'ollama',

@@ -11,6 +11,7 @@ import type {
   CapabilityCall,
   CapabilityContext,
   CapabilityResult,
+  PlannerCheckpoint,
   PlannerRequest,
   PlannerTurn,
   RunArtifact,
@@ -19,8 +20,13 @@ import type {
   WorkspaceSnapshot,
 } from '../slice0/contracts.js';
 
-export const rustKernelProtocolVersion = 'forge.kernel.bridge.v7';
+export const rustKernelProtocolVersion = 'forge.kernel.bridge.v9';
 
+
+export interface RustKernelResumeOptions {
+  readonly signal?: AbortSignal;
+  readonly allowRetryableCapabilityRetry?: boolean;
+}
 
 export interface ApprovalFactsProvider {
   collect(call: CapabilityCall, signal: AbortSignal, context: CapabilityContext): Promise<ApprovalFacts>;
@@ -94,6 +100,7 @@ const validateArtifact = (
   candidate: unknown,
   request: RunRequest,
   streamedEvents: readonly RunEvent[],
+  durableEventCount = 0,
 ): RunArtifact => {
   if (!isObject(candidate)
     || candidate.schemaVersion !== 4
@@ -113,10 +120,35 @@ const validateArtifact = (
       throw new Error('Rust kernel returned an invalid event at sequence ' + String(index + 1) + '.');
     }
   }
-  if (JSON.stringify(artifact.events) !== JSON.stringify(streamedEvents)) {
-    throw new Error('Rust kernel terminal artifact does not match its streamed event trace.');
+  if (durableEventCount < 0
+    || durableEventCount > artifact.events.length
+    || JSON.stringify(artifact.events.slice(durableEventCount)) !== JSON.stringify(streamedEvents)
+  ) {
+    throw new Error('Rust kernel terminal artifact does not match its streamed event suffix.');
   }
   return artifact;
+};
+
+const validateResumeRequest = (candidate: unknown, runId: string): RunRequest => {
+  const value = isObject(candidate) ? candidate : undefined;
+  const snapshot = isObject(value?.snapshot) ? value.snapshot : undefined;
+  const budget = isObject(value?.executionBudget) ? value.executionBudget : undefined;
+  if (value?.runId !== runId
+    || typeof value.task !== 'string'
+    || value.task.length === 0
+    || !isObject(snapshot)
+    || typeof snapshot.id !== 'string'
+    || typeof snapshot.rootLabel !== 'string'
+    || !Array.isArray(snapshot.files)
+    || !Number.isSafeInteger(value.contextBudgetBytes)
+    || Number(value.contextBudgetBytes) < 1
+    || !Number.isSafeInteger(value.maxTurns)
+    || Number(value.maxTurns) < 1
+    || budget?.schemaVersion !== 1
+    || !['maxCapabilityCalls', 'maxReportedInputTokens', 'maxReportedOutputTokens']
+      .every((field) => Number.isSafeInteger(budget[field]) && Number(budget[field]) >= 0)
+  ) throw new Error('Rust kernel returned an invalid resume request.');
+  return candidate as RunRequest;
 };
 
 export class RustKernelRuntime {
@@ -143,12 +175,30 @@ export class RustKernelRuntime {
   }
 
   async run(request: RunRequest): Promise<RunArtifact> {
+    return this.#execute({ kind: 'fresh', request });
+  }
+
+  async resume(runId: string, options: RustKernelResumeOptions = {}): Promise<RunArtifact> {
+    if (runId.trim().length === 0) throw new Error('Run ID must not be empty.');
+    options.signal?.throwIfAborted();
+    return this.#execute({ kind: 'resume', runId, ...options });
+  }
+
+  async #execute(invocation:
+    | { readonly kind: 'fresh'; readonly request: RunRequest }
+    | ({ readonly kind: 'resume'; readonly runId: string } & RustKernelResumeOptions)
+  ): Promise<RunArtifact> {
+    let request = invocation.kind === 'fresh' ? invocation.request : undefined;
+    const runId = invocation.kind === 'fresh' ? invocation.request.runId : invocation.runId;
+    let durableEventCount = 0;
+    let resumeReady = false;
     try {
       await access(this.#kernelPath, fsConstants.X_OK);
     } catch (error) {
       throw new Error('Rust kernel failed to start: ' + errorMessage(error));
     }
-    const signal = request.signal ?? new AbortController().signal;
+    const signal = (invocation.kind === 'fresh' ? invocation.request.signal : invocation.signal)
+      ?? new AbortController().signal;
     const requestId = this.#requestIdFactory();
     const child = spawn(this.#kernelPath, [...this.#kernelArguments], {
       cwd: process.cwd(),
@@ -217,10 +267,39 @@ export class RustKernelRuntime {
         throw new Error('Rust kernel emitted a mismatched protocol or request ID.');
       }
 
+      if (message.type === 'run.resume.ready') {
+        if (invocation.kind !== 'resume' || resumeReady) {
+          throw new Error('Rust kernel emitted an unexpected resume handshake.');
+        }
+        const nextRequest = validateResumeRequest(message.request, runId);
+        if (!Number.isSafeInteger(message.durableEventCount)
+          || Number(message.durableEventCount) < 0
+        ) throw new Error('Rust kernel returned an invalid durable event count.');
+        if (message.plannerCheckpoint !== undefined) {
+          if (this.#planner.restore === undefined) {
+            throw new Error('The selected planner cannot restore the durable provider checkpoint.');
+          }
+          this.#planner.restore(message.plannerCheckpoint as PlannerCheckpoint);
+        }
+        request = nextRequest;
+        durableEventCount = Number(message.durableEventCount);
+        resumeReady = true;
+        await writeMessage({
+          type: 'run.resume.accepted',
+          protocolVersion: rustKernelProtocolVersion,
+          requestId,
+        });
+        return;
+      }
+
+      if (invocation.kind === 'resume' && !resumeReady) {
+        throw new Error('Rust kernel emitted run traffic before the resume handshake.');
+      }
+
       if (message.type === 'run.event') {
         const event = message.event as RunEvent;
-        const expectedSequence = streamedEvents.length + 1;
-        if (!isObject(event) || event.runId !== request.runId || event.sequence !== expectedSequence) {
+        const expectedSequence = durableEventCount + streamedEvents.length + 1;
+        if (!isObject(event) || event.runId !== runId || event.sequence !== expectedSequence) {
           throw new Error('Rust kernel streamed an invalid event at sequence ' + String(expectedSequence) + '.');
         }
         streamedEvents.push(event);
@@ -233,11 +312,13 @@ export class RustKernelRuntime {
         try {
           const turn = await raceWithCancellation(operation, signal);
           if (turn === cancelled) return;
+          const plannerCheckpoint = this.#planner.checkpoint?.();
           await writeMessage({
             type: 'planner.turn',
             protocolVersion: rustKernelProtocolVersion,
             requestId,
             turn: turn satisfies PlannerTurn,
+            ...(plannerCheckpoint === undefined ? {} : { plannerCheckpoint }),
           });
         } catch (error) {
           if (signal.aborted) return;
@@ -313,7 +394,8 @@ export class RustKernelRuntime {
       }
 
       if (message.type === 'run.result') {
-        terminalArtifact = validateArtifact(message.artifact, request, streamedEvents);
+        if (request === undefined) throw new Error('Rust kernel returned a result without a run request.');
+        terminalArtifact = validateArtifact(message.artifact, request, streamedEvents, durableEventCount);
         return;
       }
 
@@ -321,23 +403,40 @@ export class RustKernelRuntime {
     };
 
     try {
-      const startMessage: JsonObject = {
-        type: 'run.start',
-        protocolVersion: rustKernelProtocolVersion,
-        requestId,
-        request: {
-          runId: request.runId,
-          task: request.task,
-          snapshot: request.snapshot,
-          contextBudgetBytes: request.contextBudgetBytes,
-          maxTurns: request.maxTurns,
-          executionBudget: request.executionBudget,
-          ...(request.outcomeContract === undefined ? {} : { outcomeContract: request.outcomeContract }),
-        },
-        capabilityIds: [...this.#capabilities.keys()],
-        runStoreRoot: this.#runStoreRoot,
-        ...(signal.aborted ? { initialCancellationReason: cancellationReason(signal) } : {}),
-      };
+      const capabilityDescriptors = [...this.#capabilities.values()].map((capability) => ({
+        id: capability.id,
+        replaySafety: capability.replaySafety ?? 'non_idempotent',
+      }));
+      const startMessage: JsonObject = invocation.kind === 'fresh'
+        ? {
+            type: 'run.start',
+            protocolVersion: rustKernelProtocolVersion,
+            requestId,
+            request: {
+              runId: invocation.request.runId,
+              task: invocation.request.task,
+              snapshot: invocation.request.snapshot,
+              contextBudgetBytes: invocation.request.contextBudgetBytes,
+              maxTurns: invocation.request.maxTurns,
+              executionBudget: invocation.request.executionBudget,
+              ...(invocation.request.outcomeContract === undefined
+                ? {}
+                : { outcomeContract: invocation.request.outcomeContract }),
+            },
+            capabilities: capabilityDescriptors,
+            runStoreRoot: this.#runStoreRoot,
+            ...(signal.aborted ? { initialCancellationReason: cancellationReason(signal) } : {}),
+          }
+        : {
+            type: 'run.resume',
+            protocolVersion: rustKernelProtocolVersion,
+            requestId,
+            runId: invocation.runId,
+            capabilities: capabilityDescriptors,
+            runStoreRoot: this.#runStoreRoot,
+            allowRetryableCapabilityRetry: invocation.allowRetryableCapabilityRetry ?? false,
+            ...(signal.aborted ? { initialCancellationReason: cancellationReason(signal) } : {}),
+          };
       await writeMessage(startMessage);
       if (!signal.aborted) signal.addEventListener('abort', sendCancellation, { once: true });
 

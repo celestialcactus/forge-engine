@@ -64,6 +64,7 @@ const { positionals, values } = parseArgs({
     'engine-root': { type: 'string' },
     'approval-profile': { type: 'string' },
     approve: { type: 'boolean', default: false },
+    'retry-evidence': { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
   },
 });
@@ -355,7 +356,7 @@ try {
       runStore: {
         root: join(engineRoot(), 'runs', 'v1'),
         durability: 'append-before-notify; terminal-before-result',
-        recovery: 'terminal-return or inspect-only; incomplete continuation blocked',
+        recovery: 'terminal-return; validated same-runtime continuation; unsafe frontiers blocked',
       },
       executionDefaults: defaultExecutionBudget,
       approval: {
@@ -375,27 +376,88 @@ try {
   } else if (command === 'runs') {
     const operation = positionals[1];
     const runId = positionals[2]?.trim() ?? '';
-    if (operation !== 'inspect' || runId.length === 0) {
-      throw new Error('Usage: forge runs inspect <run-id> [--json] [--engine-root <path>]');
+    if (!['inspect', 'resume'].includes(operation ?? '') || runId.length === 0) {
+      throw new Error('Usage: forge runs <inspect|resume> <run-id> [--json] [--engine-root <path>]');
     }
-    const inspection = await new RustRunStoreRuntime({
+    const store = new RustRunStoreRuntime({
       kernelPath: requireKernel(),
       runStoreRoot: join(engineRoot(), 'runs', 'v1'),
-    }).inspect(runId);
-    if (values.json) {
-      console.log(JSON.stringify(inspection, null, 2));
-    } else {
-      console.log(`Forge run ${inspection.runId}`);
-      console.log(`State: ${inspection.state}`);
-      console.log(`Recovery: ${inspection.resumeDisposition}`);
-      console.log(`Durable events: ${inspection.eventCount}`);
-      console.log(`Reason: ${inspection.reason}`);
-      if (inspection.artifact !== undefined) {
-        console.log(`Terminal status: ${inspection.artifact.status}`);
+    });
+    const inspection = await store.inspect(runId);
+    if (operation === 'inspect') {
+      if (values.json) {
+        console.log(JSON.stringify(inspection, null, 2));
+      } else {
+        console.log(`Forge run ${inspection.runId}`);
+        console.log(`State: ${inspection.state}`);
+        console.log(`Recovery: ${inspection.resumeDisposition}`);
+        console.log(`Durable events: ${inspection.eventCount}`);
+        if (inspection.continuation !== undefined) {
+          console.log(`Continuation: ${inspection.continuation.disposition}`);
+        }
+        console.log(`Reason: ${inspection.reason}`);
+        if (inspection.artifact !== undefined) {
+          console.log(`Terminal status: ${inspection.artifact.status}`);
+        }
       }
-    }
-    if (inspection.state === 'repair_required') process.exitCode = 1;
-  } else if (command === 'inspect') {
+      if (inspection.state === 'repair_required') process.exitCode = 1;
+    } else if (inspection.artifact !== undefined) {
+      if (values.json) printArtifact(inspection.artifact);
+      else {
+        const presenter = new LiveCliPresenter();
+        if (inspection.artifact.output !== undefined) {
+          presenter.printAssistantOutput(inspection.artifact.output);
+        }
+        presenter.printSummary(inspection.artifact);
+      }
+    } else {
+      const route = resolveInferenceRoute(values.provider, values.model);
+      const verificationPolicyPath = values.policy ?? process.env.FORGE_VERIFICATION_POLICY;
+      if (values.check !== undefined && verificationPolicyPath === undefined) {
+        throw new Error('--check requires --policy or FORGE_VERIFICATION_POLICY when resuming.');
+      }
+      const verificationChecks = verificationPolicyPath === undefined
+        ? []
+        : await loadVerificationPolicy(verificationPolicyPath);
+      const checkIds = verificationChecks.length === 0 ? [] : selectedChecks(verificationChecks);
+      const governedChanges = verificationChecks.length > 0;
+      const presenter = values.json ? undefined : new LiveCliPresenter();
+      const planner = new ProviderTaskPlanner({
+        provider: createInferenceProvider(route),
+        route,
+        tools: governedChanges ? developerGovernedChangeTools : developerEvidenceTools,
+        ...(presenter === undefined || governedChanges
+          ? {}
+          : { onInferenceEvent: (observation) => presenter.onInferenceEvent(observation) }),
+      });
+      const cancellation = createRunCancellation(
+        integerOption(values['timeout-ms'], 120_000, '--timeout-ms'),
+      );
+      try {
+        const artifact = await workspaceService().resumeTask(runId, planner, {
+          allowRetryableCapabilityRetry: values['retry-evidence'],
+          ...(presenter === undefined
+            ? {}
+            : { onEvent: (event: RunArtifact['events'][number]) => presenter.onRunEvent(event) }),
+          ...(governedChanges
+            ? {
+                governedChange: {
+                  checkIds,
+                  runtime: sovereignChangeRuntime(verificationChecks),
+                  io: interactiveIo(),
+                },
+              }
+            : {}),
+        }, cancellation.signal);
+        if (presenter === undefined) printArtifact(artifact);
+        else presenter.printSummary(artifact);
+        if (artifact.status !== 'completed' || artifact.outcome.status === 'unmet') {
+          process.exitCode = 1;
+        }
+      } finally {
+        cancellation.dispose();
+      }
+    }  } else if (command === 'inspect') {
     printArtifact(await workspaceService().inspect(integerOption(values['max-files'], 200, '--max-files')));
   } else if (command === 'search') {
     const query = positionals.slice(1).join(' ').trim();
@@ -573,7 +635,9 @@ try {
       'Evidence commands:',
       '  forge doctor [--json] [--workspace <path>]',
       '  forge runs inspect <run-id> [--json] [--engine-root <path>]',
-      '    Terminal artifacts are returned without replay; incomplete or corrupt runs are never auto-resumed.',
+      '  forge runs resume <run-id> --provider <ollama|openai> --model <model> [--retry-evidence] [--json]',
+      '    Resume replays validated completions through the same Rust runtime; ambiguous provider, approval, and mutation work stays blocked.',
+      '    --retry-evidence deliberately retries one unresolved capability explicitly classified read-only; it is accepted only once.',
       '  forge inspect [--json] [--max-files <count>]',
       '  forge search <literal query> [--json] [--max-matches <count>]',
       '  forge read <path> [--json] [--start-line <line>] [--max-lines <count>]',

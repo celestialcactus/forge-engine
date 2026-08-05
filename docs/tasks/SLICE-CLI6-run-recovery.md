@@ -1,7 +1,7 @@
 # CLI ship lane 6: outer-run recovery
 
-**Status:** 6A current-head local gate passed; controlled VS Code passed at `88501dc`; hosted pending; 6B not started
-**Branch:** `feature/cli-run-recovery`
+**Status:** 6A and 6B exact-head local/controlled VS Code gates passed; hosted Windows/macOS/Ubuntu pending.
+**Branch:** `feature/cli-safe-continuation` (stacked on `feature/cli-run-recovery`)
 **Base:** merged `develop` at `e09826a` (PR #23)
 
 ## Objective
@@ -91,23 +91,60 @@ pass. It accepts 6A locally while retaining the hosted cross-platform gate.
 
 ## Increment 6B: safe continuation transcript
 
-Persist the Rust/host interaction boundary required to reconstruct continuation:
-planner requests and validated turns, approval requests and facts, capability
-invoke intent and results, and provider planner message/tool-call state. Each
-capability descriptor carries explicit replay safety; absence means
-non-idempotent. Resume consumes already completed responses, reissues only a
-proven-idempotent unresolved action, and blocks all ambiguous non-idempotent work.
+[ADR-0030](../decisions/ADRs/ADR-0030-durable-interaction-transcript-and-safe-continuation.md)
+defines the implemented continuation path through the existing `Slice0Runtime`.
+Rust persists host-interaction intents before send and validated completions before
+use. Resume replays those completions through the same runtime, verifies the
+reproduced event prefix exactly, and appends only beyond the crash frontier. There
+is no recovery runtime or child logical run.
+
+### 6B-1: transcript and classification
+
+- bridge capability descriptors declare `read_only_retryable` or
+  `non_idempotent`; absence fails closed as non-idempotent;
+- a bounded continuation manifest and interaction log bind planner, approval, and
+  capability intent/completion frames;
+- the provider planner exports and validates a restorable message/tool-call
+  checkpoint shared by Ollama and OpenAI transports;
+- run inspection validates the transcript and classifies safe, retryable,
+  ambiguous, non-idempotent, unavailable-checkpoint, and corrupt frontiers;
+- classification is independently inspectable; live resume is exposed only through
+  the validated 6B-2 path.
+
+### 6B-2: deterministic replay and live continuation
+
+- an OS file lock serializes execution/resume and releases on process death;
+- the original request re-enters the same runtime with recorded completions;
+- reproduced events must exactly equal the durable prefix and are not appended
+  twice;
+- only a new safe frontier may call a live integration; an unresolved read-only
+  capability requires deliberate retry permission;
+- CLI resume and restart fixtures prove no duplicated cloud request, approval,
+  mutation, promotion, Git operation, or process.
 
 ### 6B exit gate
 
-- completed provider and capability responses are consumed without another call;
-- an unresolved idempotent evidence call may be deliberately retried once;
-- an unresolved or completed non-idempotent action is surfaced and never replayed;
-- a retained ChangeSet transaction is linked and inspected through its existing
-  Rust transaction authority;
-- provider continuation state reconstructs exact tool-call correlation;
-- restart fixtures prove no duplicated cloud inference, prompt, mutation,
-  promotion, Git operation, or external process.
+- [x] completed provider, approval, and capability responses are consumed without
+      another host call;
+- [x] an unresolved explicitly retryable evidence call may be deliberately retried
+      once total, and an interrupted retry becomes permanently blocked;
+- [x] unresolved non-idempotent work is surfaced and never replayed;
+- [ ] retained ChangeSet transaction identity is not yet cross-linked from the
+      outer interaction record; the outer capability blocks safely and the
+      existing Rust ChangeSet journal remains authoritative;
+- [x] provider continuation state reconstructs exact tool-call correlation;
+- [x] local child-crash fixtures prove no duplicated inference, approval, or
+      capability work and zero invocation of an unresolved non-idempotent adapter;
+- [x] controlled VS Code exact-head gate passes after restarting the MCP server on
+      the bridge v9 build;
+- [ ] hosted Windows/macOS/Ubuntu exact-head gates pass.
+
+Local exact-head evidence is recorded in
+[Checkpoint 76](../decisions/checkpoints/2026-08-05-76-safe-run-continuation-local-gate.md):
+zero-warning Rust formatting and clippy, the full Rust workspace, 92/92 Node tests
+and build, 59 retained-kernel hybrid scenarios, packaged CLI smoke, direct replay
+unit proof, adversarial crash/tamper/retry fixtures, and the controlled one-call VS
+Code gate pass.
 
 ## Whole-lane exit
 

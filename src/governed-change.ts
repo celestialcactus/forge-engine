@@ -86,6 +86,7 @@ export const createGovernedChangeCapability = (
   const planner = createChangeProposalCapability(workspaceRoot, { modelInput: true });
   return {
     id: 'workspace.change.execute',
+    replaySafety: 'non_idempotent',
     async invoke(call, snapshot, signal, context): Promise<CapabilityResult> {
       if (context.basis.snapshotId !== snapshot.id || context.basis.runId.length === 0) {
         throw new Error('Governed change capability received mismatched Rust lifecycle context.');

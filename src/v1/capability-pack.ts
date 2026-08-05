@@ -23,5 +23,5 @@ export function createDeveloperEvidenceCapabilities(workspaceRoot: string): read
     createTypeScriptDiagnosticsCapability(workspaceRoot),
     createGitStatusCapability(workspaceRoot),
     createGitDiffCapability(workspaceRoot),
-  ];
+  ].map((capability) => ({ ...capability, replaySafety: 'read_only_retryable' as const }));
 }
