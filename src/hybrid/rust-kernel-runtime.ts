@@ -19,7 +19,7 @@ import type {
   WorkspaceSnapshot,
 } from '../slice0/contracts.js';
 
-export const rustKernelProtocolVersion = 'forge.kernel.bridge.v5';
+export const rustKernelProtocolVersion = 'forge.kernel.bridge.v6';
 
 
 export interface ApprovalFactsProvider {
@@ -84,17 +84,24 @@ const raceWithCancellation = async <T>(operation: Promise<T>, signal: AbortSigna
   });
 };
 
+const isExecutionUsage = (value: unknown): boolean => isObject(value)
+  && value.schemaVersion === 1
+  && ['capabilityCalls', 'inferenceTurns', 'reportedInputTokens', 'reportedOutputTokens']
+    .every((field) => Number.isSafeInteger(value[field]) && Number(value[field]) >= 0);
+
 const validateArtifact = (
   candidate: unknown,
   request: RunRequest,
   streamedEvents: readonly RunEvent[],
 ): RunArtifact => {
   if (!isObject(candidate)
-    || candidate.schemaVersion !== 3
+    || candidate.schemaVersion !== 4
     || candidate.runId !== request.runId
     || !Array.isArray(candidate.events)
     || !Array.isArray(candidate.capabilityResults)
     || !isOutcomeAssessment(candidate.outcome)
+    || !isDeepStrictEqual(candidate.executionBudget, request.executionBudget)
+    || !isExecutionUsage(candidate.executionUsage)
     || !isDeepStrictEqual(candidate.outcomeContract, request.outcomeContract)
   ) {
     throw new Error('Rust kernel returned an invalid RunArtifact envelope.');
@@ -321,6 +328,7 @@ export class RustKernelRuntime {
           snapshot: request.snapshot,
           contextBudgetBytes: request.contextBudgetBytes,
           maxTurns: request.maxTurns,
+          executionBudget: request.executionBudget,
           ...(request.outcomeContract === undefined ? {} : { outcomeContract: request.outcomeContract }),
         },
         capabilityIds: [...this.#capabilities.keys()],

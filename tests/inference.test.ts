@@ -270,10 +270,12 @@ test('runs a provider tool call and final response through the canonical Forge r
           name: 'forge_workspace_read',
           argumentsDelta: '{"path":"README.md","startLine":1,"maxLines":2}',
         };
+        yield { type: 'usage', inputTokens: 20, outputTokens: 4 };
         yield { type: 'response.completed', finishReason: 'tool_call' };
         return;
       }
       yield { type: 'text.delta', text: 'The README evidence was returned by Forge.' };
+      yield { type: 'usage', inputTokens: 30, outputTokens: 5 };
       yield { type: 'response.completed', finishReason: 'stop' };
     },
   };
@@ -311,8 +313,10 @@ test('runs a provider tool call and final response through the canonical Forge r
     type: observation.event.type,
   })), [
     { requestId: 'inference:one', provider: 'ollama', model: 'fixture-model', type: 'tool_call.delta' },
+    { requestId: 'inference:one', provider: 'ollama', model: 'fixture-model', type: 'usage' },
     { requestId: 'inference:one', provider: 'ollama', model: 'fixture-model', type: 'response.completed' },
     { requestId: 'inference:two', provider: 'ollama', model: 'fixture-model', type: 'text.delta' },
+    { requestId: 'inference:two', provider: 'ollama', model: 'fixture-model', type: 'usage' },
     { requestId: 'inference:two', provider: 'ollama', model: 'fixture-model', type: 'response.completed' },
   ]);
   assert.deepEqual(artifact.events.map((event) => event.type), [

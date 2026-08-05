@@ -9,6 +9,7 @@ pub enum RunStatus {
     Failed,
     Cancelled,
     BudgetExhausted,
+    ExecutionBudgetExhausted,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -246,6 +247,33 @@ pub struct InferenceEvidence {
     pub routing: InferenceRouting,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExecutionBudget {
+    pub schema_version: u8,
+    pub max_capability_calls: u32,
+    pub max_reported_input_tokens: u64,
+    pub max_reported_output_tokens: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExecutionUsage {
+    pub schema_version: u8,
+    pub capability_calls: u32,
+    pub inference_turns: u32,
+    pub reported_input_tokens: u64,
+    pub reported_output_tokens: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionBudgetDimension {
+    CapabilityCalls,
+    ReportedInputTokens,
+    ReportedOutputTokens,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum RunEventData {
@@ -287,6 +315,13 @@ pub enum RunEventData {
         #[serde(rename = "requiredBytes")]
         required_bytes: u64,
     },
+    #[serde(rename = "run.execution_budget_exhausted")]
+    RunExecutionBudgetExhausted {
+        dimension: ExecutionBudgetDimension,
+        limit: u64,
+        observed: u64,
+        usage: ExecutionUsage,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -308,6 +343,8 @@ pub struct RunArtifact {
     pub status: RunStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_plan: Option<ContextPlan>,
+    pub execution_budget: ExecutionBudget,
+    pub execution_usage: ExecutionUsage,
     pub capability_results: Vec<CapabilityResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference_evidence: Option<Vec<InferenceEvidence>>,
@@ -327,6 +364,7 @@ pub struct RunRequest {
     pub snapshot: WorkspaceSnapshot,
     pub context_budget_bytes: u64,
     pub max_turns: u32,
+    pub execution_budget: ExecutionBudget,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outcome_contract: Option<OutcomeContract>,
 }

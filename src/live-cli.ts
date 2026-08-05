@@ -97,8 +97,14 @@ export class LiveCliPresenter {
       this.#status('run cancelled: ' + event.reason);
     } else if (event.type === 'run.budget_exhausted') {
       this.#status(
-        'run budget exhausted: required=' + event.requiredBytes
+        'context budget exhausted: required=' + event.requiredBytes
         + ' budget=' + event.plan.budgetBytes,
+      );
+    } else if (event.type === 'run.execution_budget_exhausted') {
+      this.#status(
+        'execution budget exhausted: ' + event.dimension
+        + ' observed=' + event.observed
+        + ' limit=' + event.limit,
       );
     }
   }
@@ -128,6 +134,12 @@ export class LiveCliPresenter {
       '  snapshot=' + artifact.snapshot.id + ' files=' + artifact.snapshot.files.length,
       '  context selected=' + selected + ' omitted=' + omitted,
       '  inference turns=' + inference.length + ' tokens ' + tokenSummary,
+      '  execution capabilities=' + artifact.executionUsage.capabilityCalls
+        + '/' + artifact.executionBudget.maxCapabilityCalls
+        + ' reportedTokens=' + artifact.executionUsage.reportedInputTokens
+        + '/' + artifact.executionBudget.maxReportedInputTokens
+        + '+' + artifact.executionUsage.reportedOutputTokens
+        + '/' + artifact.executionBudget.maxReportedOutputTokens,
       '  capabilities success=' + successfulCapabilities + ' failed=' + failedCapabilities,
       '  events=' + artifact.events.length + ' outputCharacters=' + outputCharacters,
       '',

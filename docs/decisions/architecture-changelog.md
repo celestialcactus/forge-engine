@@ -1,3 +1,46 @@
+# 2026-08-05 - Rust-owned execution budgets accepted
+
+- Closed the two remaining 5B gates without broadening the implementation. A
+  conservative credentialed `openai/gpt-5.6` request completed under one turn,
+  zero capability calls, and explicit reported-token ceilings with exact expected
+  output. The run recorded 768 input and 12 output tokens.
+- In a trusted fresh VS Code Agent chat with exactly seven Forge tools selected,
+  Copilot made one `Forge Workspace Summary` call and no built-in call. It
+  preserved the run/snapshot IDs, `outcome.status=verified`,
+  `runStatus=completed`, and all seven ordered events.
+- Accepted 5B at implementation `3f2774b`. Product policy posture and embedded
+  host callback conformance remain 5C; outer-run recovery, native packaging,
+  licensing, and OS containment are still open.
+- See [Checkpoint 70](checkpoints/2026-08-05-70-execution-budget-openai-and-vscode-acceptance.md).
+
+# 2026-08-05 - Rust-owned execution budgets reach the local gate
+
+- Implemented [ADR-0027](ADRs/ADR-0027-rust-owned-execution-budgets.md):
+  RunArtifact v4 and `forge.kernel.bridge.v6` now carry a versioned execution
+  budget and exact admitted usage. Rust checks capability admission before policy
+  or invocation, stops continuation after cumulative reported token usage crosses
+  a ceiling, fails closed when reported usage is unavailable, and validates the
+  direct-caller turn bound. Context exhaustion remains a separate state.
+- The product defaults require no added startup ceremony and can be overridden
+  with explicit capability/input/output ceiling flags. Documentation states that
+  reported-token ceilings are post-response continuation controls, not provider
+  transport or billing caps.
+- Local typecheck, 86/86 tests, production build, Rust formatting, and dependency
+  audit pass. A fresh advisory refresh exposed five MCP-tree findings; the locked
+  MCP SDK/transitive graph was updated and the clean-install audit returned zero.
+  The workstation lacks the MSVC linker, so native Rust correctness is
+  explicitly pending hosted Windows/macOS/Ubuntu acceptance rather than inferred
+  from TypeScript. See [Checkpoint 68](checkpoints/2026-08-05-68-execution-budget-local-gate.md).
+- Exact implementation `3f2774b` passes hosted Node Windows/macOS and full hybrid
+  Windows/macOS/Ubuntu. The retained Windows kernel passes product doctor/smoke,
+  live Qwen 7B one-read evidence, and a Qwen 0.5B tiny-budget termination. The
+  OpenAI credential is not inherited by this process and VS Code opened the new
+  worktree in Restricted Mode, so both gates remain explicitly pending. See
+  [Checkpoint 69](checkpoints/2026-08-05-69-execution-budget-hosted-and-live-qwen-gate.md).
+- Added the source-backed [CLI harness comparison](../audit/2026-08-05-cli-harness-core-comparison.md).
+  Forge is calibrated as a credible narrow evidence/transaction core, not a mature
+  product peer. The alpha critical path is 5B acceptance, 5C policy UX, minimum
+  outer-run recovery, native packaging/license, and a developer test kit.
 # 2026-08-04 - Approval cancellation hardening accepted
 
 - Merged accepted Rust-owned governed lifecycle convergence through PR #20; remote

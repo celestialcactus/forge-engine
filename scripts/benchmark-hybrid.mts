@@ -3,7 +3,7 @@ import { performance } from 'node:perf_hooks';
 import { resolve } from 'node:path';
 import { RustKernelRuntime } from '../src/hybrid/rust-kernel-runtime.js';
 import type { ApprovalFacts, CapabilityCall } from '../src/slice0/contracts.js';
-import { allowAll, ScriptedPlanner, slice0Workspace, workspaceInventory } from '../src/slice0/fixtures.js';
+import { allowAll, fixtureExecutionBudget, ScriptedPlanner, slice0Workspace, workspaceInventory } from '../src/slice0/fixtures.js';
 import { TypeScriptConformanceRuntime, type TypeScriptConformanceRuntimeOptions } from '../src/slice0/runtime.js';
 
 const samples = Number(process.env.FORGE_BENCHMARK_SAMPLES ?? '30');
@@ -51,6 +51,7 @@ const request = (index: number) => ({
   snapshot: slice0Workspace,
   contextBudgetBytes: 200,
   maxTurns: 2,
+  executionBudget: fixtureExecutionBudget,
 });
 
 const measure = async (operation: () => Promise<unknown>): Promise<number> => {

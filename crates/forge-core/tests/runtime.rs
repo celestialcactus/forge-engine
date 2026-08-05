@@ -4,11 +4,12 @@ use std::rc::Rc;
 
 use forge_core::{
     ApprovalDecision, ApprovalOutcome, ApprovalPolicy, Cancellation, CapabilityAdapter,
-    CapabilityCall, CapabilityContext, CapabilityEvidence, CapabilityResult, InferenceCost,
-    InferenceCostStatus, InferenceEvidence, InferenceFinishReason, InferenceLocality,
-    InferenceRouting, InferenceUsage, NoCancellation, NoopEventSink, OutcomeContract,
-    OutcomeRequirement, OutcomeStatus, PlannerRequest, PlannerTurn, RunRequest, RunStatus,
-    RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceFile, WorkspaceSnapshot,
+    CapabilityCall, CapabilityContext, CapabilityEvidence, CapabilityResult, ExecutionBudget,
+    ExecutionBudgetDimension, InferenceCost, InferenceCostStatus, InferenceEvidence,
+    InferenceFinishReason, InferenceLocality, InferenceRouting, InferenceUsage, NoCancellation,
+    NoopEventSink, OutcomeContract, OutcomeRequirement, OutcomeStatus, PlannerRequest, PlannerTurn,
+    RunRequest, RunStatus, RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceFile,
+    WorkspaceSnapshot,
 };
 use serde_json::json;
 
@@ -40,6 +41,12 @@ fn request(run_id: &str) -> RunRequest {
         snapshot: workspace(),
         context_budget_bytes: 200,
         max_turns: 2,
+        execution_budget: ExecutionBudget {
+            schema_version: 1,
+            max_capability_calls: 6,
+            max_reported_input_tokens: 262_144,
+            max_reported_output_tokens: 32_768,
+        },
         outcome_contract: None,
     }
 }
@@ -303,7 +310,7 @@ fn produces_the_slice_zero_golden_trace() {
         &mut FixtureCapabilities::inventory(),
         &NoCancellation,
     );
-    assert_eq!(artifact.schema_version, 3);
+    assert_eq!(artifact.schema_version, 4);
     assert_eq!(artifact.status, RunStatus::Completed);
     assert_eq!(artifact.outcome.status, OutcomeStatus::NotEvaluated);
     assert_eq!(artifact.output.as_deref(), Some("Workspace inspected."));
@@ -883,4 +890,216 @@ fn reports_turn_exhaustion() {
     );
     assert_eq!(artifact.status, RunStatus::Failed);
     assert!(artifact.events.iter().any(|event| matches!(event.data, forge_core::RunEventData::RunFailed { ref code, .. } if code == "turn_limit")));
+}
+
+fn measured_inference(input_tokens: Option<u64>, output_tokens: Option<u64>) -> InferenceEvidence {
+    InferenceEvidence {
+        schema_version: 1,
+        request_id: "inference:budget-fixture".to_owned(),
+        provider: "ollama".to_owned(),
+        locality: InferenceLocality::Local,
+        model: "fixture-model".to_owned(),
+        finish_reason: InferenceFinishReason::Stop,
+        duration_ms: 10,
+        output_characters: 4,
+        tool_call_count: 0,
+        usage: InferenceUsage {
+            input_tokens,
+            output_tokens,
+        },
+        cost: InferenceCost {
+            status: InferenceCostStatus::NotApplicable,
+            amount_usd: None,
+        },
+        routing: InferenceRouting {
+            requested_provider: "ollama".to_owned(),
+            selected_provider: "ollama".to_owned(),
+            requested_model: "fixture-model".to_owned(),
+            selected_model: "fixture-model".to_owned(),
+            fallback_used: false,
+        },
+    }
+}
+
+#[test]
+fn stops_before_crossing_the_independent_capability_budget() {
+    let mut limited = request("capability-budget-run");
+    limited.max_turns = 3;
+    limited.execution_budget.max_capability_calls = 1;
+    let mut planner = ScriptedPlanner {
+        turns: VecDeque::from([
+            PlannerTurn::Call {
+                call: inspect_call(),
+                inference: None,
+            },
+            PlannerTurn::Call {
+                call: CapabilityCall {
+                    id: "call-2".to_owned(),
+                    ..inspect_call()
+                },
+                inference: None,
+            },
+        ]),
+    };
+    let artifact = run(
+        limited,
+        &mut planner,
+        &mut allow(),
+        &mut FixtureCapabilities::inventory(),
+        &NoCancellation,
+    );
+    assert_eq!(artifact.status, RunStatus::ExecutionBudgetExhausted);
+    assert_eq!(artifact.capability_results.len(), 1);
+    assert_eq!(artifact.execution_usage.capability_calls, 1);
+    assert!(matches!(
+        artifact.events.last().map(|event| &event.data),
+        Some(forge_core::RunEventData::RunExecutionBudgetExhausted {
+            dimension: ExecutionBudgetDimension::CapabilityCalls,
+            limit: 1,
+            observed: 2,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn allows_exact_reported_tokens_and_stops_after_a_crossing_response() {
+    let mut exact_request = request("token-budget-exact");
+    exact_request.max_turns = 1;
+    exact_request.execution_budget.max_reported_input_tokens = 12;
+    exact_request.execution_budget.max_reported_output_tokens = 3;
+    let exact = run(
+        exact_request,
+        &mut ScriptedPlanner {
+            turns: VecDeque::from([PlannerTurn::Complete {
+                output: "Done".to_owned(),
+                inference: Some(measured_inference(Some(12), Some(3))),
+            }]),
+        },
+        &mut allow(),
+        &mut FixtureCapabilities::inventory(),
+        &NoCancellation,
+    );
+    assert_eq!(exact.status, RunStatus::Completed);
+    assert_eq!(exact.execution_usage.reported_input_tokens, 12);
+    assert_eq!(exact.execution_usage.reported_output_tokens, 3);
+
+    let mut crossed_request = request("token-budget-crossed");
+    crossed_request.max_turns = 1;
+    crossed_request.execution_budget.max_reported_input_tokens = 11;
+    let crossed = run(
+        crossed_request,
+        &mut ScriptedPlanner {
+            turns: VecDeque::from([PlannerTurn::Complete {
+                output: "Done".to_owned(),
+                inference: Some(measured_inference(Some(12), Some(3))),
+            }]),
+        },
+        &mut allow(),
+        &mut FixtureCapabilities::inventory(),
+        &NoCancellation,
+    );
+    assert_eq!(crossed.status, RunStatus::ExecutionBudgetExhausted);
+    assert!(crossed.output.is_none());
+    assert!(matches!(
+        crossed.events.last().map(|event| &event.data),
+        Some(forge_core::RunEventData::RunExecutionBudgetExhausted {
+            dimension: ExecutionBudgetDimension::ReportedInputTokens,
+            limit: 11,
+            observed: 12,
+            ..
+        })
+    ));
+
+    let mut output_crossed_request = request("output-token-budget-crossed");
+    output_crossed_request.max_turns = 1;
+    output_crossed_request
+        .execution_budget
+        .max_reported_output_tokens = 2;
+    let output_crossed = run(
+        output_crossed_request,
+        &mut ScriptedPlanner {
+            turns: VecDeque::from([PlannerTurn::Complete {
+                output: "Done".to_owned(),
+                inference: Some(measured_inference(Some(12), Some(3))),
+            }]),
+        },
+        &mut allow(),
+        &mut FixtureCapabilities::inventory(),
+        &NoCancellation,
+    );
+    assert_eq!(output_crossed.status, RunStatus::ExecutionBudgetExhausted);
+    assert!(matches!(
+        output_crossed.events.last().map(|event| &event.data),
+        Some(forge_core::RunEventData::RunExecutionBudgetExhausted {
+            dimension: ExecutionBudgetDimension::ReportedOutputTokens,
+            limit: 2,
+            observed: 3,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn fails_closed_when_reported_token_usage_is_unavailable() {
+    let mut limited = request("token-usage-missing");
+    limited.max_turns = 1;
+    let artifact = run(
+        limited,
+        &mut ScriptedPlanner {
+            turns: VecDeque::from([PlannerTurn::Complete {
+                output: "Done".to_owned(),
+                inference: Some(measured_inference(None, Some(3))),
+            }]),
+        },
+        &mut allow(),
+        &mut FixtureCapabilities::inventory(),
+        &NoCancellation,
+    );
+    assert_eq!(artifact.status, RunStatus::Failed);
+    assert_eq!(artifact.execution_usage.inference_turns, 1);
+    assert!(matches!(
+        artifact.events.last().map(|event| &event.data),
+        Some(forge_core::RunEventData::RunFailed { code, .. })
+            if code == "inference_usage_unavailable"
+    ));
+}
+
+#[test]
+fn rejects_an_unsupported_execution_budget_before_planning() {
+    let mut invalid = request("invalid-execution-budget");
+    invalid.execution_budget.schema_version = 2;
+    let artifact = run(
+        invalid,
+        &mut ScriptedPlanner::successful(),
+        &mut allow(),
+        &mut FixtureCapabilities::inventory(),
+        &NoCancellation,
+    );
+    assert_eq!(artifact.status, RunStatus::Failed);
+    assert_eq!(artifact.events.len(), 2);
+    assert!(matches!(
+        artifact.events.last().map(|event| &event.data),
+        Some(forge_core::RunEventData::RunFailed { code, .. })
+            if code == "invalid_execution_budget"
+    ));
+}
+
+#[test]
+fn rejects_a_direct_caller_turn_bound_outside_the_kernel_contract() {
+    let mut invalid = request("invalid-turn-limit");
+    invalid.max_turns = 0;
+    let artifact = run(
+        invalid,
+        &mut ScriptedPlanner::successful(),
+        &mut allow(),
+        &mut FixtureCapabilities::inventory(),
+        &NoCancellation,
+    );
+    assert_eq!(artifact.status, RunStatus::Failed);
+    assert!(matches!(
+        artifact.events.last().map(|event| &event.data),
+        Some(forge_core::RunEventData::RunFailed { code, .. })
+            if code == "invalid_turn_limit"
+    ));
 }

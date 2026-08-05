@@ -2,7 +2,7 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
-**Last groomed:** 2026-08-04 after approval-cancellation hosted, live, and VS Code acceptance
+**Last groomed:** 2026-08-05 after full execution-budget acceptance
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
 
@@ -173,19 +173,26 @@ broader V1 slices remain authoritative capability goals.
    **Exit:** a representative change is proposed, reviewed, verified, accepted or
    discarded, and fully attributed without generic raw powers; unsupported claims
    cannot silently inherit an accepted verification state.
-5. **Approval and control - active on `feature/cli-approval-control`.** Visible
-   allow/ask/deny, approval callbacks, cancellation, timeouts, iteration/tool
-   budgets, and honest execution posture. Increment 5A makes both governed-change
-   approval waits cancellation-safe without changing the Rust protocol or MCP
-   surface. Increment 5A is accepted at implementation `ae746ff` after 81 local
-   tests, hosted Node Windows/macOS, hosted hybrid Windows/macOS/Ubuntu, two live
-   Windows Qwen cancellation gates, and a controlled one-call seven-tool VS Code
-   regression. Independent Rust-owned capability and inference-usage budgets remain
-   5B, followed by explicit product policy/host
-   callback conformance in 5C. See
-   [CLI ship lane 5](../tasks/SLICE-CLI5-approval-control.md),
+5. **Approval and control - 5A and 5B accepted; 5C open.** Visible
+   allow/ask/deny, approval callbacks,
+   cancellation, timeouts, iteration/tool budgets, and honest execution posture.
+   Increment 5A is accepted at implementation `ae746ff` after 81 local tests,
+   hosted Node Windows/macOS, hosted hybrid Windows/macOS/Ubuntu, two live Windows
+   Qwen cancellation gates, and a controlled one-call seven-tool VS Code
+   regression. Increment 5B now adds RunArtifact v4, bridge v6, Rust-owned
+   pre-admission capability ceilings, cumulative provider-reported input/output
+   ceilings, exact usage counters, fail-closed missing usage, and direct-kernel
+   turn validation. The local typecheck, 86-test suite, build, fmt, and dependency
+   audit pass. Exact commit `3f2774b` passes hosted Rust/hybrid Windows/macOS/Ubuntu
+   plus live Qwen normal and tiny-budget gates. A conservative credentialed OpenAI
+   call and a one-call, seven-tool controlled VS Code regression also pass.
+   Explicit product policy/host callback conformance remains 5C.
+   See [CLI ship lane 5](../tasks/SLICE-CLI5-approval-control.md),
    [ADR-0026](../decisions/ADRs/ADR-0026-cancellation-safe-approval-callbacks.md),
-   and [Checkpoint 67](../decisions/checkpoints/2026-08-04-67-approval-cancellation-local-gate.md).
+   [ADR-0027](../decisions/ADRs/ADR-0027-rust-owned-execution-budgets.md),
+   [Checkpoint 68](../decisions/checkpoints/2026-08-05-68-execution-budget-local-gate.md),
+   [Checkpoint 69](../decisions/checkpoints/2026-08-05-69-execution-budget-hosted-and-live-qwen-gate.md),
+   and [Checkpoint 70](../decisions/checkpoints/2026-08-05-70-execution-budget-openai-and-vscode-acceptance.md).
    **Exit:** denial, cancellation, timeout, and exhaustion are deterministic and
    recoverable through CLI and embedded-host fixtures.
 6. **Recovery state.** Append-oriented local events/artifacts, idempotency and
@@ -437,14 +444,20 @@ license rather than being inferred from package metadata.
 
 ## Core completion and delivery forecast
 
-**Forecast date:** 2026-08-04. Completion is measured by accepted behavioral gates,
+**Forecast date:** 2026-08-05. Completion is measured by accepted behavioral gates,
 not source volume or the number of abstractions present.
 
-| Scope | Estimated complete | Remaining critical path |
-| --- | ---: | --- |
-| Core runtime and dependable local change machinery | 93% | The active-run governed edit lifecycle and cancellation-safe approvals are accepted. Independent call/usage budgets, policy-profile/host-callback conformance, and run-level recovery remain core gates; OS containment is a separately labeled hardening program. |
-| Shippable standalone CLI alpha | 83% | Live Qwen/OpenAI, interactive outcome authority, verified edit composition, hosted cross-platform, and controlled VS Code gates pass. Budgets, policy UX, recovery, native packaging, clean-install/update smoke, and the root license remain open. |
-| Broader V1 platform | 28% | Context quality gates, durable projections, reviewed skills/memory, symmetric host integrations, restricted execution, connectors, and release hardening. |
+| Gate group | State | Evidence or open condition |
+| --- | --- | --- |
+| Canonical runtime, real inference/live loop, governed change, cancellation-safe approvals | Accepted on `develop` through 5A | Cross-platform hosted, live-provider, and controlled VS Code evidence is recorded by the linked checkpoints. |
+| 5B execution controls | Accepted on feature commit `3f2774b` | Local, hosted Windows/macOS/Ubuntu, live Qwen, conservative credentialed OpenAI, and one-call controlled VS Code gates pass. See Checkpoints 68-70. |
+| 5C policy posture and host callback conformance | Open | Must remain a small profile over the existing Rust fact/decision contract. |
+| Minimum outer-run recovery | Open | Append canonical events/artifact and resume without replaying completed non-idempotent work. Durable ChangeSet recovery alone is insufficient. |
+| Installable developer alpha | Open | Bundle the native kernel for clean Windows/macOS install/update, resolve the root license, publish effective config/doctor guidance, and ship the developer test kit. |
+| Broader V1 platform | Deferred | Context compiler, skills/memory, MCP client/mutation symmetry, connectors, automation, generalized UI, and restricted execution retain their roadmap gates. |
+
+Percent-complete figures are intentionally not used. They hid the difference
+between many finished internal tests and a few still-blocking product gates.
 
 Assuming one focused implementation lane, working hosted CI, and no material scope
 expansion, the current planning ranges are:
@@ -457,14 +470,21 @@ expansion, the current planning ranges are:
 - 4B-2 interactive edit composition: **accepted at implementation `bbf119e` with hosted Windows/macOS/Ubuntu, a full promoted Qwen flow, and controlled one-call VS Code evidence**;
 - 4B-3 Rust-owned lifecycle convergence: **accepted at implementation `1cc1e3f` after exact-head hosted Windows/macOS/Ubuntu, an exact-kernel live Qwen promoted transaction, and a controlled one-call seven-tool VS Code gate; merged through PR #20 at `2ff5669`**;
 - 5A cancellation-safe approvals: **accepted at implementation `ae746ff` after local 81-test/build, hosted Windows/macOS/Ubuntu, two live Qwen timeout/no-mutation gates, and a controlled one-call seven-tool VS Code gate**;
-- shippable standalone CLI alpha: **3–5 weeks**;
+- 5B Rust-owned execution budgets: **accepted at implementation `3f2774b` after local 86-test/build/audit, hosted Windows/macOS/Ubuntu, live Qwen normal and tiny-budget gates, conservative credentialed OpenAI, and a controlled one-call seven-tool VS Code gate**;
+- shippable standalone CLI alpha: **2-4 focused weeks from 2026-08-05**, contingent on fast license resolution and keeping OS sandboxing outside the trusted-alpha gate;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
+
+The source-backed
+[CLI harness comparison](../audit/2026-08-05-cli-harness-core-comparison.md)
+calibrates Forge as a strong narrow evidence/transaction core rather than a mature
+CLI peer. It fixes the immediate post-5B order at 5C policy UX, minimum outer-run
+recovery, clean native packaging/license, and the developer alpha test kit.
 
 These are ranges, not promises. Host key provisioning, Windows/macOS containment
 mechanics, packaging/signing, or new boundary requirements move the dates. Every accepted
 checkpoint must update the completed gates and forecast rather than silently
-preserving an obsolete percentage.
+claiming progress from implementation volume.
 ## Confidence and decision gates
 
 The scores are the initial planning confidence that each scope could be built

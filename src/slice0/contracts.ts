@@ -4,7 +4,13 @@
  * Event sequence is a logical clock, rather than wall time, so a fixture run can
  * be compared byte-for-byte across hosts. Hosts may attach timestamps externally.
  */
-export type RunStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'budget_exhausted';
+export type RunStatus =
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'budget_exhausted'
+  | 'execution_budget_exhausted';
 export type ApprovalOutcome = 'allow' | 'ask' | 'deny';
 export type OutcomeStatus = 'not_evaluated' | 'verified' | 'unmet';
 
@@ -145,6 +151,31 @@ export interface InferenceEvidence {
   };
 }
 
+/**
+ * Rust-authoritative execution ceilings. Token ceilings apply to cumulative
+ * provider-reported usage and stop continuation after the response that crosses
+ * a ceiling; they are not a transport-level promise about that response.
+ */
+export interface ExecutionBudget {
+  readonly schemaVersion: 1;
+  readonly maxCapabilityCalls: number;
+  readonly maxReportedInputTokens: number;
+  readonly maxReportedOutputTokens: number;
+}
+
+export interface ExecutionUsage {
+  readonly schemaVersion: 1;
+  readonly capabilityCalls: number;
+  readonly inferenceTurns: number;
+  readonly reportedInputTokens: number;
+  readonly reportedOutputTokens: number;
+}
+
+export type ExecutionBudgetDimension =
+  | 'capability_calls'
+  | 'reported_input_tokens'
+  | 'reported_output_tokens';
+
 export type RunEventData =
   | { readonly type: 'run.started'; readonly task: string; readonly snapshotId: string }
   | { readonly type: 'context.planned'; readonly plan: ContextPlan }
@@ -156,7 +187,14 @@ export type RunEventData =
   | { readonly type: 'run.completed'; readonly output: string }
   | { readonly type: 'run.failed'; readonly code: string; readonly message: string }
   | { readonly type: 'run.cancelled'; readonly reason: string }
-  | { readonly type: 'run.budget_exhausted'; readonly plan: ContextPlan; readonly requiredBytes: number };
+  | { readonly type: 'run.budget_exhausted'; readonly plan: ContextPlan; readonly requiredBytes: number }
+  | {
+      readonly type: 'run.execution_budget_exhausted';
+      readonly dimension: ExecutionBudgetDimension;
+      readonly limit: number;
+      readonly observed: number;
+      readonly usage: ExecutionUsage;
+    };
 
 export type RunEvent = RunEventData & {
   readonly runId: string;
@@ -164,12 +202,14 @@ export type RunEvent = RunEventData & {
 };
 
 export interface RunArtifact {
-  readonly schemaVersion: 3;
+  readonly schemaVersion: 4;
   readonly runId: string;
   readonly task: string;
   readonly snapshot: WorkspaceSnapshot;
   readonly status: RunStatus;
   readonly contextPlan?: ContextPlan;
+  readonly executionBudget: ExecutionBudget;
+  readonly executionUsage: ExecutionUsage;
   readonly capabilityResults: readonly CapabilityResult[];
   readonly inferenceEvidence?: readonly InferenceEvidence[];
   readonly outcomeContract?: OutcomeContract;
@@ -184,6 +224,7 @@ export interface RunRequest {
   readonly snapshot: WorkspaceSnapshot;
   readonly contextBudgetBytes: number;
   readonly maxTurns: number;
+  readonly executionBudget: ExecutionBudget;
   readonly outcomeContract?: OutcomeContract;
   readonly signal?: AbortSignal;
 }

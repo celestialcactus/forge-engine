@@ -1,8 +1,8 @@
 # CLI ship lane 5: approval and control
 
-**Status:** active; increment 5A accepted at `ae746ff`, increments 5B and 5C open
-**Branch:** `feature/cli-approval-control`
-**Base:** merged `develop` at `2ff5669` (PR #20)
+**Status:** active; 5A and 5B accepted, 5C open
+**Branch:** `feature/cli-execution-budgets`
+**Base:** merged `develop` at `2a5fe3e` (PR #21)
 
 ## Objective
 
@@ -61,10 +61,41 @@ IDE mutation or approval surface.
 
 ## Increment 5B: Rust-owned execution budgets
 
-Add a versioned control contract rather than more CLI-only flags. Rust must own an
-independent capability-call budget and bounded reported inference usage. Exhaustion
-must have a deterministic terminal status/event, exact counters, and Rust/TypeScript
-parity. Context byte exhaustion remains distinct from execution-control exhaustion.
+[ADR-0027](../decisions/ADRs/ADR-0027-rust-owned-execution-budgets.md)
+defines a versioned budget and usage contract in the canonical run. `RunArtifact`
+v4 and bridge v6 carry exact admitted call and reported token counters. Rust checks
+capability admission before approval/invocation and stops continuation after an
+inference response crosses a reported-usage ceiling. Missing usage fails closed.
+Context byte exhaustion remains a separate status/event.
+
+The product defaults require no extra setup: six capability calls, 262,144
+cumulative reported input tokens, 32,768 cumulative reported output tokens, and the
+existing eight-turn default. Optional CLI overrides are explicit. Token ceilings
+are documented as post-response continuation controls; transport-level output caps
+remain separate.
+
+### 5B exit gate
+
+- [x] RunArtifact v4 and `forge.kernel.bridge.v6` carry the exact budget/usage;
+- [x] capability over-limit stops before policy and capability adapters;
+- [x] exact token equality completes and crossing usage terminates distinctly;
+- [x] missing provider usage fails closed instead of being estimated as zero;
+- [x] Rust validates the existing 1–32 turn bound for direct bridge callers;
+- [x] TypeScript typecheck, 86/86 tests, build, fmt, and audit pass locally;
+- [x] Rust/TypeScript hybrid parity fixtures cover the new terminal paths;
+- [x] hosted Rust fmt/clippy/test/build and hybrid parity pass on Windows/macOS/Ubuntu at `3f2774b`;
+- [x] live Qwen 7B normal and Qwen 0.5B tiny-budget gates pass against the exact hosted Windows kernel;
+- [x] conservative credentialed OpenAI normal gate passes;
+- [x] controlled VS Code still exposes exactly seven read-only Forge tools and
+      completes the one-call summary regression without a built-in tool.
+
+Local evidence and the missing local MSVC linker are recorded in
+[Checkpoint 68](../decisions/checkpoints/2026-08-05-68-execution-budget-local-gate.md).
+Hosted and live Qwen evidence is recorded in
+[Checkpoint 69](../decisions/checkpoints/2026-08-05-69-execution-budget-hosted-and-live-qwen-gate.md).
+Credentialed OpenAI and controlled VS Code acceptance is recorded in
+[Checkpoint 70](../decisions/checkpoints/2026-08-05-70-execution-budget-openai-and-vscode-acceptance.md).
+All 5B gates are closed; 5C is the only open increment in this lane.
 
 ## Increment 5C: policy posture and host callback conformance
 

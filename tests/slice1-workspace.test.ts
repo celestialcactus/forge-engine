@@ -172,7 +172,7 @@ test('runs real workspace inventory through the accepted Forge run contract', as
   const artifact = await new ForgeWorkspaceService(fixtureRoot, { runtime: typeScriptConformanceFixture }).inspect(1);
   const payload = artifactPayload(artifact);
   const evidence = payload.evidence as { totalFiles: number; files: unknown[]; truncated: boolean };
-  assert.equal(artifact.schemaVersion, 3);
+  assert.equal(artifact.schemaVersion, 4);
   assert.equal(artifact.status, 'completed');
   assert.equal(artifact.outcome.status, 'verified');
   assert.equal(artifact.outcomeContract?.requirements.length, 2);

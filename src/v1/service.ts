@@ -4,6 +4,7 @@ import type {
   Capability,
   CapabilityCall,
   CapabilityResult,
+  ExecutionBudget,
   OutcomeContract,
   PlannerRequest,
   PlannerTurn,
@@ -155,9 +156,17 @@ export interface GitDiffOptions {
   readonly maxBytes?: number;
 }
 
+export const defaultExecutionBudget = {
+  schemaVersion: 1,
+  maxCapabilityCalls: 6,
+  maxReportedInputTokens: 262_144,
+  maxReportedOutputTokens: 32_768,
+} as const satisfies ExecutionBudget;
+
 export interface ExecuteTaskOptions {
   readonly contextBudgetBytes?: number;
   readonly maxTurns?: number;
+  readonly executionBudget?: ExecutionBudget;
   readonly outcomeContract?: OutcomeContract;
   readonly onEvent?: (event: RunEvent) => void;
 }
@@ -333,11 +342,27 @@ export class ForgeWorkspaceService {
     if (task.trim().length === 0) throw new Error('A Forge task must not be empty.');
     const contextBudgetBytes = options.contextBudgetBytes ?? 65_536;
     const maxTurns = options.maxTurns ?? 8;
+    const executionBudget = options.executionBudget ?? defaultExecutionBudget;
     if (!Number.isInteger(contextBudgetBytes) || contextBudgetBytes < 1 || contextBudgetBytes > 1_048_576) {
       throw new Error('contextBudgetBytes must be an integer from 1 to 1048576.');
     }
     if (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > 32) {
       throw new Error('maxTurns must be an integer from 1 to 32.');
+    }
+    if (executionBudget.schemaVersion !== 1) {
+      throw new Error('executionBudget schemaVersion must be 1.');
+    }
+    if (!Number.isInteger(executionBudget.maxCapabilityCalls)
+      || executionBudget.maxCapabilityCalls < 0
+      || executionBudget.maxCapabilityCalls > 64
+    ) throw new Error('maxCapabilityCalls must be an integer from 0 to 64.');
+    for (const [label, value] of [
+      ['maxReportedInputTokens', executionBudget.maxReportedInputTokens],
+      ['maxReportedOutputTokens', executionBudget.maxReportedOutputTokens],
+    ] as const) {
+      if (!Number.isSafeInteger(value) || value < 0 || value > 1_000_000_000_000) {
+        throw new Error(`${label} must be an integer from 0 to 1000000000000.`);
+      }
     }
     return this.#runPlanner(
       task,
@@ -345,6 +370,7 @@ export class ForgeWorkspaceService {
       capabilities,
       contextBudgetBytes,
       maxTurns,
+      executionBudget,
       options.outcomeContract,
       signal,
       options.onEvent,
@@ -367,7 +393,16 @@ export class ForgeWorkspaceService {
         { id: 'output-present', kind: 'output_non_empty' },
       ],
     };
-    return this.#runPlanner(task, planner, [capability], 65_536, 2, outcomeContract, signal);
+    return this.#runPlanner(
+      task,
+      planner,
+      [capability],
+      65_536,
+      2,
+      defaultExecutionBudget,
+      outcomeContract,
+      signal,
+    );
   }
 
   async #runPlanner(
@@ -376,6 +411,7 @@ export class ForgeWorkspaceService {
     capabilities: readonly Capability[],
     contextBudgetBytes: number,
     maxTurns: number,
+    executionBudget: ExecutionBudget,
     outcomeContract?: OutcomeContract,
     signal?: AbortSignal,
     onEvent?: (event: RunEvent) => void,
@@ -406,6 +442,7 @@ export class ForgeWorkspaceService {
       snapshot,
       contextBudgetBytes,
       maxTurns,
+      executionBudget,
       ...(outcomeContract === undefined ? {} : { outcomeContract }),
       ...(signal === undefined ? {} : { signal }),
     });

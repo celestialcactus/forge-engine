@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import type { ApprovalFacts, CapabilityCall, RunArtifact } from './slice0/contracts.js';
+import type { ApprovalFacts, CapabilityCall, ExecutionBudget, RunArtifact } from './slice0/contracts.js';
 import { developerEvidenceTools, developerGovernedChangeTools } from './inference/developer-tools.js';
 import { ProviderTaskPlanner } from './inference/planner.js';
 import { createInferenceProvider, resolveInferenceRoute } from './inference/routing.js';
@@ -28,7 +28,7 @@ import {
   RustSovereignChangeRuntime,
   type SovereignChangeProposal,
 } from './hybrid/rust-sovereign-change-runtime.js';
-import { artifactPayload, ForgeWorkspaceService, type ForgeWorkspaceServiceOptions } from './v1/service.js';
+import { artifactPayload, defaultExecutionBudget, ForgeWorkspaceService, type ForgeWorkspaceServiceOptions } from './v1/service.js';
 import { parseTrustedVerificationPolicy, selectVerificationCheckIds } from './verification-policy.js';
 
 const { positionals, values } = parseArgs({
@@ -49,6 +49,9 @@ const { positionals, values } = parseArgs({
     'max-diagnostics': { type: 'string' },
     'max-bytes': { type: 'string' },
     'max-turns': { type: 'string' },
+    'max-capability-calls': { type: 'string' },
+    'max-input-tokens': { type: 'string' },
+    'max-output-tokens': { type: 'string' },
     'timeout-ms': { type: 'string' },
     provider: { type: 'string' },
     model: { type: 'string' },
@@ -77,6 +80,7 @@ const executeProviderTask = async (
   task: string,
   route: InferenceRoute,
   maxTurns: number,
+  executionBudget: ExecutionBudget,
   timeoutMs: number,
   presenter?: LiveCliPresenter,
   governedChange?: GovernedChangeCapabilityOptions,
@@ -99,6 +103,7 @@ const executeProviderTask = async (
     });
     const taskOptions = {
       maxTurns,
+      executionBudget,
       ...(presenter === undefined
         ? {}
         : { onEvent: (event: RunArtifact['events'][number]) => presenter.onRunEvent(event) }),
@@ -145,6 +150,25 @@ const integerOption = (raw: string | undefined, fallback: number, name: string):
   if (!Number.isInteger(value)) throw new Error(`${name} must be an integer.`);
   return value;
 };
+
+const executionBudgetOption = (): ExecutionBudget => ({
+  schemaVersion: 1,
+  maxCapabilityCalls: integerOption(
+    values['max-capability-calls'],
+    defaultExecutionBudget.maxCapabilityCalls,
+    '--max-capability-calls',
+  ),
+  maxReportedInputTokens: integerOption(
+    values['max-input-tokens'],
+    defaultExecutionBudget.maxReportedInputTokens,
+    '--max-input-tokens',
+  ),
+  maxReportedOutputTokens: integerOption(
+    values['max-output-tokens'],
+    defaultExecutionBudget.maxReportedOutputTokens,
+    '--max-output-tokens',
+  ),
+});
 
 const readJson = async (path: string, label: string): Promise<unknown> => {
   try {
@@ -274,6 +298,7 @@ try {
       mcp: 'stdio',
       workspaceRoot,
       engineRoot: engineRoot(),
+      executionDefaults: defaultExecutionBudget,
       readOnlyFeatures: ['summary', 'search', 'read', 'symbols', 'typescript-diagnostics', 'git-status', 'git-diff'],
       changeFlow: kernelProbe?.ready === true ? 'forge.kernel.changeset.v3' : 'unavailable',
       isolation: 'trusted verification; process lifecycle owned; no Forge-enforced OS sandbox',
@@ -281,7 +306,7 @@ try {
     if (!report.ok) process.exitCode = 1;
     console.log(values.json
       ? JSON.stringify(report)
-      : `ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}\nNode: ${report.node}\nRuntime: ${report.runtime}\nKernel: ${report.kernel.path ?? report.kernel.message}\nMCP: ${report.mcp}\nChange flow: ${report.changeFlow}\nIsolation: ${report.isolation}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
+      : `ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}\nNode: ${report.node}\nRuntime: ${report.runtime}\nKernel: ${report.kernel.path ?? report.kernel.message}\nMCP: ${report.mcp}\nExecution defaults: calls=${report.executionDefaults.maxCapabilityCalls}, input=${report.executionDefaults.maxReportedInputTokens}, output=${report.executionDefaults.maxReportedOutputTokens}\nChange flow: ${report.changeFlow}\nIsolation: ${report.isolation}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
   } else if (command === 'inspect') {
     printArtifact(await workspaceService().inspect(integerOption(values['max-files'], 200, '--max-files')));
   } else if (command === 'search') {
@@ -397,6 +422,7 @@ try {
           task,
           route,
           maxTurns,
+          executionBudgetOption(),
           timeoutMs,
           presenter,
           governedChanges
@@ -421,6 +447,7 @@ try {
       task,
       route,
       integerOption(values['max-turns'], 8, '--max-turns'),
+      executionBudgetOption(),
       integerOption(values['timeout-ms'], 120_000, '--timeout-ms'),
       presenter,
     );
@@ -463,6 +490,8 @@ try {
       '  forge git-status [--json]',
       '  forge git-diff [--staged] [--json] [--max-bytes <count>]',
       '  forge run <task> --provider <ollama|openai> --model <model> [--max-turns <count>] [--timeout-ms <ms>] [--json]',
+      '    Optional ceilings: --max-capability-calls, --max-input-tokens, --max-output-tokens.',
+      '    Token ceilings stop continuation after cumulative provider-reported usage crosses the limit.',
       '    Human mode streams validated assistant text and canonical run status; --json emits one terminal artifact.',
       '  forge mcp [--workspace <path>]',
       '',

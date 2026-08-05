@@ -15,6 +15,9 @@ import type {
   CapabilityObservation,
   CapabilityResult,
   ContextPlan,
+  ExecutionBudget,
+  ExecutionBudgetDimension,
+  ExecutionUsage,
   InferenceEvidence,
   RunArtifact,
   RunEvent,
@@ -130,6 +133,23 @@ const inferenceValidationError = (turn: PlannerTurn): string | undefined => {
   return undefined;
 };
 
+const executionBudgetValidationError = (budget: ExecutionBudget): string | undefined => {
+  if (budget.schemaVersion !== 1) return 'Execution budget schemaVersion must be 1.';
+  if (!Number.isSafeInteger(budget.maxCapabilityCalls)
+    || budget.maxCapabilityCalls < 0
+    || budget.maxCapabilityCalls > 64
+  ) return 'Execution budget maxCapabilityCalls must be an integer from 0 to 64.';
+  for (const [label, value] of [
+    ['maxReportedInputTokens', budget.maxReportedInputTokens],
+    ['maxReportedOutputTokens', budget.maxReportedOutputTokens],
+  ] as const) {
+    if (!Number.isSafeInteger(value) || value < 0 || value > 1_000_000_000_000) {
+      return `Execution budget ${label} must be an integer from 0 to 1000000000000.`;
+    }
+  }
+  return undefined;
+};
+
 export interface TypeScriptConformanceRuntimeOptions {
   readonly planner: TaskPlanner;
   readonly approvalPolicy: ApprovalPolicy;
@@ -163,6 +183,10 @@ export class TypeScriptConformanceRuntime {
     const observations: CapabilityObservation[] = [];
     const attempts: OutcomeCapabilityAttempt[] = [];
     const inferenceEvidence: InferenceEvidence[] = [];
+    let capabilityCalls = 0;
+    let inferenceTurns = 0;
+    let reportedInputTokens = 0;
+    let reportedOutputTokens = 0;
     let sequence = 0;
     let status: RunStatus = 'running';
     let contextPlan: ContextPlan | undefined;
@@ -177,13 +201,23 @@ export class TypeScriptConformanceRuntime {
       this.#onEvent?.(event);
     };
 
+    const executionUsage = (): ExecutionUsage => ({
+      schemaVersion: 1,
+      capabilityCalls,
+      inferenceTurns,
+      reportedInputTokens,
+      reportedOutputTokens,
+    });
+
     const artifact = (): RunArtifact => ({
-      schemaVersion: 3,
+      schemaVersion: 4,
       runId: request.runId,
       task: request.task,
       snapshot: request.snapshot,
       status,
       ...(contextPlan === undefined ? {} : { contextPlan }),
+      executionBudget: request.executionBudget,
+      executionUsage: executionUsage(),
       capabilityResults: results,
       ...(inferenceEvidence.length === 0 ? {} : { inferenceEvidence }),
       ...(request.outcomeContract === undefined ? {} : { outcomeContract: request.outcomeContract }),
@@ -195,6 +229,21 @@ export class TypeScriptConformanceRuntime {
     try {
       signal.throwIfAborted();
       emit({ type: 'run.started', task: request.task, snapshotId: request.snapshot.id });
+      if (!Number.isSafeInteger(request.maxTurns) || request.maxTurns < 1 || request.maxTurns > 32) {
+        status = 'failed';
+        emit({
+          type: 'run.failed',
+          code: 'invalid_turn_limit',
+          message: 'Run maxTurns must be an integer from 1 to 32.',
+        });
+        return artifact();
+      }
+      const budgetError = executionBudgetValidationError(request.executionBudget);
+      if (budgetError !== undefined) {
+        status = 'failed';
+        emit({ type: 'run.failed', code: 'invalid_execution_budget', message: budgetError });
+        return artifact();
+      }
       if (request.outcomeContract !== undefined) {
         const contractError = outcomeContractError(request.outcomeContract);
         if (contractError !== undefined) {
@@ -224,7 +273,40 @@ export class TypeScriptConformanceRuntime {
         }
         if (next.inference !== undefined) {
           inferenceEvidence.push(next.inference);
+          inferenceTurns += 1;
           emit({ type: 'inference.completed', evidence: next.inference });
+          if (next.inference.usage.inputTokens === undefined || next.inference.usage.outputTokens === undefined) {
+            status = 'failed';
+            emit({
+              type: 'run.failed',
+              code: 'inference_usage_unavailable',
+              message: 'Execution token ceilings require provider-reported inputTokens and outputTokens.',
+            });
+            return artifact();
+          }
+          reportedInputTokens += next.inference.usage.inputTokens;
+          reportedOutputTokens += next.inference.usage.outputTokens;
+          const exhausted = (
+            dimension: ExecutionBudgetDimension,
+            limit: number,
+            observed: number,
+          ): RunArtifact => {
+            status = 'execution_budget_exhausted';
+            emit({
+              type: 'run.execution_budget_exhausted',
+              dimension,
+              limit,
+              observed,
+              usage: executionUsage(),
+            });
+            return artifact();
+          };
+          if (reportedInputTokens > request.executionBudget.maxReportedInputTokens) {
+            return exhausted('reported_input_tokens', request.executionBudget.maxReportedInputTokens, reportedInputTokens);
+          }
+          if (reportedOutputTokens > request.executionBudget.maxReportedOutputTokens) {
+            return exhausted('reported_output_tokens', request.executionBudget.maxReportedOutputTokens, reportedOutputTokens);
+          }
         }
         if (next.kind === 'complete') {
           output = next.output;
@@ -234,6 +316,19 @@ export class TypeScriptConformanceRuntime {
           emit({ type: 'run.completed', output });
           return artifact();
         }
+        const attemptedCapabilityCalls = capabilityCalls + 1;
+        if (attemptedCapabilityCalls > request.executionBudget.maxCapabilityCalls) {
+          status = 'execution_budget_exhausted';
+          emit({
+            type: 'run.execution_budget_exhausted',
+            dimension: 'capability_calls',
+            limit: request.executionBudget.maxCapabilityCalls,
+            observed: attemptedCapabilityCalls,
+            usage: executionUsage(),
+          });
+          return artifact();
+        }
+        capabilityCalls = attemptedCapabilityCalls;
         const result = await this.#execute(next.call, request, contextPlan, observations, signal, emit);
         attempts.push({ capabilityId: next.call.capabilityId, success: result.success });
         observations.push({ call: next.call, result });
