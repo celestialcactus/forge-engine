@@ -43,7 +43,7 @@ test('requires complete explicit defaults and does not contact discovery when th
 });
 
 test('runs repeated prompts and session controls without creating another runtime contract', async () => {
-  const inputs = ['/status', 'Inspect the workspace.', '/status', '/model ollama alternate-coder:7b', 'Inspect again.', '/clear', '/exit'];
+  const inputs = ['/status', '/permissions', 'Inspect the workspace.', '/status', '/model ollama alternate-coder:7b', 'Inspect again.', '/clear', '/exit'];
   const output: string[] = [];
   let cleared = 0;
   let closed = 0;
@@ -60,6 +60,7 @@ test('runs repeated prompts and session controls without creating another runtim
       route: { provider: 'ollama', model: 'qwen2.5-coder:7b' },
       source: 'ollama-discovery',
     },
+    approvalProfile: 'developer',
     io,
     notices: ['changes: disabled for fixture'],
     runTask: async (task, route) => {
@@ -74,6 +75,8 @@ test('runs repeated prompts and session controls without creating another runtim
   assert.equal(cleared, 1);
   assert.equal(closed, 1);
   assert.ok(output.some((line) => line.includes('Each prompt creates a new evidence run')));
+  assert.ok(output.some((line) => line.includes('approval: developer')));
+  assert.ok(output.some((line) => line.includes('governed mutations still require')));
   assert.ok(output.includes('changes: disabled for fixture'));
   assert.ok(output.some((line) => line.includes('status=completed, outcome=not_evaluated')));
   assert.ok(output.some((line) => line.includes('route changed: ollama/alternate-coder:7b (session)')));

@@ -4,6 +4,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { RustKernelRuntime, type ApprovalFactsProvider } from '../../src/hybrid/rust-kernel-runtime.js';
+import {
+  createProductApprovalFactsProvider,
+  type ProductApprovalConfiguration,
+} from '../../src/approval-profile.js';
 import type { ApprovalFacts, CapabilityCall, InferenceEvidence, RunRequest, TaskPlanner } from '../../src/slice0/contracts.js';
 import {
   allowAll,
@@ -462,6 +466,89 @@ test('Rust resolves host and user facts and fails closed at the bridge boundary'
   });
 });
 
+test('Rust remains the decision authority for product approval profiles and host callbacks', async (t) => {
+  const runWithProfile = async (
+    runId: string,
+    approval: ProductApprovalConfiguration,
+    signal?: AbortSignal,
+  ) => new RustKernelRuntime({
+    ...toRustOptions(successfulOptions()),
+    approvalFacts: createProductApprovalFactsProvider(approval),
+    kernelPath: kernelBinary,
+  }).run({ ...baseRequest(runId), ...(signal === undefined ? {} : { signal }) });
+
+  const approvalEvent = (artifact: Awaited<ReturnType<typeof runWithProfile>>) => {
+    const event = artifact.events.find((candidate) => candidate.type === 'approval.decided');
+    assert.equal(event?.type, 'approval.decided');
+    if (event?.type !== 'approval.decided') throw new Error('Expected an approval decision.');
+    return event;
+  };
+
+  await t.test('developer resolves to allow', async () => {
+    const artifact = await runWithProfile('hybrid-profile-developer', { profile: 'developer' });
+    assert.equal(approvalEvent(artifact).outcome, 'allow');
+    assert.equal(artifact.capabilityResults[0]?.success, true);
+  });
+
+  await t.test('review grant resolves to allow', async () => {
+    const artifact = await runWithProfile('hybrid-profile-review-grant', {
+      profile: 'review',
+      async requestConsent() {
+        return { status: 'granted', source: 'fixture.host', reason: 'Fixture developer granted the call.' };
+      },
+    });
+    const event = approvalEvent(artifact);
+    assert.equal(event.outcome, 'allow');
+    assert.equal(event.reason, 'Fixture developer granted the call.');
+    assert.equal(artifact.capabilityResults[0]?.success, true);
+  });
+
+  await t.test('review decline resolves to deny', async () => {
+    const artifact = await runWithProfile('hybrid-profile-review-decline', {
+      profile: 'review',
+      async requestConsent() {
+        return { status: 'declined', source: 'fixture.host', reason: 'Fixture developer declined the call.' };
+      },
+    });
+    assert.equal(approvalEvent(artifact).outcome, 'deny');
+    assert.equal(artifact.capabilityResults[0]?.success, false);
+  });
+
+  await t.test('review without a callback remains ask and does not invoke', async () => {
+    const artifact = await runWithProfile('hybrid-profile-review-unresolved', { profile: 'review' });
+    assert.equal(approvalEvent(artifact).outcome, 'ask');
+    assert.equal(artifact.capabilityResults[0]?.success, false);
+  });
+
+  await t.test('locked resolves to deny', async () => {
+    const artifact = await runWithProfile('hybrid-profile-locked', { profile: 'locked' });
+    assert.equal(approvalEvent(artifact).outcome, 'deny');
+    assert.equal(artifact.capabilityResults[0]?.success, false);
+  });
+
+  await t.test('host timeout cancels the canonical Rust run', async () => {
+    const controller = new AbortController();
+    let started = (): void => {};
+    const callbackStarted = new Promise<void>((resolveStarted) => { started = resolveStarted; });
+    const run = runWithProfile('hybrid-profile-timeout', {
+      profile: 'review',
+      requestConsent() {
+        started();
+        return new Promise<never>(() => {
+          // Deliberately non-cooperative embedded-host callback.
+        });
+      },
+    }, controller.signal);
+    await withTimeout(callbackStarted);
+    controller.abort(new Error('Fixture approval deadline expired.'));
+    const artifact = await withTimeout(run);
+    assert.equal(artifact.status, 'cancelled');
+    const terminal = artifact.events.at(-1);
+    assert.equal(terminal?.type, 'run.cancelled');
+    if (terminal?.type !== 'run.cancelled') throw new Error('Expected a terminal cancellation event.');
+    assert.equal(terminal.reason, 'Fixture approval deadline expired.');
+  });
+});
 test('Rust bridge cancellation interrupts approval-facts collection without hanging', async () => {
   const controller = new AbortController();
   let markCollectorStarted = (): void => {};

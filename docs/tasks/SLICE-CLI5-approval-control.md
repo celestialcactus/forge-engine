@@ -1,8 +1,8 @@
 # CLI ship lane 5: approval and control
 
-**Status:** active; 5A and 5B accepted, 5C open
-**Branch:** `feature/cli-execution-budgets`
-**Base:** merged `develop` at `2a5fe3e` (PR #21)
+**Status:** active; 5A and 5B accepted, 5C implemented with hosted acceptance pending
+**Branch:** `feature/cli-policy-profiles`
+**Base:** merged `develop` at `74308ca` (PR #22)
 
 ## Objective
 
@@ -27,9 +27,9 @@ than being simulated by CLI prose.
    waiting for another line even though the run signal was cancelled.
 2. `maxTurns` indirectly limits tool calls but does not express an independent
    capability-call budget or token/usage ceiling.
-3. Read-only product policy is fixed allow and governed entry policy is fixed allow;
-   user-selectable policy posture and embedded-host ask callbacks need a separate
-   product contract.
+3. The former fixed product allow mappings are removed. The new product contract
+   exposes developer/review/locked postures as facts while Rust remains the only
+   decision authority.
 4. Cancellation after a verified candidate is durable, but the outer RunArtifact is
    not yet crash-resumable. The CLI must expose the retained transaction ID while
    recovery work remains deferred.
@@ -95,7 +95,7 @@ Hosted and live Qwen evidence is recorded in
 [Checkpoint 69](../decisions/checkpoints/2026-08-05-69-execution-budget-hosted-and-live-qwen-gate.md).
 Credentialed OpenAI and controlled VS Code acceptance is recorded in
 [Checkpoint 70](../decisions/checkpoints/2026-08-05-70-execution-budget-openai-and-vscode-acceptance.md).
-All 5B gates are closed; 5C is the only open increment in this lane.
+All 5B gates are closed. 5C is implemented and remains at its exact-head hosted acceptance gate.
 
 ## Increment 5C: policy posture and host callback conformance
 
@@ -103,6 +103,38 @@ Expose a small, explicit product policy selection over the existing fact contrac
 Read-only defaults remain convenient; mutation remains ask. Embedded hosts must
 prove allow, ask-grant, ask-decline, deny, cancellation, and timeout behavior without
 inventing a second approval state machine.
+
+[ADR-0028](../decisions/ADRs/ADR-0028-product-approval-profiles.md) defines three
+explicit profiles over the existing fact boundary. `developer` supplies
+attributable allow/not-required facts, `review` requests a callback bound to the
+exact call and Rust-authored capability context, and `locked` supplies deny facts.
+An unresolved review remains `ask` and cannot invoke the capability. Governed
+changes keep their separate exact-candidate and promotion approvals.
+
+The CLI exposes the effective profile through a flag/environment setting,
+interactive startup/status, `/permissions`, help, and `doctor`. Review prompts are
+human-mode only. MCP deliberately has no terminal callback over stdio, so review
+without a future host handshake fails closed instead of corrupting transport bytes.
+
+### 5C exit gate
+
+- [x] profile parsing and developer/review/locked fact projections are bounded and
+      attributable;
+- [x] the review callback receives the exact call plus Rust-authored capability
+      context and fails closed on invalid provenance;
+- [x] cancellation settles a non-cooperative host callback;
+- [x] real-kernel parity covers allow, grant, decline, unresolved ask, deny, and
+      cancellation without a second policy evaluator;
+- [x] CLI locked denial exits nonzero and `doctor` reports effective authority;
+- [x] 91/91 Node tests, typecheck, production build, and the full 54/54 retained-
+      kernel hybrid suite pass locally;
+- [x] live Qwen 1.5B review grant and decline behavior is recorded;
+- [x] controlled VS Code retains exactly seven Forge tools and completes one
+      summary call without a built-in tool or mutation;
+- [ ] exact-head hosted Node Windows/macOS and hybrid Windows/macOS/Ubuntu pass.
+
+The local/live/VS Code evidence and the Qwen 0.5B continuation gap are recorded in
+[Checkpoint 71](../decisions/checkpoints/2026-08-05-71-policy-profile-and-host-callback-local-gate.md).
 
 ## Whole-lane exit
 

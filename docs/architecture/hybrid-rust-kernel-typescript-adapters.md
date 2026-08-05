@@ -127,6 +127,16 @@ results. Capability calls are stopped before an over-budget admission; provider
 responses are recorded before token-overage termination, so token limits control
 continuation rather than pre-empting an in-flight request.
 
+The product approval profile is an integration adapter over this same boundary,
+not another policy engine. `developer`, `review`, and `locked` select attributable
+host-policy/user-consent facts. A review callback receives the exact call plus the
+Rust-authored `CapabilityContext`; a missing callback produces unavailable consent
+and remains `ask`/no-invoke. Rust still validates, resolves, emits the decision,
+and controls invocation. MCP cannot print interactive questions over its stdio
+transport, so review without a future host handshake remains deliberately
+fail-closed. Governed ChangeSet candidate and promotion decisions bind different
+subjects and remain separate.
+
 `RunStatus.completed` records that the planner produced a valid terminal turn. It
 does not certify that the developer objective was achieved. When a caller supplies
 a valid `OutcomeContract`, Rust evaluates its deterministic requirements and emits

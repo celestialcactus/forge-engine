@@ -1,3 +1,27 @@
+# 2026-08-05 - Product approval profiles reach the local/live/VS Code gate
+
+- Implemented [ADR-0028](ADRs/ADR-0028-product-approval-profiles.md): one
+  TypeScript profile adapter now supplies attributable facts for developer,
+  review, and locked postures while Rust remains the only final approval authority.
+- Removed fixed product policy mappings from the workspace service. CLI, embedded
+  service, and MCP share the same profile module; the only TypeScript final-decision
+  mapper is explicitly test-only conformance code.
+- Added exact-context embedded review callbacks, provenance bounds, cancellation of
+  non-cooperative callbacks, visible CLI review prompts, effective `doctor` and
+  `/permissions` output, fail-closed MCP review without a host callback, and nonzero
+  evidence-command exits for denied/unmet runs.
+- Local typecheck, 91/91 tests, production build, and the complete 54/54 retained-
+  kernel hybrid suite pass. Live Qwen 1.5B grant and decline gates
+  behave safely. Qwen 0.5B exposed a malformed streamed continuation and is not
+  claimed as a general tool-use floor.
+- A trusted fresh VS Code chat with exactly seven Forge tools made one summary call
+  in four seconds, used no built-ins or mutation, and returned the complete
+  seven-event projection for `run:3a5bc81a-7f2a-49cc-b63f-9c2a7a13e0a5`.
+- Hosted exact-head Windows/macOS Node and Windows/macOS/Ubuntu hybrid checks remain
+  the final 5C acceptance gate. Minimum outer-run recovery is next; packaging,
+  license, the alpha test kit, and OS containment remain open.
+- See [Checkpoint 71](checkpoints/2026-08-05-71-policy-profile-and-host-callback-local-gate.md).
+
 # 2026-08-05 - Rust-owned execution budgets accepted
 
 - Closed the two remaining 5B gates without broadening the implementation. A
