@@ -1,5 +1,6 @@
 mod candidate_bridge;
 mod protocol;
+mod run_store_bridge;
 mod sovereign_change_bridge;
 mod transaction_bridge;
 
@@ -12,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use forge_core::{
     ApprovalDecision, ApprovalFacts, ApprovalPolicy, Cancellation, CapabilityAdapter,
     CapabilityCall, CapabilityContext, CapabilityResult, PlannerRequest, PlannerTurn, RunArtifact,
-    RunEvent, RunRequest, RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceSnapshot,
+    RunEvent, RunLedger, RunRequest, RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceSnapshot,
     resolve_approval,
 };
 use serde::Deserialize;
@@ -20,7 +21,8 @@ use serde_json::{Value, json};
 
 use crate::protocol::{
     MAX_HOST_FRAME_BYTES, MAX_START_FRAME_BYTES, PROBE_PROTOCOL_VERSION, RUN_PROTOCOL_VERSION,
-    StartDiscriminator, read_bounded_frame, send_json, send_protocol_error,
+    RUN_STORE_PROTOCOL_VERSION, StartDiscriminator, read_bounded_frame, send_json,
+    send_protocol_error,
 };
 
 #[derive(Debug, Deserialize)]
@@ -32,6 +34,7 @@ struct RunStart {
     request_id: String,
     request: RunRequest,
     capability_ids: Vec<String>,
+    run_store_root: std::path::PathBuf,
     #[serde(default)]
     initial_cancellation_reason: Option<String>,
 }
@@ -269,10 +272,14 @@ impl Cancellation for InitialCancellation {
 
 struct BridgeEventSink {
     io: Rc<RefCell<BridgeIo>>,
+    ledger: RunLedger,
 }
 
 impl forge_core::runtime::EventSink for BridgeEventSink {
     fn on_event(&mut self, event: &RunEvent) {
+        self.ledger
+            .append_event(event)
+            .expect("durable run event append must succeed before host notification");
         let mut io = self.io.borrow_mut();
         let request_id = io.request_id.clone();
         io.send(&json!({
@@ -325,6 +332,12 @@ fn execute_run(
     let request = start.request;
     let cancellation = InitialCancellation(start.initial_cancellation_reason);
     let capability_ids = start.capability_ids;
+    let ledger = RunLedger::create(
+        &start.run_store_root,
+        RUN_PROTOCOL_VERSION,
+        &request,
+        &capability_ids,
+    )?;
     let io = Rc::new(RefCell::new(BridgeIo {
         reader,
         writer,
@@ -336,7 +349,10 @@ fn execute_run(
         supported: capability_ids.into_iter().collect(),
     };
     let mut policy = BridgePolicy { io: Rc::clone(&io) };
-    let mut sink = BridgeEventSink { io: Rc::clone(&io) };
+    let mut sink = BridgeEventSink {
+        io: Rc::clone(&io),
+        ledger,
+    };
     let artifact = Slice0Runtime {
         planner: &mut planner,
         approval_policy: &mut policy,
@@ -346,6 +362,7 @@ fn execute_run(
     }
     .run(request);
 
+    sink.ledger.seal(&artifact)?;
     send_terminal(&io, &artifact)
 }
 
@@ -399,6 +416,7 @@ fn main() {
                 "protocolVersion": PROBE_PROTOCOL_VERSION,
                 "kernelVersion": env!("CARGO_PKG_VERSION"),
                 "runProtocolVersion": RUN_PROTOCOL_VERSION,
+                "runStoreProtocolVersion": RUN_STORE_PROTOCOL_VERSION,
                 "transactionProtocolVersion": protocol::TRANSACTION_PROTOCOL_VERSION,
                 "candidateProtocolVersion": protocol::CANDIDATE_PROTOCOL_VERSION,
                 "sovereignChangeProtocolVersion": protocol::SOVEREIGN_CHANGE_PROTOCOL_VERSION,
@@ -430,6 +448,22 @@ fn main() {
         if let Err(message) = execute_run(start, reader, writer) {
             eprintln!("forge-kernel failed to return terminal artifact: {message}");
             std::process::exit(3);
+        }
+        return;
+    }
+
+    if discriminator.message_type == "run_store.inspect"
+        && discriminator.protocol_version == RUN_STORE_PROTOCOL_VERSION
+    {
+        if let Err(failure) = run_store_bridge::execute(&frame, &mut writer) {
+            send_protocol_error(
+                &mut writer,
+                RUN_STORE_PROTOCOL_VERSION,
+                failure.request_id.as_deref(),
+                failure.code,
+                &failure.message,
+            );
+            std::process::exit(2);
         }
         return;
     }

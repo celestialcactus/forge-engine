@@ -13,6 +13,9 @@ const execFileAsync = promisify(execFile);
 const fixtureRoot = resolve('tests/fixtures/slice1-workspace');
 const kernelBinary = process.env.FORGE_KERNEL_BINARY
   ?? resolve('target', 'debug', process.platform === 'win32' ? 'forge-kernel.exe' : 'forge-kernel');
+const hybridEngineRoot = resolve('target', 'hybrid-test-engines', 'mcp-rust-kernel-' + String(process.pid));
+const mcpEngineRoot = resolve(hybridEngineRoot, 'mcp');
+const cliEngineRoot = resolve(hybridEngineRoot, 'cli');
 
 const structuredPayload = <T>(result: unknown): T =>
   (result as { readonly structuredContent?: unknown }).structuredContent as T;
@@ -21,7 +24,11 @@ test('official MCP client preserves the seven-tool compact contract over the Rus
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [resolve('node_modules/tsx/dist/cli.mjs'), resolve('src/cli.ts'), 'mcp', '--workspace', fixtureRoot],
-    env: { ...getDefaultEnvironment(), FORGE_KERNEL_BINARY: kernelBinary },
+    env: {
+      ...getDefaultEnvironment(),
+      FORGE_KERNEL_BINARY: kernelBinary,
+      FORGE_ENGINE_ROOT: mcpEngineRoot,
+    },
     stderr: 'pipe',
   });
   const client = new Client({ name: 'forge-hybrid-conformance', version: '0.1.0' });
@@ -90,7 +97,7 @@ test('official MCP client preserves the seven-tool compact contract over the Rus
   }
 });
 test('product CLI auto-discovers the Rust kernel for a real inspection', async () => {
-  const environment = { ...process.env };
+  const environment: NodeJS.ProcessEnv = { ...process.env, FORGE_ENGINE_ROOT: cliEngineRoot };
   delete environment.FORGE_KERNEL_BINARY;
   const { stdout } = await execFileAsync(process.execPath, [
     resolve('node_modules/tsx/dist/cli.mjs'),
@@ -103,6 +110,7 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
     '--json',
   ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment });
   const payload = JSON.parse(stdout) as {
+    readonly runId: string;
     readonly status: string;
     readonly outcome: { readonly status: string };
     readonly task: string;
@@ -125,6 +133,30 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
   assert.equal(payload.evidence.files[0]?.path, 'README.md');
   assert.ok((payload.evidence.files[0]?.bytes ?? 0) > 0);
 
+  const stored = await execFileAsync(process.execPath, [
+    resolve('node_modules/tsx/dist/cli.mjs'),
+    resolve('src/cli.ts'),
+    'runs',
+    'inspect',
+    payload.runId,
+    '--engine-root',
+    cliEngineRoot,
+    '--json',
+  ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment });
+  const inspection = JSON.parse(stored.stdout) as {
+    readonly runId: string;
+    readonly state: string;
+    readonly resumeDisposition: string;
+    readonly eventCount: number;
+    readonly artifact: { readonly runId: string; readonly status: string };
+  };
+  assert.equal(inspection.runId, payload.runId);
+  assert.equal(inspection.state, 'terminal');
+  assert.equal(inspection.resumeDisposition, 'return_terminal_artifact');
+  assert.equal(inspection.eventCount, 7);
+  assert.equal(inspection.artifact.runId, payload.runId);
+  assert.equal(inspection.artifact.status, 'completed');
+
   const doctor = await execFileAsync(process.execPath, [
     resolve('node_modules/tsx/dist/cli.mjs'),
     resolve('src/cli.ts'),
@@ -142,8 +174,9 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
       readonly source: string;
       readonly path: string;
       readonly version: string;
-      readonly protocols: { readonly run: string; readonly sovereignChange: string };
+      readonly protocols: { readonly run: string; readonly runStore: string; readonly sovereignChange: string };
     };
+    readonly runStore: { readonly root: string; readonly durability: string; readonly recovery: string };
   };
   assert.equal(report.ok, true);
   assert.equal(report.runtime, 'rust-kernel-typescript-adapter');
@@ -151,8 +184,12 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
   assert.match(report.kernel.source, /^source-(debug|release)$/u);
   assert.match(report.kernel.path, /forge-kernel(?:\.exe)?$/u);
   assert.equal(report.kernel.version, '0.1.0');
-  assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v6');
+  assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v7');
+  assert.equal(report.kernel.protocols.runStore, 'forge.kernel.run-store.v1');
   assert.equal(report.kernel.protocols.sovereignChange, 'forge.kernel.changeset.v3');
+  assert.equal(report.runStore.root, resolve(cliEngineRoot, 'runs', 'v1'));
+  assert.equal(report.runStore.durability, 'append-before-notify; terminal-before-result');
+  assert.match(report.runStore.recovery, /incomplete continuation blocked/u);
   assert.deepEqual(report.approval, {
     profile: 'developer',
     source: 'default',

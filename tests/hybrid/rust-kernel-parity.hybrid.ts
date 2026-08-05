@@ -22,6 +22,12 @@ import { TypeScriptConformanceRuntime, type TypeScriptConformanceRuntimeOptions 
 
 const kernelBinary = process.env.FORGE_KERNEL_BINARY
   ?? resolve('target', 'debug', process.platform === 'win32' ? 'forge-kernel.exe' : 'forge-kernel');
+let runStoreSequence = 0;
+const nextRunStoreRoot = (): string => resolve(
+  'target',
+  'hybrid-test-engines',
+  'rust-kernel-parity-' + String(process.pid) + '-' + String(Date.now()) + '-' + String(++runStoreSequence),
+);
 
 const inspectCall = { id: 'call-1', capabilityId: 'workspace.inventory', input: {} };
 const baseRequest = (runId: string): RunRequest => ({
@@ -119,6 +125,7 @@ const assertParity = async (
     onEvent: (event) => typescriptEvents.push(event.type),
   }).run(requestFactory());
   const rustArtifact = await new RustKernelRuntime({
+    runStoreRoot: nextRunStoreRoot(),
     ...toRustOptions(rustOptions),
     kernelPath: kernelBinary,
     requestIdFactory: () => 'bridge:parity',
@@ -380,6 +387,7 @@ test('Rust resolves host and user facts and fails closed at the bridge boundary'
     },
   };
   const runWithProvider = async (runId: string, approvalFacts: ApprovalFactsProvider) => new RustKernelRuntime({
+    runStoreRoot: nextRunStoreRoot(),
     ...toRustOptions(successfulOptions()),
     approvalFacts,
     kernelPath: kernelBinary,
@@ -472,6 +480,7 @@ test('Rust remains the decision authority for product approval profiles and host
     approval: ProductApprovalConfiguration,
     signal?: AbortSignal,
   ) => new RustKernelRuntime({
+    runStoreRoot: nextRunStoreRoot(),
     ...toRustOptions(successfulOptions()),
     approvalFacts: createProductApprovalFactsProvider(approval),
     kernelPath: kernelBinary,
@@ -556,6 +565,7 @@ test('Rust bridge cancellation interrupts approval-facts collection without hang
     markCollectorStarted = resolveStarted;
   });
   const run = new RustKernelRuntime({
+    runStoreRoot: nextRunStoreRoot(),
     ...toRustOptions(successfulOptions()),
     approvalFacts: {
       collect() {
@@ -590,6 +600,7 @@ test('Rust bridge cancellation interrupts an in-flight TypeScript integration ca
   };
   const controller = new AbortController();
   const run = new RustKernelRuntime({
+    runStoreRoot: nextRunStoreRoot(),
     ...toRustOptions(successfulOptions()),
     planner: blockingPlanner,
     kernelPath: kernelBinary,
@@ -607,6 +618,7 @@ test('Rust bridge cancellation interrupts an in-flight TypeScript integration ca
 test('Rust bridge rejects missing and malformed kernels promptly', async (t) => {
   await t.test('missing binary', async () => {
     const runtime = new RustKernelRuntime({
+    runStoreRoot: nextRunStoreRoot(),
       ...toRustOptions(successfulOptions()),
       kernelPath: join(tmpdir(), 'forge-kernel-does-not-exist'),
     });
@@ -618,6 +630,7 @@ test('Rust bridge rejects missing and malformed kernels promptly', async (t) => 
 
   await t.test('malformed protocol output', async () => {
     const runtime = new RustKernelRuntime({
+    runStoreRoot: nextRunStoreRoot(),
       ...toRustOptions(successfulOptions()),
       kernelPath: process.execPath,
       kernelArguments: ['-e', "process.stdin.resume(); console.log('not-json');"],

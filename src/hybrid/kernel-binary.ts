@@ -120,6 +120,7 @@ export interface ForgeKernelProbe {
   readonly ready: boolean;
   readonly kernelVersion?: string;
   readonly runProtocolVersion?: string;
+  readonly runStoreProtocolVersion?: string;
   readonly transactionProtocolVersion?: string;
   readonly candidateProtocolVersion?: string;
   readonly sovereignChangeProtocolVersion?: string;
@@ -187,6 +188,7 @@ export const probeForgeKernelBinary = async (
           || frame.protocolVersion !== forgeKernelProbeProtocolVersion
           || typeof frame.kernelVersion !== 'string'
           || typeof frame.runProtocolVersion !== 'string'
+          || typeof frame.runStoreProtocolVersion !== 'string'
           || typeof frame.transactionProtocolVersion !== 'string'
           || typeof frame.candidateProtocolVersion !== 'string'
           || typeof frame.sovereignChangeProtocolVersion !== 'string'
@@ -197,6 +199,7 @@ export const probeForgeKernelBinary = async (
           ready: true,
           kernelVersion: frame.kernelVersion,
           runProtocolVersion: frame.runProtocolVersion,
+          runStoreProtocolVersion: frame.runStoreProtocolVersion,
           transactionProtocolVersion: frame.transactionProtocolVersion,
           candidateProtocolVersion: frame.candidateProtocolVersion,
           sovereignChangeProtocolVersion: frame.sovereignChangeProtocolVersion,

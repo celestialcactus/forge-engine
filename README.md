@@ -10,9 +10,13 @@ slice by slice from the contracts in `docs/architecture/`.
 
 ## Current implementation
 
-The accepted core currently provides:
+The current implementation provides; acceptance status is recorded by the linked checkpoints:
 
 - a Rust-owned run, approval, event, artifact, transaction, and recovery authority;
+- a bridge-v7 Rust outer-run ledger at its local gate: request-before-run,
+  append-before-notify events, terminal-before-result artifacts, and read-only
+  terminal/open/repair inspection; hosted and controlled VS Code acceptance remain
+  pending;
 - deterministic workspace inventory, literal search, bounded line reads,
   TypeScript declarations/diagnostics, and read-only Git evidence;
 - a seven-tool stdio MCP evidence adapter tested with VS Code;
@@ -33,7 +37,9 @@ selected conformance fixture.
 Plain `forge` starts an interactive local-first prompt shell and auto-discovers an
 installed Ollama model when no route is supplied. Each prompt creates a separate
 Rust-authoritative run; tool continuation is preserved within the run, but
-cross-prompt conversation context is not yet retained. `forge run <task>` remains
+cross-prompt conversation context is not yet retained. Each outer run is now
+durably inspectable when a run store is configured, but interrupted provider/tool
+continuation is deliberately blocked until the separately gated 6B transcript. `forge run <task>` remains
 the explicit non-interactive and JSON automation surface.
 
 ## Honest limitations
@@ -46,8 +52,9 @@ the explicit non-interactive and JSON automation surface.
 - `restricted` execution remains unavailable and fails closed until native platform
   providers pass adversarial gates.
 - There is no public MCP mutation tool, generic shell, unrestricted write tool,
-  cross-prompt conversational memory, durable/resumable session projection,
-  skills, compression, connector, or automation surface yet.
+  cross-prompt conversational memory, resumable provider conversation, skills,
+  compression, connector, or automation surface yet. The outer request/event/
+  artifact record is durable; incomplete execution is inspect-only, not resumable.
 - OpenAI transport conformance is tested, but a live cloud acceptance run requires
   the user's own `OPENAI_API_KEY`; Forge does not accept credentials as CLI flags or
   write them into run evidence.
@@ -68,14 +75,15 @@ npm run smoke
 ```
 
 `npm run build:product` builds the Rust kernel and TypeScript adapter. `forge doctor`
-reports the exact kernel path, discovery source, runtime posture, and isolation
-limitation.
+reports the exact kernel path, discovery source, runtime posture, isolation
+limitation, and effective run-store root/recovery posture.
 
 Useful commands after the product build:
 
 ```powershell
 node dist/src/cli.js --workspace C:\path\to\repo
 node dist/src/cli.js doctor --json
+node dist/src/cli.js runs inspect run:the-id-from-a-prior-result --json
 node dist/src/cli.js inspect --workspace C:\path\to\repo --json
 node dist/src/cli.js search "literal text" --workspace C:\path\to\repo --json
 node dist/src/cli.js run "Inspect this workspace" --provider ollama --model qwen2.5-coder:7b --workspace C:\path\to\repo --json

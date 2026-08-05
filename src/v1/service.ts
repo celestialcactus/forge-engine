@@ -120,6 +120,7 @@ export interface RustKernelServiceOptions {
   readonly binaryPath: string;
   readonly arguments?: readonly string[];
   readonly environment?: Readonly<NodeJS.ProcessEnv>;
+  readonly runStoreRoot: string;
 }
 
 export type ForgeWorkspaceRuntimeConfiguration =
@@ -138,6 +139,9 @@ const validateRuntimeConfiguration = (
   }
   if (runtime.kind === 'rust_kernel' && runtime.kernel.binaryPath.trim().length === 0) {
     throw new Error('Rust kernel runtime requires a non-empty binary path.');
+  }
+  if (runtime.kind === 'rust_kernel' && runtime.kernel.runStoreRoot.trim().length === 0) {
+    throw new Error('Rust kernel run-store root must not be empty when configured.');
   }
   return runtime;
 };
@@ -385,6 +389,7 @@ export class ForgeWorkspaceService {
           kernelPath: this.#runtime.kernel.binaryPath,
           ...(this.#runtime.kernel.arguments === undefined ? {} : { kernelArguments: this.#runtime.kernel.arguments }),
           ...(this.#runtime.kernel.environment === undefined ? {} : { environment: this.#runtime.kernel.environment }),
+          runStoreRoot: this.#runtime.kernel.runStoreRoot,
         });
     return runtime.run({
       runId: this.#runIdFactory(),

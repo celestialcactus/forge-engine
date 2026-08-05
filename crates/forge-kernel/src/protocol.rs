@@ -3,7 +3,8 @@ use std::io::{BufRead, Write};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-pub const RUN_PROTOCOL_VERSION: &str = "forge.kernel.bridge.v6";
+pub const RUN_PROTOCOL_VERSION: &str = "forge.kernel.bridge.v7";
+pub const RUN_STORE_PROTOCOL_VERSION: &str = "forge.kernel.run-store.v1";
 pub const PROBE_PROTOCOL_VERSION: &str = "forge.kernel.probe.v1";
 pub const TRANSACTION_PROTOCOL_VERSION: &str = "forge.kernel.transaction.v2";
 pub const CANDIDATE_PROTOCOL_VERSION: &str = "forge.kernel.candidate.v1";

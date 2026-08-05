@@ -13,6 +13,11 @@ if (!Number.isInteger(samples) || samples < 5 || samples > 500) {
 const profile = process.env.FORGE_KERNEL_PROFILE ?? 'release';
 const kernelBinary = process.env.FORGE_KERNEL_BINARY
   ?? resolve('target', profile, process.platform === 'win32' ? 'forge-kernel.exe' : 'forge-kernel');
+const benchmarkRunStoreRoot = resolve(
+  'target',
+  'benchmark-run-stores',
+  String(process.pid) + '-' + String(Date.now()),
+);
 const inspectCall = { id: 'call-1', capabilityId: 'workspace.inventory', input: {} };
 
 const benchmarkApprovalFacts = {
@@ -75,13 +80,13 @@ const summarize = (values: readonly number[]) => {
 
 const typescriptDurations: number[] = [];
 const rustDurations: number[] = [];
-await new RustKernelRuntime({ ...runtimeOptions(), approvalFacts: benchmarkApprovalFacts, kernelPath: kernelBinary }).run(request(-1));
+await new RustKernelRuntime({ ...runtimeOptions(), approvalFacts: benchmarkApprovalFacts, kernelPath: kernelBinary, runStoreRoot: benchmarkRunStoreRoot }).run(request(-1));
 
 for (let index = 0; index < samples; index += 1) {
   typescriptDurations.push(await measure(async () =>
     new TypeScriptConformanceRuntime(runtimeOptions()).run(request(index))));
   rustDurations.push(await measure(async () =>
-    new RustKernelRuntime({ ...runtimeOptions(), approvalFacts: benchmarkApprovalFacts, kernelPath: kernelBinary }).run(request(index))));
+    new RustKernelRuntime({ ...runtimeOptions(), approvalFacts: benchmarkApprovalFacts, kernelPath: kernelBinary, runStoreRoot: benchmarkRunStoreRoot }).run(request(index))));
 }
 
 const binary = await stat(kernelBinary);

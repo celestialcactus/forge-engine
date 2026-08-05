@@ -19,7 +19,7 @@ import type {
   WorkspaceSnapshot,
 } from '../slice0/contracts.js';
 
-export const rustKernelProtocolVersion = 'forge.kernel.bridge.v6';
+export const rustKernelProtocolVersion = 'forge.kernel.bridge.v7';
 
 
 export interface ApprovalFactsProvider {
@@ -34,6 +34,7 @@ export interface RustKernelRuntimeOptions {
   readonly kernelPath: string;
   readonly kernelArguments?: readonly string[];
   readonly environment?: Readonly<NodeJS.ProcessEnv>;
+  readonly runStoreRoot: string;
   readonly requestIdFactory?: () => string;
 }
 
@@ -126,6 +127,7 @@ export class RustKernelRuntime {
   readonly #kernelPath: string;
   readonly #kernelArguments: readonly string[];
   readonly #environment: Readonly<NodeJS.ProcessEnv> | undefined;
+  readonly #runStoreRoot: string;
   readonly #requestIdFactory: () => string;
 
   constructor(options: RustKernelRuntimeOptions) {
@@ -136,6 +138,7 @@ export class RustKernelRuntime {
     this.#kernelPath = options.kernelPath;
     this.#kernelArguments = options.kernelArguments ?? [];
     this.#environment = options.environment;
+    this.#runStoreRoot = options.runStoreRoot;
     this.#requestIdFactory = options.requestIdFactory ?? (() => 'bridge:' + randomUUID());
   }
 
@@ -332,6 +335,7 @@ export class RustKernelRuntime {
           ...(request.outcomeContract === undefined ? {} : { outcomeContract: request.outcomeContract }),
         },
         capabilityIds: [...this.#capabilities.keys()],
+        runStoreRoot: this.#runStoreRoot,
         ...(signal.aborted ? { initialCancellationReason: cancellationReason(signal) } : {}),
       };
       await writeMessage(startMessage);

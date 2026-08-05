@@ -23,6 +23,7 @@ import {
   requireForgeKernelBinary,
   resolveForgeKernelBinary,
 } from './hybrid/kernel-binary.js';
+import { RustRunStoreRuntime } from './hybrid/rust-run-store-runtime.js';
 
 import type { TrustedVerificationCheckConfiguration } from './hybrid/verification-configuration.js';
 import {
@@ -108,7 +109,13 @@ const approvalConfiguration = (interactiveConsent = true): ProductApprovalConfig
   };
 };
 const productServiceOptions = (interactiveConsent = true): ForgeWorkspaceServiceOptions => ({
-  runtime: { kind: 'rust_kernel', kernel: { binaryPath: requireKernel() } },
+  runtime: {
+    kind: 'rust_kernel',
+    kernel: {
+      binaryPath: requireKernel(),
+      runStoreRoot: join(engineRoot(), 'runs', 'v1'),
+    },
+  },
   approval: approvalConfiguration(interactiveConsent),
 });
 let service: ForgeWorkspaceService | undefined;
@@ -335,6 +342,7 @@ try {
         version: kernelProbe?.kernelVersion ?? null,
         protocols: {
           run: kernelProbe?.runProtocolVersion ?? null,
+          runStore: kernelProbe?.runStoreProtocolVersion ?? null,
           transaction: kernelProbe?.transactionProtocolVersion ?? null,
           candidate: kernelProbe?.candidateProtocolVersion ?? null,
           sovereignChange: kernelProbe?.sovereignChangeProtocolVersion ?? null,
@@ -344,6 +352,11 @@ try {
       mcp: 'stdio',
       workspaceRoot,
       engineRoot: engineRoot(),
+      runStore: {
+        root: join(engineRoot(), 'runs', 'v1'),
+        durability: 'append-before-notify; terminal-before-result',
+        recovery: 'terminal-return or inspect-only; incomplete continuation blocked',
+      },
       executionDefaults: defaultExecutionBudget,
       approval: {
         profile: approvalProfile,
@@ -358,7 +371,30 @@ try {
     if (!report.ok) process.exitCode = 1;
     console.log(values.json
       ? JSON.stringify(report)
-      : `ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}\nNode: ${report.node}\nRuntime: ${report.runtime}\nKernel: ${report.kernel.path ?? report.kernel.message}\nMCP: ${report.mcp}\nExecution defaults: calls=${report.executionDefaults.maxCapabilityCalls}, input=${report.executionDefaults.maxReportedInputTokens}, output=${report.executionDefaults.maxReportedOutputTokens}\nApproval profile: ${report.approval.profile} (${report.approval.source}); authority=${report.approval.decisionAuthority}\nChange flow: ${report.changeFlow}\nIsolation: ${report.isolation}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
+      : `ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}\nNode: ${report.node}\nRuntime: ${report.runtime}\nKernel: ${report.kernel.path ?? report.kernel.message}\nMCP: ${report.mcp}\nRun store: ${report.runStore.root} (${report.runStore.recovery})\nExecution defaults: calls=${report.executionDefaults.maxCapabilityCalls}, input=${report.executionDefaults.maxReportedInputTokens}, output=${report.executionDefaults.maxReportedOutputTokens}\nApproval profile: ${report.approval.profile} (${report.approval.source}); authority=${report.approval.decisionAuthority}\nChange flow: ${report.changeFlow}\nIsolation: ${report.isolation}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
+  } else if (command === 'runs') {
+    const operation = positionals[1];
+    const runId = positionals[2]?.trim() ?? '';
+    if (operation !== 'inspect' || runId.length === 0) {
+      throw new Error('Usage: forge runs inspect <run-id> [--json] [--engine-root <path>]');
+    }
+    const inspection = await new RustRunStoreRuntime({
+      kernelPath: requireKernel(),
+      runStoreRoot: join(engineRoot(), 'runs', 'v1'),
+    }).inspect(runId);
+    if (values.json) {
+      console.log(JSON.stringify(inspection, null, 2));
+    } else {
+      console.log(`Forge run ${inspection.runId}`);
+      console.log(`State: ${inspection.state}`);
+      console.log(`Recovery: ${inspection.resumeDisposition}`);
+      console.log(`Durable events: ${inspection.eventCount}`);
+      console.log(`Reason: ${inspection.reason}`);
+      if (inspection.artifact !== undefined) {
+        console.log(`Terminal status: ${inspection.artifact.status}`);
+      }
+    }
+    if (inspection.state === 'repair_required') process.exitCode = 1;
   } else if (command === 'inspect') {
     printArtifact(await workspaceService().inspect(integerOption(values['max-files'], 200, '--max-files')));
   } else if (command === 'search') {
@@ -536,6 +572,8 @@ try {
       '',
       'Evidence commands:',
       '  forge doctor [--json] [--workspace <path>]',
+      '  forge runs inspect <run-id> [--json] [--engine-root <path>]',
+      '    Terminal artifacts are returned without replay; incomplete or corrupt runs are never auto-resumed.',
       '  forge inspect [--json] [--max-files <count>]',
       '  forge search <literal query> [--json] [--max-matches <count>]',
       '  forge read <path> [--json] [--start-line <line>] [--max-lines <count>]',

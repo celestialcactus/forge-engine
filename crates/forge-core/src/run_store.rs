@@ -1,0 +1,940 @@
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+use crate::{OutcomeStatus, RunArtifact, RunEvent, RunEventData, RunRequest, RunStatus};
+
+pub const RUN_STORE_SCHEMA_VERSION: u8 = 1;
+pub const MAX_RUN_STORE_EVENTS: usize = 512;
+const MAX_REQUEST_BYTES: u64 = 24 * 1_048_576;
+const MAX_EVENT_BYTES: usize = 8 * 1_048_576;
+const MAX_EVENTS_BYTES: u64 = 64 * 1_048_576;
+const MAX_ARTIFACT_BYTES: u64 = 128 * 1_048_576;
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RunLedgerRequest {
+    pub schema_version: u8,
+    pub bridge_protocol_version: String,
+    pub request_sha256: String,
+    pub request: RunRequest,
+    pub capability_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunRecordState {
+    Terminal,
+    OpenOrInterrupted,
+    RepairRequired,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunResumeDisposition {
+    ReturnTerminalArtifact,
+    BlockedIncomplete,
+    RepairRequired,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RunStoreInspection {
+    pub schema_version: u8,
+    pub run_id: String,
+    pub state: RunRecordState,
+    pub resume_disposition: RunResumeDisposition,
+    pub event_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_sequence: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_sha256: Option<String>,
+    pub reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artifact: Option<RunArtifact>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RunLedgerSubject<'a> {
+    request: &'a RunRequest,
+    capability_ids: &'a [String],
+}
+
+pub struct RunLedger {
+    directory: PathBuf,
+    request: RunRequest,
+    request_sha256: String,
+    events_file: File,
+    events: Vec<RunEvent>,
+    sealed: bool,
+}
+
+impl RunLedger {
+    pub fn create(
+        root: &Path,
+        bridge_protocol_version: &str,
+        request: &RunRequest,
+        capability_ids: &[String],
+    ) -> Result<Self, String> {
+        validate_root(root)?;
+        validate_run_id(&request.run_id)?;
+        if bridge_protocol_version.trim().is_empty() {
+            return Err("Run ledger bridge protocol version must not be empty.".to_owned());
+        }
+        let mut normalized_capability_ids = capability_ids.to_vec();
+        normalized_capability_ids.sort();
+        normalized_capability_ids.dedup();
+        if normalized_capability_ids
+            .iter()
+            .any(|id| id.trim().is_empty())
+        {
+            return Err("Run ledger capability IDs must not be empty.".to_owned());
+        }
+        fs::create_dir_all(root)
+            .map_err(|error| format!("Cannot create run store root: {error}"))?;
+        let canonical_root = root
+            .canonicalize()
+            .map_err(|error| format!("Cannot canonicalize run store root: {error}"))?;
+        let directory = run_directory(&canonical_root, &request.run_id);
+        fs::create_dir_all(&directory)
+            .map_err(|error| format!("Cannot create run ledger directory: {error}"))?;
+
+        let request_sha256 = subject_sha256(request, &normalized_capability_ids)?;
+        let record = RunLedgerRequest {
+            schema_version: RUN_STORE_SCHEMA_VERSION,
+            bridge_protocol_version: bridge_protocol_version.to_owned(),
+            request_sha256: request_sha256.clone(),
+            request: request.clone(),
+            capability_ids: normalized_capability_ids,
+        };
+        let request_bytes = encode_json(&record, "run ledger request")?;
+        if request_bytes.len() as u64 > MAX_REQUEST_BYTES {
+            return Err("Run ledger request exceeds the configured byte limit.".to_owned());
+        }
+        write_new_synced(&directory.join("request.json"), &request_bytes).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                format!(
+                    "Run {} already has a durable ledger and cannot be executed again.",
+                    request.run_id
+                )
+            } else {
+                format!("Cannot persist run ledger request: {error}")
+            }
+        })?;
+        let events_file = OpenOptions::new()
+            .create_new(true)
+            .append(true)
+            .open(directory.join("events.jsonl"))
+            .map_err(|error| format!("Cannot create run event ledger: {error}"))?;
+        events_file
+            .sync_all()
+            .map_err(|error| format!("Cannot sync run event ledger: {error}"))?;
+        sync_directory(&directory)?;
+
+        Ok(Self {
+            directory,
+            request: request.clone(),
+            request_sha256,
+            events_file,
+            events: Vec::new(),
+            sealed: false,
+        })
+    }
+
+    pub fn append_event(&mut self, event: &RunEvent) -> Result<(), String> {
+        if self.sealed {
+            return Err("A sealed run ledger cannot accept more events.".to_owned());
+        }
+        if event.run_id != self.request.run_id {
+            return Err("Run event ID does not match its ledger request.".to_owned());
+        }
+        let expected_sequence = self.events.len() as u64 + 1;
+        if event.sequence != expected_sequence {
+            return Err(format!(
+                "Run event sequence {} does not match expected sequence {}.",
+                event.sequence, expected_sequence
+            ));
+        }
+        if self.events.len() >= MAX_RUN_STORE_EVENTS {
+            return Err("Run event ledger exceeds the configured event limit.".to_owned());
+        }
+        let encoded = encode_json(event, "run event")?;
+        if encoded.len() > MAX_EVENT_BYTES {
+            return Err("Run event exceeds the configured byte limit.".to_owned());
+        }
+        let current_bytes = self
+            .events_file
+            .metadata()
+            .map_err(|error| format!("Cannot inspect run event ledger: {error}"))?
+            .len();
+        if current_bytes.saturating_add(encoded.len() as u64 + 1) > MAX_EVENTS_BYTES {
+            return Err("Run event ledger exceeds the configured byte limit.".to_owned());
+        }
+        self.events_file
+            .write_all(&encoded)
+            .and_then(|()| self.events_file.write_all(b"\n"))
+            .and_then(|()| self.events_file.sync_all())
+            .map_err(|error| format!("Cannot durably append run event: {error}"))?;
+        self.events.push(event.clone());
+        Ok(())
+    }
+
+    pub fn seal(&mut self, artifact: &RunArtifact) -> Result<(), String> {
+        if self.sealed {
+            return Err("Run ledger is already sealed.".to_owned());
+        }
+        validate_terminal_artifact(&self.request, &self.events, artifact)?;
+        let artifact_bytes = encode_json(artifact, "terminal run artifact")?;
+        if artifact_bytes.len() as u64 > MAX_ARTIFACT_BYTES {
+            return Err("Terminal run artifact exceeds the configured byte limit.".to_owned());
+        }
+        let temporary = self.directory.join("artifact.json.tmp");
+        write_new_synced(&temporary, &artifact_bytes)
+            .map_err(|error| format!("Cannot persist terminal run artifact: {error}"))?;
+        fs::rename(&temporary, self.directory.join("artifact.json"))
+            .map_err(|error| format!("Cannot publish terminal run artifact: {error}"))?;
+        sync_directory(&self.directory)?;
+        self.sealed = true;
+        Ok(())
+    }
+
+    pub fn request_sha256(&self) -> &str {
+        &self.request_sha256
+    }
+}
+
+pub fn inspect_run(root: &Path, run_id: &str) -> Result<RunStoreInspection, String> {
+    validate_root(root)?;
+    validate_run_id(run_id)?;
+    if !root.exists() {
+        return Err(format!("Run store root does not exist: {}", root.display()));
+    }
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|error| format!("Cannot canonicalize run store root: {error}"))?;
+    let directory = run_directory(&canonical_root, run_id);
+    if !directory.is_dir() {
+        return Err(format!("Run ledger was not found: {run_id}"));
+    }
+
+    let request: RunLedgerRequest = match read_bounded_json(
+        &directory.join("request.json"),
+        MAX_REQUEST_BYTES,
+        "run ledger request",
+    ) {
+        Ok(record) => record,
+        Err(reason) => return Ok(repair_required(run_id, 0, None, None, reason)),
+    };
+    if let Err(reason) = validate_request_record(&request, run_id) {
+        return Ok(repair_required(run_id, 0, None, None, reason));
+    }
+
+    let events = match read_events(&directory.join("events.jsonl"), run_id) {
+        Ok(events) => events,
+        Err(reason) => {
+            return Ok(repair_required(
+                run_id,
+                0,
+                None,
+                Some(request.request_sha256),
+                reason,
+            ));
+        }
+    };
+    let event_count = events.len() as u32;
+    let last_sequence = events.last().map(|event| event.sequence);
+    let artifact_path = directory.join("artifact.json");
+    if !artifact_path.exists() {
+        return Ok(RunStoreInspection {
+            schema_version: RUN_STORE_SCHEMA_VERSION,
+            run_id: run_id.to_owned(),
+            state: RunRecordState::OpenOrInterrupted,
+            resume_disposition: RunResumeDisposition::BlockedIncomplete,
+            event_count,
+            last_sequence,
+            request_sha256: Some(request.request_sha256),
+            reason: "The run has durable request/event evidence but no terminal artifact. Automatic continuation is blocked until an exact continuation boundary is proven.".to_owned(),
+            artifact: None,
+        });
+    }
+    let artifact: RunArtifact =
+        match read_bounded_json(&artifact_path, MAX_ARTIFACT_BYTES, "terminal run artifact") {
+            Ok(artifact) => artifact,
+            Err(reason) => {
+                return Ok(repair_required(
+                    run_id,
+                    event_count,
+                    last_sequence,
+                    Some(request.request_sha256),
+                    reason,
+                ));
+            }
+        };
+    if let Err(reason) = validate_terminal_artifact(&request.request, &events, &artifact) {
+        return Ok(repair_required(
+            run_id,
+            event_count,
+            last_sequence,
+            Some(request.request_sha256),
+            reason,
+        ));
+    }
+    Ok(RunStoreInspection {
+        schema_version: RUN_STORE_SCHEMA_VERSION,
+        run_id: run_id.to_owned(),
+        state: RunRecordState::Terminal,
+        resume_disposition: RunResumeDisposition::ReturnTerminalArtifact,
+        event_count,
+        last_sequence,
+        request_sha256: Some(request.request_sha256),
+        reason: "The durable terminal artifact passed request and event-ledger validation; callers may return it without replaying the run.".to_owned(),
+        artifact: Some(artifact),
+    })
+}
+
+fn validate_root(root: &Path) -> Result<(), String> {
+    if !root.is_absolute() {
+        return Err("Run store root must be an absolute path.".to_owned());
+    }
+    Ok(())
+}
+
+fn validate_run_id(run_id: &str) -> Result<(), String> {
+    if run_id.trim().is_empty() || run_id.len() > 512 {
+        return Err("Run ID must contain from 1 to 512 characters.".to_owned());
+    }
+    Ok(())
+}
+
+fn run_directory(root: &Path, run_id: &str) -> PathBuf {
+    let digest = crate::change_set_v2::sha256(run_id.as_bytes());
+    root.join(&digest[..2]).join(digest)
+}
+
+fn subject_sha256(request: &RunRequest, capability_ids: &[String]) -> Result<String, String> {
+    let encoded = serde_json::to_vec(&RunLedgerSubject {
+        request,
+        capability_ids,
+    })
+    .map_err(|error| format!("Cannot encode run request identity: {error}"))?;
+    Ok(crate::change_set_v2::sha256(&encoded))
+}
+
+fn validate_request_record(record: &RunLedgerRequest, run_id: &str) -> Result<(), String> {
+    if record.schema_version != RUN_STORE_SCHEMA_VERSION {
+        return Err(format!(
+            "Unsupported run ledger request schema: {}",
+            record.schema_version
+        ));
+    }
+    if record.bridge_protocol_version.trim().is_empty() {
+        return Err("Run ledger request has an empty bridge protocol version.".to_owned());
+    }
+    if record.request.run_id != run_id {
+        return Err("Run ledger request ID does not match its hashed directory.".to_owned());
+    }
+    let mut normalized = record.capability_ids.clone();
+    normalized.sort();
+    normalized.dedup();
+    if normalized != record.capability_ids || normalized.iter().any(|id| id.trim().is_empty()) {
+        return Err("Run ledger capability IDs are not canonical.".to_owned());
+    }
+    let expected = subject_sha256(&record.request, &record.capability_ids)?;
+    if expected != record.request_sha256 {
+        return Err("Run ledger request digest does not match its contents.".to_owned());
+    }
+    Ok(())
+}
+
+fn validate_terminal_artifact(
+    request: &RunRequest,
+    events: &[RunEvent],
+    artifact: &RunArtifact,
+) -> Result<(), String> {
+    if artifact.schema_version != 4
+        || artifact.run_id != request.run_id
+        || artifact.task != request.task
+        || artifact.snapshot != request.snapshot
+        || artifact.execution_budget != request.execution_budget
+        || artifact.outcome_contract != request.outcome_contract
+    {
+        return Err("Terminal run artifact does not match its durable request.".to_owned());
+    }
+    if artifact.events != events {
+        return Err("Terminal run artifact does not match its durable event ledger.".to_owned());
+    }
+
+    let context_plans: Vec<_> = events
+        .iter()
+        .filter_map(|event| match &event.data {
+            RunEventData::ContextPlanned { plan } => Some(plan.clone()),
+            _ => None,
+        })
+        .collect();
+    if context_plans.len() > 1 || artifact.context_plan != context_plans.first().cloned() {
+        return Err(
+            "Terminal run artifact context projection does not match its events.".to_owned(),
+        );
+    }
+    let capability_results: Vec<_> = events
+        .iter()
+        .filter_map(|event| match &event.data {
+            RunEventData::CapabilityCompleted { result } => Some(result.clone()),
+            _ => None,
+        })
+        .collect();
+    if artifact.capability_results != capability_results {
+        return Err(
+            "Terminal run artifact capability projection does not match its events.".to_owned(),
+        );
+    }
+    let inference_evidence: Vec<_> = events
+        .iter()
+        .filter_map(|event| match &event.data {
+            RunEventData::InferenceCompleted { evidence } => Some(evidence.clone()),
+            _ => None,
+        })
+        .collect();
+    let expected_inference = if inference_evidence.is_empty() {
+        None
+    } else {
+        Some(inference_evidence.clone())
+    };
+    if artifact.inference_evidence != expected_inference {
+        return Err(
+            "Terminal run artifact inference projection does not match its events.".to_owned(),
+        );
+    }
+    let assessed_outcomes: Vec<_> = events
+        .iter()
+        .filter_map(|event| match &event.data {
+            RunEventData::OutcomeAssessed { assessment } => Some(assessment.clone()),
+            _ => None,
+        })
+        .collect();
+    if assessed_outcomes.len() > 1
+        || assessed_outcomes
+            .first()
+            .is_some_and(|assessment| assessment != &artifact.outcome)
+        || (assessed_outcomes.is_empty()
+            && (artifact.outcome.status != OutcomeStatus::NotEvaluated
+                || !artifact.outcome.checks.is_empty()))
+    {
+        return Err(
+            "Terminal run artifact outcome projection does not match its events.".to_owned(),
+        );
+    }
+
+    let requested_calls = events
+        .iter()
+        .filter(|event| matches!(event.data, RunEventData::CapabilityRequested { .. }))
+        .count() as u32;
+    let invalid_call_increment = matches!(
+        events.last().map(|event| &event.data),
+        Some(RunEventData::RunFailed { code, .. }) if code == "invalid_capability_call"
+    ) as u32;
+    let (expected_input_tokens, expected_output_tokens) =
+        inference_evidence
+            .iter()
+            .fold(
+                (0_u64, 0_u64),
+                |(input_total, output_total), evidence| match (
+                    evidence.usage.input_tokens,
+                    evidence.usage.output_tokens,
+                ) {
+                    (Some(input_tokens), Some(output_tokens)) => (
+                        input_total.saturating_add(input_tokens),
+                        output_total.saturating_add(output_tokens),
+                    ),
+                    _ => (input_total, output_total),
+                },
+            );
+    if artifact.execution_usage.schema_version != 1
+        || artifact.execution_usage.capability_calls
+            != requested_calls.saturating_add(invalid_call_increment)
+        || artifact.execution_usage.inference_turns != inference_evidence.len() as u32
+        || artifact.execution_usage.reported_input_tokens != expected_input_tokens
+        || artifact.execution_usage.reported_output_tokens != expected_output_tokens
+    {
+        return Err("Terminal run artifact usage projection does not match its events.".to_owned());
+    }
+    if artifact.status == RunStatus::Running {
+        return Err("A running artifact cannot seal a run ledger.".to_owned());
+    }
+    let terminal_matches = match (
+        artifact.status.clone(),
+        events.last().map(|event| &event.data),
+    ) {
+        (RunStatus::Completed, Some(RunEventData::RunCompleted { output }))
+            if artifact.output.as_ref() == Some(output) =>
+        {
+            true
+        }
+        (RunStatus::Failed, Some(RunEventData::RunFailed { .. }))
+        | (RunStatus::Cancelled, Some(RunEventData::RunCancelled { .. }))
+        | (RunStatus::BudgetExhausted, Some(RunEventData::RunBudgetExhausted { .. }))
+        | (
+            RunStatus::ExecutionBudgetExhausted,
+            Some(RunEventData::RunExecutionBudgetExhausted { .. }),
+        ) if artifact.output.is_none() => true,
+        _ => false,
+    };
+    if !terminal_matches {
+        return Err("Terminal run status does not match the final durable event.".to_owned());
+    }
+    Ok(())
+}
+
+fn read_events(path: &Path, run_id: &str) -> Result<Vec<RunEvent>, String> {
+    let bytes = read_bounded(path, MAX_EVENTS_BYTES, "run event ledger")?;
+    if !bytes.is_empty() && bytes.last() != Some(&b'\n') {
+        return Err("Run event ledger ends with a partial frame.".to_owned());
+    }
+    if bytes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut events = Vec::new();
+    let complete_frames = &bytes[..bytes.len() - 1];
+    for frame in complete_frames.split(|byte| *byte == b'\n') {
+        if frame.len() > MAX_EVENT_BYTES {
+            return Err("Run event exceeds the configured byte limit.".to_owned());
+        }
+        if events.len() >= MAX_RUN_STORE_EVENTS {
+            return Err("Run event ledger exceeds the configured event limit.".to_owned());
+        }
+        let event: RunEvent = serde_json::from_slice(frame)
+            .map_err(|error| format!("Run event ledger contains invalid JSON: {error}"))?;
+        let expected_sequence = events.len() as u64 + 1;
+        if event.run_id != run_id || event.sequence != expected_sequence {
+            return Err(format!(
+                "Run event ledger identity or sequence is invalid at event {}.",
+                expected_sequence
+            ));
+        }
+        events.push(event);
+    }
+    Ok(events)
+}
+
+fn read_bounded_json<T: for<'de> Deserialize<'de>>(
+    path: &Path,
+    maximum_bytes: u64,
+    label: &str,
+) -> Result<T, String> {
+    let bytes = read_bounded(path, maximum_bytes, label)?;
+    serde_json::from_slice(&bytes).map_err(|error| format!("Invalid {label} JSON: {error}"))
+}
+
+fn read_bounded(path: &Path, maximum_bytes: u64, label: &str) -> Result<Vec<u8>, String> {
+    let metadata =
+        fs::metadata(path).map_err(|error| format!("Cannot inspect {label}: {error}"))?;
+    if !metadata.is_file() {
+        return Err(format!("The {label} is not a regular file."));
+    }
+    if metadata.len() > maximum_bytes {
+        return Err(format!("The {label} exceeds the configured byte limit."));
+    }
+    let mut file = File::open(path).map_err(|error| format!("Cannot open {label}: {error}"))?;
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    file.read_to_end(&mut bytes)
+        .map_err(|error| format!("Cannot read {label}: {error}"))?;
+    Ok(bytes)
+}
+
+fn encode_json<T: Serialize>(value: &T, label: &str) -> Result<Vec<u8>, String> {
+    serde_json::to_vec(value).map_err(|error| format!("Cannot encode {label}: {error}"))
+}
+
+fn write_new_synced(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut file = OpenOptions::new().create_new(true).write(true).open(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()
+}
+
+fn sync_directory(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        File::open(path)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|error| format!("Cannot sync run ledger directory: {error}"))?;
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
+    Ok(())
+}
+
+fn repair_required(
+    run_id: &str,
+    event_count: u32,
+    last_sequence: Option<u64>,
+    request_sha256: Option<String>,
+    reason: String,
+) -> RunStoreInspection {
+    RunStoreInspection {
+        schema_version: RUN_STORE_SCHEMA_VERSION,
+        run_id: run_id.to_owned(),
+        state: RunRecordState::RepairRequired,
+        resume_disposition: RunResumeDisposition::RepairRequired,
+        event_count,
+        last_sequence,
+        request_sha256,
+        reason,
+        artifact: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use crate::{
+        ApprovalDecision, ApprovalPolicy, CapabilityAdapter, CapabilityCall, CapabilityContext,
+        CapabilityResult, ExecutionBudget, NoCancellation, NoopEventSink, PlannerRequest,
+        PlannerTurn, RuntimeSignal, Slice0Runtime, TaskPlanner, WorkspaceSnapshot,
+    };
+
+    use super::*;
+
+    static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(1);
+
+    struct CompletePlanner;
+
+    impl TaskPlanner for CompletePlanner {
+        fn next(&mut self, _request: PlannerRequest) -> Result<PlannerTurn, RuntimeSignal> {
+            Ok(PlannerTurn::Complete {
+                output: "done".to_owned(),
+                inference: None,
+            })
+        }
+    }
+
+    struct UnusedPolicy;
+
+    impl ApprovalPolicy for UnusedPolicy {
+        fn decide(
+            &mut self,
+            _call: &CapabilityCall,
+            _context: &CapabilityContext,
+        ) -> Result<ApprovalDecision, RuntimeSignal> {
+            panic!("approval is not used")
+        }
+    }
+
+    struct NoCapabilities;
+
+    impl CapabilityAdapter for NoCapabilities {
+        fn supports(&self, _capability_id: &str) -> bool {
+            false
+        }
+
+        fn invoke(
+            &mut self,
+            _call: &CapabilityCall,
+            _snapshot: &WorkspaceSnapshot,
+            _context: &CapabilityContext,
+        ) -> Result<CapabilityResult, RuntimeSignal> {
+            panic!("capabilities are not used")
+        }
+    }
+
+    fn temporary_root() -> PathBuf {
+        let nonce = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
+        let time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "forge-run-store-{}-{time}-{nonce}",
+            std::process::id()
+        ))
+    }
+
+    fn request(run_id: &str) -> RunRequest {
+        RunRequest {
+            run_id: run_id.to_owned(),
+            task: "return done".to_owned(),
+            snapshot: WorkspaceSnapshot {
+                id: "workspace:test".to_owned(),
+                root_label: "fixture".to_owned(),
+                files: Vec::new(),
+            },
+            context_budget_bytes: 65_536,
+            max_turns: 2,
+            execution_budget: ExecutionBudget {
+                schema_version: 1,
+                max_capability_calls: 1,
+                max_reported_input_tokens: 100,
+                max_reported_output_tokens: 100,
+            },
+            outcome_contract: None,
+        }
+    }
+
+    fn terminal_artifact(request: &RunRequest) -> RunArtifact {
+        let mut planner = CompletePlanner;
+        let mut policy = UnusedPolicy;
+        let mut capabilities = NoCapabilities;
+        let cancellation = NoCancellation;
+        let mut sink = NoopEventSink;
+        Slice0Runtime {
+            planner: &mut planner,
+            approval_policy: &mut policy,
+            capabilities: &mut capabilities,
+            cancellation: &cancellation,
+            event_sink: &mut sink,
+        }
+        .run(request.clone())
+    }
+
+    #[test]
+    fn returns_a_valid_terminal_artifact_without_replay() {
+        let root = temporary_root();
+        let request = request("run:terminal");
+        let artifact = terminal_artifact(&request);
+        let mut ledger = RunLedger::create(
+            &root,
+            "forge.kernel.bridge.test",
+            &request,
+            &["workspace.read".to_owned()],
+        )
+        .expect("ledger");
+        for event in &artifact.events {
+            ledger.append_event(event).expect("append");
+        }
+        ledger.seal(&artifact).expect("seal");
+
+        let inspection = inspect_run(&root, &request.run_id).expect("inspect");
+        assert_eq!(inspection.state, RunRecordState::Terminal);
+        assert_eq!(
+            inspection.resume_disposition,
+            RunResumeDisposition::ReturnTerminalArtifact
+        );
+        assert_eq!(inspection.artifact, Some(artifact));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn blocks_an_interrupted_run_instead_of_replaying_it() {
+        let root = temporary_root();
+        let request = request("run:interrupted");
+        let artifact = terminal_artifact(&request);
+        let mut ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        ledger.append_event(&artifact.events[0]).expect("append");
+        drop(ledger);
+
+        let inspection = inspect_run(&root, &request.run_id).expect("inspect");
+        assert_eq!(inspection.state, RunRecordState::OpenOrInterrupted);
+        assert_eq!(
+            inspection.resume_disposition,
+            RunResumeDisposition::BlockedIncomplete
+        );
+        assert_eq!(inspection.event_count, 1);
+        assert!(inspection.artifact.is_none());
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn refuses_to_reopen_an_existing_run_identity() {
+        let root = temporary_root();
+        let request = request("run:duplicate");
+        let _ledger = RunLedger::create(&root, "test", &request, &[]).expect("first");
+        let error = RunLedger::create(&root, "test", &request, &[])
+            .err()
+            .expect("duplicate must fail");
+        assert!(error.contains("cannot be executed again"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn classifies_a_partial_event_frame_as_repair_required() {
+        let root = temporary_root();
+        let request = request("run:corrupt");
+        let artifact = terminal_artifact(&request);
+        let mut ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        ledger.append_event(&artifact.events[0]).expect("append");
+        let directory = ledger.directory.clone();
+        drop(ledger);
+        let mut events = OpenOptions::new()
+            .append(true)
+            .open(directory.join("events.jsonl"))
+            .expect("events");
+        events.write_all(b"{\"partial\":true}").expect("corrupt");
+        events.sync_all().expect("sync");
+
+        let inspection = inspect_run(&root, &request.run_id).expect("inspect");
+        assert_eq!(inspection.state, RunRecordState::RepairRequired);
+        assert_eq!(
+            inspection.resume_disposition,
+            RunResumeDisposition::RepairRequired
+        );
+        assert!(inspection.reason.contains("partial frame"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn accepts_the_runtime_all_or_nothing_accounting_for_partial_usage() {
+        struct PartialUsagePlanner;
+        impl TaskPlanner for PartialUsagePlanner {
+            fn next(&mut self, _request: PlannerRequest) -> Result<PlannerTurn, RuntimeSignal> {
+                let evidence = serde_json::from_value(serde_json::json!({
+                    "schemaVersion": 1,
+                    "requestId": "inference:partial",
+                    "provider": "fixture",
+                    "locality": "local",
+                    "model": "fixture",
+                    "finishReason": "stop",
+                    "durationMs": 1,
+                    "outputCharacters": 4,
+                    "toolCallCount": 0,
+                    "usage": { "inputTokens": 5 },
+                    "cost": { "status": "not_applicable" },
+                    "routing": {
+                        "requestedProvider": "fixture",
+                        "selectedProvider": "fixture",
+                        "requestedModel": "fixture",
+                        "selectedModel": "fixture",
+                        "fallbackUsed": false
+                    }
+                }))
+                .expect("evidence");
+                Ok(PlannerTurn::Complete {
+                    output: "done".to_owned(),
+                    inference: Some(evidence),
+                })
+            }
+        }
+
+        let root = temporary_root();
+        let request = request("run:partial-usage");
+        let mut planner = PartialUsagePlanner;
+        let mut policy = UnusedPolicy;
+        let mut capabilities = NoCapabilities;
+        let cancellation = NoCancellation;
+        let mut sink = NoopEventSink;
+        let artifact = Slice0Runtime {
+            planner: &mut planner,
+            approval_policy: &mut policy,
+            capabilities: &mut capabilities,
+            cancellation: &cancellation,
+            event_sink: &mut sink,
+        }
+        .run(request.clone());
+        assert_eq!(artifact.status, RunStatus::Failed);
+        assert_eq!(artifact.execution_usage.inference_turns, 1);
+        assert_eq!(artifact.execution_usage.reported_input_tokens, 0);
+        assert_eq!(artifact.execution_usage.reported_output_tokens, 0);
+
+        let mut ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        for event in &artifact.events {
+            ledger.append_event(event).expect("append");
+        }
+        ledger.seal(&artifact).expect("seal");
+        assert_eq!(
+            inspect_run(&root, &request.run_id).expect("inspect").state,
+            RunRecordState::Terminal
+        );
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+    #[test]
+    fn hashes_run_ids_into_cross_platform_directory_components() {
+        let root = temporary_root();
+        let request = request("run:contains/windows:and/unix/separators");
+        let ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        let relative = ledger
+            .directory
+            .strip_prefix(root.canonicalize().expect("root"))
+            .expect("relative");
+        let components: Vec<_> = relative
+            .iter()
+            .map(|component| component.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(components.len(), 2);
+        assert_eq!(components[0].len(), 2);
+        assert_eq!(components[1].len(), 64);
+        assert!(components.iter().all(|component| {
+            component
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        }));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn classifies_a_sequence_gap_as_repair_required() {
+        let root = temporary_root();
+        let request = request("run:sequence-gap");
+        let artifact = terminal_artifact(&request);
+        let mut ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        ledger.append_event(&artifact.events[0]).expect("append");
+        let directory = ledger.directory.clone();
+        drop(ledger);
+        let mut invalid = artifact.events[1].clone();
+        invalid.sequence = 3;
+        let mut events = OpenOptions::new()
+            .append(true)
+            .open(directory.join("events.jsonl"))
+            .expect("events");
+        serde_json::to_writer(&mut events, &invalid).expect("encode");
+        events.write_all(b"\n").expect("newline");
+        events.sync_all().expect("sync");
+
+        let inspection = inspect_run(&root, &request.run_id).expect("inspect");
+        assert_eq!(inspection.state, RunRecordState::RepairRequired);
+        assert!(inspection.reason.contains("sequence is invalid"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn rejects_an_artifact_projection_that_disagrees_with_terminal_events() {
+        let root = temporary_root();
+        let request = request("run:artifact-mismatch");
+        let artifact = terminal_artifact(&request);
+        let mut ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        for event in &artifact.events {
+            ledger.append_event(event).expect("append");
+        }
+        let directory = ledger.directory.clone();
+        drop(ledger);
+        let mut tampered = artifact;
+        tampered.output = Some("tampered".to_owned());
+        fs::write(
+            directory.join("artifact.json"),
+            serde_json::to_vec(&tampered).expect("encode"),
+        )
+        .expect("artifact");
+
+        let inspection = inspect_run(&root, &request.run_id).expect("inspect");
+        assert_eq!(inspection.state, RunRecordState::RepairRequired);
+        assert!(inspection.reason.contains("final durable event"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn rejects_an_oversized_event_ledger_before_allocating_it() {
+        let root = temporary_root();
+        let request = request("run:oversized");
+        let ledger = RunLedger::create(&root, "test", &request, &[]).expect("ledger");
+        let directory = ledger.directory.clone();
+        drop(ledger);
+        let events = OpenOptions::new()
+            .write(true)
+            .open(directory.join("events.jsonl"))
+            .expect("events");
+        events
+            .set_len(MAX_EVENTS_BYTES + 1)
+            .expect("sparse oversized ledger");
+
+        let inspection = inspect_run(&root, &request.run_id).expect("inspect");
+        assert_eq!(inspection.state, RunRecordState::RepairRequired);
+        assert!(inspection.reason.contains("byte limit"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+}

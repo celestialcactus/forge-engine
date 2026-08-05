@@ -1,3 +1,21 @@
+# 2026-08-05 - Durable outer-run ledger reaches the local gate
+
+- Implemented [ADR-0029](ADRs/ADR-0029-append-before-notify-run-ledger.md):
+  bridge v7 requires one Rust run-store root, persists the request before
+  execution, synchronizes every canonical event before host notification, and
+  validates/publishes the terminal artifact before host completion.
+- Added Rust-owned terminal/open/repair inspection, the read-only
+  forge runs inspect <run-id> CLI surface, and effective run-store reporting in
+  forge doctor. Terminal artifacts return without re-execution; incomplete or
+  corrupt runs are never automatically replayed.
+- Local validation passes 91/91 Node tests and build, zero-warning clippy and the
+  full Rust workspace, 56/56 retained-kernel hybrid tests, nine adversarial store
+  regressions, and live append-before-notify/seal-before-result ordering.
+- A full hybrid run exposed and corrected a partial token-usage projection
+  mismatch before checkpoint. Hosted Windows/macOS/Ubuntu, controlled VS Code, and
+  6B's exact continuation transcript remain pending.
+- See [Checkpoint 73](checkpoints/2026-08-05-73-durable-run-ledger-local-gate.md)
+  and [CLI ship lane 6](../tasks/SLICE-CLI6-run-recovery.md).
 # 2026-08-05 - Product approval profiles accepted cross-platform
 
 - Accepted increment 5C at exact implementation `2941948` after all five hosted

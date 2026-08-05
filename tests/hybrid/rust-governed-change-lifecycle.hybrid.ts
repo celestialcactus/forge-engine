@@ -96,7 +96,17 @@ test('Rust lifecycle retains governed edit approval and promotion evidence befor
   };
   const answers = ['yes', 'accept'];
   const service = new ForgeWorkspaceService(workspaceRoot, {
-    runtime: { kind: 'rust_kernel', kernel: { binaryPath: kernelBinary } },
+    runtime: {
+      kind: 'rust_kernel',
+      kernel: {
+        binaryPath: kernelBinary,
+        runStoreRoot: resolve(
+          'target',
+          'hybrid-test-engines',
+          'rust-governed-' + String(process.pid) + '-' + String(Date.now()),
+        ),
+      },
+    },
     runIdFactory: () => 'run:hybrid-governed-change',
   });
   try {

@@ -197,10 +197,18 @@ broader V1 slices remain authoritative capability goals.
    **Exit:** denial, cancellation, timeout, and exhaustion are deterministic through
    CLI and embedded-host fixtures, and the exact head passes hosted Tier-1/Tier-2
    conformance.
-6. **Recovery state.** Append-oriented local events/artifacts, idempotency and
-   recovery, and resume without duplicating completed non-idempotent work.
-   **Exit:** restart fixtures resume or report repair state without repeating an
-   accepted mutation or external action.
+6. **Recovery state - 6A local gate passed; hosted/VS Code pending; 6B open.**
+   Bridge v7 now requires the Rust filesystem ledger, appends canonical events
+   before host notification, seals the terminal artifact before completion, and
+   exposes validated terminal/open/repair inspection through Rust. Incomplete work
+   is deliberately blocked, not called resumable. Safe continuation still requires
+   6B's provider/approval/capability interaction transcript and explicit replay
+   safety. See [CLI ship lane 6](../tasks/SLICE-CLI6-run-recovery.md),
+   [ADR-0029](../decisions/ADRs/ADR-0029-append-before-notify-run-ledger.md), and
+   [Checkpoint 73](../decisions/checkpoints/2026-08-05-73-durable-run-ledger-local-gate.md).
+   **Exit:** exact-head hosted Windows/macOS/Ubuntu and controlled VS Code pass,
+   then 6B restart fixtures resume only proven-safe boundaries without repeating
+   an accepted mutation, cloud request, or external action.
 7. **Release hardening.** Clean install, Windows boundary decisions, `doctor`,
    smoke tests, packaging, effective config, and verified docs. **Exit:** fresh
    Windows and macOS environments install and run the documented alpha workflow.
@@ -454,7 +462,7 @@ not source volume or the number of abstractions present.
 | Canonical runtime, real inference/live loop, governed change, cancellation-safe approvals | Accepted on `develop` through 5A | Cross-platform hosted, live-provider, and controlled VS Code evidence is recorded by the linked checkpoints. |
 | 5B execution controls | Accepted and merged on `develop` at `74308ca` | Local, hosted Windows/macOS/Ubuntu, live Qwen, conservative credentialed OpenAI, and one-call controlled VS Code gates pass. See Checkpoints 68-70. |
 | 5C policy posture and host callback conformance | Accepted at implementation `2941948` | One fact-producing profile layer serves CLI/service/MCP while Rust alone decides. Local, exact-kernel, live Qwen 1.5B, controlled VS Code, and hosted Windows/macOS/Ubuntu gates pass. See ADR-0028 and Checkpoints 71-72. |
-| Minimum outer-run recovery | Open | Append canonical events/artifact and resume without replaying completed non-idempotent work. Durable ChangeSet recovery alone is insufficient. |
+| Minimum outer-run recovery | 6A local gate passed; hosted/VS Code pending; 6B open | Rust now durably records request/events/artifact and returns terminal records without replay. Incomplete state is inspectable but intentionally blocked until 6B persists the exact continuation transcript and replay-safety evidence. |
 | Installable developer alpha | Open | Bundle the native kernel for clean Windows/macOS install/update, resolve the root license, publish effective config/doctor guidance, and ship the developer test kit. |
 | Broader V1 platform | Deferred | Context compiler, skills/memory, MCP client/mutation symmetry, connectors, automation, generalized UI, and restricted execution retain their roadmap gates. |
 
@@ -474,6 +482,7 @@ expansion, the current planning ranges are:
 - 5A cancellation-safe approvals: **accepted at implementation `ae746ff` after local 81-test/build, hosted Windows/macOS/Ubuntu, two live Qwen timeout/no-mutation gates, and a controlled one-call seven-tool VS Code gate**;
 - 5B Rust-owned execution budgets: **accepted at implementation `3f2774b` after local 86-test/build/audit, hosted Windows/macOS/Ubuntu, live Qwen normal and tiny-budget gates, conservative credentialed OpenAI, and a controlled one-call seven-tool VS Code gate; merged through PR #22 at `74308ca`**;
 - 5C product approval profiles: **accepted at implementation `2941948` after local 91-test/build, full 54-test retained-kernel hybrid, live Qwen 1.5B grant/decline, controlled one-call VS Code, and hosted Node/hybrid Windows/macOS/Ubuntu gates**;
+- 6A durable outer-run ledger: **local gate passed with 91 Node tests/build, zero-warning full Rust workspace validation, 56 retained-kernel hybrid tests, nine adversarial store regressions, and live append-before-notify/seal-before-result ordering; exact-head hosted Windows/macOS/Ubuntu and controlled VS Code remain pending; 6B safe continuation is not implemented**;
 - shippable standalone CLI alpha: **2-4 focused weeks from 2026-08-05**, contingent on fast license resolution and keeping OS sandboxing outside the trusted-alpha gate;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
@@ -481,9 +490,9 @@ expansion, the current planning ranges are:
 The source-backed
 [CLI harness comparison](../audit/2026-08-05-cli-harness-core-comparison.md)
 calibrates Forge as a strong narrow evidence/transaction core rather than a mature
-CLI peer. With 5C accepted, the next core order is minimum
-outer-run recovery, clean native packaging/license, and the developer alpha test
-kit.
+CLI peer. With 6A at the local gate, the immediate order is exact-head hosted and
+controlled VS Code acceptance, 6B safe continuation, then clean native
+packaging/license and the developer alpha test kit.
 
 These are ranges, not promises. Host key provisioning, Windows/macOS containment
 mechanics, packaging/signing, or new boundary requirements move the dates. Every accepted
