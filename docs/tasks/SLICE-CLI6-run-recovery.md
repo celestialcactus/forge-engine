@@ -1,6 +1,6 @@
 # CLI ship lane 6: outer-run recovery
 
-**Status:** 6A and 6B exact-head local/controlled VS Code gates passed; hosted Windows/macOS/Ubuntu pending.
+**Status:** 6A/6B exact-head local/controlled VS Code gates and atomic-initialization local/controlled VS Code gates passed; hosted Windows/macOS/Ubuntu pending.
 **Branch:** `feature/cli-safe-continuation` (stacked on `feature/cli-run-recovery`)
 **Base:** merged `develop` at `e09826a` (PR #23)
 
@@ -135,6 +135,9 @@ is no recovery runtime or child logical run.
 - [x] provider continuation state reconstructs exact tool-call correlation;
 - [x] local child-crash fixtures prove no duplicated inference, approval, or
       capability work and zero invocation of an unresolved non-idempotent adapter;
+- [x] initial run state is privately staged and atomically directory-published;
+      lock acquisition creates no authoritative run, abandoned staging is invisible,
+      and a clean retry is allowed;
 - [x] controlled VS Code exact-head gate passes after restarting the MCP server on
       the bridge v9 build;
 - [ ] hosted Windows/macOS/Ubuntu exact-head gates pass.
@@ -144,7 +147,10 @@ Local exact-head evidence is recorded in
 zero-warning Rust formatting and clippy, the full Rust workspace, 92/92 Node tests
 and build, 59 retained-kernel hybrid scenarios, packaged CLI smoke, direct replay
 unit proof, adversarial crash/tamper/retry fixtures, and the controlled one-call VS
-Code gate pass.
+Code gate pass. Atomic initialization hardening is recorded separately in
+[Checkpoint 77](../decisions/checkpoints/2026-08-05-77-atomic-run-initialization-local-gate.md):
+26 focused run-store tests and the full Rust/Node/hybrid gate pass, including
+Windows-compatible close-before-rename behavior and orphaned-staging retry proof.
 
 ## Whole-lane exit
 

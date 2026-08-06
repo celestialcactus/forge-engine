@@ -1,6 +1,6 @@
 # Hybrid runtime candidate: Rust kernel and TypeScript adapters
 
-**Status:** bridge v9 is implemented and has passed the exact-head local and controlled VS Code gates for durable run storage and safe same-runtime continuation; hosted Windows/macOS/Ubuntu acceptance remains pending.
+**Status:** bridge v9 is implemented and has passed the exact-head local and controlled VS Code gates for durable run storage and safe same-runtime continuation. Atomic initial-ledger publication has also passed its local full-hybrid and controlled VS Code gates; hosted Windows/macOS/Ubuntu acceptance remains pending.
 **Date:** 2026-07-22
 **Updated:** 2026-08-05
 
@@ -110,6 +110,15 @@ never treats raw files as authority. Terminal resume returns the existing artifa
 without planner, provider, approval, or capability execution. Non-terminal resume
 is permitted only after Rust classifies the exact frontier and the same runtime
 reproduces the durable prefix.
+
+Initial execution locks live in a non-authoritative `.locks` namespace. Rust writes
+`request.json`, `continuation.json`, `interactions.jsonl`, and `events.jsonl` into a
+private short-token staging directory, synchronizes them, closes the append handles
+needed for Windows rename compatibility, and publishes the complete directory with
+one rename. An abandoned private staging directory is not discoverable as a run and
+does not prevent a later clean retry. This is a process-crash guarantee at the
+explicit sync/rename boundary, not a general power-loss guarantee; see
+[Checkpoint 77](../decisions/checkpoints/2026-08-05-77-atomic-run-initialization-local-gate.md).
 
 ## State ownership
 
@@ -276,7 +285,7 @@ harness metrics.
 ## Production questions deliberately left open
 
 - long-lived kernel lifecycle and multi-run concurrency;
-- crash recovery and durable append-before-notify event storage;
+- power-loss validation and bounded cleanup/doctor reporting for abandoned private staging;
 - binary discovery, updates, signing, and compatibility negotiation;
 - provider streaming and partial-result semantics;
 - process-tree containment and sandbox backends;

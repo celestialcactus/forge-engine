@@ -1,3 +1,18 @@
+# 2026-08-05 - Initial run records publish atomically
+
+- Moved OS execution locks into a non-authoritative `.locks` namespace so lock
+  acquisition cannot manufacture a partial run record.
+- Rust now synchronizes all four initial ledger files in private staging, closes
+  append handles for Windows compatibility, and publishes the complete directory
+  with one rename before reopening it for execution.
+- A fault-injection regression proves the final run is invisible before publication;
+  a second regression proves abandoned private staging is non-authoritative and does
+  not block a clean retry. Concurrent duplicate creation remains single-winner.
+- The full local hybrid gate passes: zero-warning Rust validation, 92/92 Node tests
+  and build, and 59 hybrid scenarios. A restarted controlled VS Code session also passes in one Forge call and 5 seconds. Hosted Windows/macOS/Ubuntu remains pending.
+- See [Checkpoint 77](checkpoints/2026-08-05-77-atomic-run-initialization-local-gate.md),
+  [ADR-0030](ADRs/ADR-0030-durable-interaction-transcript-and-safe-continuation.md),
+  and [CLI ship lane 6](../tasks/SLICE-CLI6-run-recovery.md).
 # 2026-08-05 - Safe continuation exact-head local gate
 
 - Implemented bridge v9 durable interaction intents/completions, bounded planner

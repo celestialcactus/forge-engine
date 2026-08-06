@@ -107,12 +107,20 @@ The full local hybrid gate, packaged CLI smoke, and controlled one-call VS Code
 retest pass; see
 [Checkpoint 76](../checkpoints/2026-08-05-76-safe-run-continuation-local-gate.md).
 
-Remaining acceptance work is hosted Windows/macOS/Ubuntu, an explicit outer
-interaction-to-ChangeSet transaction cross-link, and disposition of
-the small crash window between initial `request.json` publication and creation of
-the continuation/event records. Unresolved provider and approval requests remain
-intentionally non-retryable, same-version continuation is required, and
-cross-device/distributed recovery is out of scope.
+The follow-up hardening closes the process-crash window during initial record
+creation: locks use a non-authoritative namespace, all four initial ledger files are
+synchronized in private staging, open handles are closed before a Windows-compatible
+directory rename, and only the complete renamed directory is authoritative. An
+abandoned staging directory is invisible to run inspection and cannot block a clean
+retry. See
+[Checkpoint 77](../checkpoints/2026-08-05-77-atomic-run-initialization-local-gate.md).
+
+Remaining acceptance work is hosted Windows/macOS/Ubuntu and an explicit outer
+interaction-to-ChangeSet transaction cross-link. Automatic cleanup/reporting for
+abandoned private staging is release hardening, not an authority gap. Unresolved
+provider and approval requests remain intentionally non-retryable, same-version
+continuation is required, and cross-device/distributed and general power-loss
+recovery are out of scope.
 
 ## Non-goals
 

@@ -92,15 +92,16 @@ impl RunExecutionLock {
         let canonical_root = root
             .canonicalize()
             .map_err(|error| format!("Cannot canonicalize run store root: {error}"))?;
-        let directory = run_directory(&canonical_root, run_id);
-        fs::create_dir_all(&directory)
-            .map_err(|error| format!("Cannot create run execution directory: {error}"))?;
+        let digest = crate::change_set_v2::sha256(run_id.as_bytes());
+        let lock_directory = canonical_root.join(".locks").join(&digest[..2]);
+        fs::create_dir_all(&lock_directory)
+            .map_err(|error| format!("Cannot create run execution lock directory: {error}"))?;
         let file = OpenOptions::new()
             .create(true)
             .truncate(false)
             .read(true)
             .write(true)
-            .open(directory.join("execution.lock"))
+            .open(lock_directory.join(format!("{digest}.lock")))
             .map_err(|error| format!("Cannot open run execution lock: {error}"))?;
         file.try_lock().map_err(|error| {
             format!("Run {run_id} already has a live execution or resume owner: {error}")
@@ -127,6 +128,68 @@ pub enum RunResumeOpen {
     },
 }
 
+struct StagedRunDirectory {
+    path: PathBuf,
+    published: bool,
+}
+
+impl StagedRunDirectory {
+    fn create(parent: &Path) -> Result<Self, String> {
+        for _ in 0..4 {
+            let mut nonce = [0_u8; 16];
+            getrandom::fill(&mut nonce)
+                .map_err(|error| format!("Cannot obtain run-ledger staging randomness: {error}"))?;
+            let token = crate::change_set_v2::sha256(&nonce);
+            let path = parent.join(format!(".initializing-{}", &token[..32]));
+            match fs::create_dir(&path) {
+                Ok(()) => {
+                    return Ok(Self {
+                        path,
+                        published: false,
+                    });
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => {
+                    return Err(format!(
+                        "Cannot create staged run ledger directory: {error}"
+                    ));
+                }
+            }
+        }
+        Err("Cannot allocate a unique staged run ledger directory.".to_owned())
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn publish(mut self, destination: &Path, run_id: &str) -> Result<(), String> {
+        if let Err(error) = fs::rename(&self.path, destination) {
+            if destination.exists() {
+                return Err(format!(
+                    "Run {run_id} already has a durable ledger and cannot be executed again."
+                ));
+            }
+            return Err(format!(
+                "Cannot atomically publish run ledger directory: {error}"
+            ));
+        }
+        self.published = true;
+        let parent = destination
+            .parent()
+            .ok_or_else(|| "Run ledger directory has no parent.".to_owned())?;
+        sync_directory(parent)
+    }
+}
+
+impl Drop for StagedRunDirectory {
+    fn drop(&mut self) {
+        if !self.published {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}
+
 pub struct RunLedger {
     directory: PathBuf,
     request: RunRequest,
@@ -144,6 +207,25 @@ impl RunLedger {
         request: &RunRequest,
         capability_descriptors: &[CapabilityDescriptor],
     ) -> Result<Self, String> {
+        Self::create_with_before_publish(
+            root,
+            bridge_protocol_version,
+            request,
+            capability_descriptors,
+            |_, _| Ok(()),
+        )
+    }
+
+    fn create_with_before_publish<F>(
+        root: &Path,
+        bridge_protocol_version: &str,
+        request: &RunRequest,
+        capability_descriptors: &[CapabilityDescriptor],
+        before_publish: F,
+    ) -> Result<Self, String>
+    where
+        F: FnOnce(&Path, &Path) -> Result<(), String>,
+    {
         validate_root(root)?;
         validate_run_id(&request.run_id)?;
         if bridge_protocol_version.trim().is_empty() {
@@ -161,8 +243,19 @@ impl RunLedger {
             .canonicalize()
             .map_err(|error| format!("Cannot canonicalize run store root: {error}"))?;
         let directory = run_directory(&canonical_root, &request.run_id);
-        fs::create_dir_all(&directory)
-            .map_err(|error| format!("Cannot create run ledger directory: {error}"))?;
+        let parent = directory
+            .parent()
+            .ok_or_else(|| "Run ledger directory has no parent.".to_owned())?;
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Cannot create run ledger parent directory: {error}"))?;
+        if directory.exists() {
+            return Err(format!(
+                "Run {} already has a durable ledger and cannot be executed again.",
+                request.run_id
+            ));
+        }
+        let staged = StagedRunDirectory::create(parent)?;
+        let staged_directory = staged.path().to_path_buf();
 
         let request_sha256 = subject_sha256(request, &normalized_capability_ids)?;
         let record = RunLedgerRequest {
@@ -176,31 +269,35 @@ impl RunLedger {
         if request_bytes.len() as u64 > MAX_REQUEST_BYTES {
             return Err("Run ledger request exceeds the configured byte limit.".to_owned());
         }
-        write_new_synced(&directory.join("request.json"), &request_bytes).map_err(|error| {
-            if error.kind() == std::io::ErrorKind::AlreadyExists {
-                format!(
-                    "Run {} already has a durable ledger and cannot be executed again.",
-                    request.run_id
-                )
-            } else {
-                format!("Cannot persist run ledger request: {error}")
-            }
-        })?;
-        let continuation = create_continuation(
-            &directory,
+        write_new_synced(&staged_directory.join("request.json"), &request_bytes)
+            .map_err(|error| format!("Cannot persist staged run ledger request: {error}"))?;
+        let staged_continuation = create_continuation(
+            &staged_directory,
             &request.run_id,
             bridge_protocol_version,
             &normalized_capability_descriptors,
         )?;
+        drop(staged_continuation);
+        {
+            let staged_events_file = OpenOptions::new()
+                .create_new(true)
+                .append(true)
+                .open(staged_directory.join("events.jsonl"))
+                .map_err(|error| format!("Cannot create staged run event ledger: {error}"))?;
+            staged_events_file
+                .sync_all()
+                .map_err(|error| format!("Cannot sync staged run event ledger: {error}"))?;
+        }
+        sync_directory(&staged_directory)?;
+        before_publish(&staged_directory, &directory)?;
+        staged.publish(&directory, &request.run_id)?;
+        let validated = read_continuation(&directory, &record)?
+            .ok_or_else(|| "Published run ledger has no continuation transcript.".to_owned())?;
+        let continuation = resume_continuation(&directory, &validated)?;
         let events_file = OpenOptions::new()
-            .create_new(true)
             .append(true)
             .open(directory.join("events.jsonl"))
-            .map_err(|error| format!("Cannot create run event ledger: {error}"))?;
-        events_file
-            .sync_all()
-            .map_err(|error| format!("Cannot sync run event ledger: {error}"))?;
-        sync_directory(&directory)?;
+            .map_err(|error| format!("Cannot reopen published run event ledger: {error}"))?;
 
         Ok(Self {
             directory,
@@ -1116,6 +1213,110 @@ mod tests {
     }
 
     #[test]
+    fn publishes_initial_run_state_atomically_after_all_ledger_files_are_synced() {
+        let root = temporary_root();
+        let request = request("run:atomic-initialization");
+
+        let failure = RunLedger::create_with_before_publish(
+            &root,
+            "test",
+            &request,
+            &[],
+            |staged, destination| {
+                assert!(!destination.exists());
+                for name in [
+                    "request.json",
+                    "continuation.json",
+                    "interactions.jsonl",
+                    "events.jsonl",
+                ] {
+                    assert!(staged.join(name).is_file(), "missing staged {name}");
+                }
+                assert!(inspect_run(&root, &request.run_id).is_err());
+                Err("fixture interrupted before publish".to_owned())
+            },
+        );
+        let error = match failure {
+            Ok(_) => panic!("fault fixture must stop publication"),
+            Err(error) => error,
+        };
+        assert_eq!(error, "fixture interrupted before publish");
+
+        let canonical_root = root.canonicalize().expect("canonical root");
+        let directory = run_directory(&canonical_root, &request.run_id);
+        assert!(!directory.exists());
+        let parent = directory.parent().expect("run directory parent");
+        let staging_entries = fs::read_dir(parent)
+            .expect("run directory parent")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".initializing-")
+            })
+            .count();
+        assert_eq!(staging_entries, 0);
+
+        let ledger = RunLedger::create(&root, "test", &request, &[])
+            .expect("a clean retry can publish the complete ledger");
+        assert_eq!(ledger.directory, directory);
+        drop(ledger);
+        let inspection = inspect_run(&root, &request.run_id).expect("published run inspection");
+        assert_eq!(inspection.state, RunRecordState::OpenOrInterrupted);
+        assert_eq!(
+            inspection.resume_disposition,
+            RunResumeDisposition::ResumeAvailable
+        );
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn an_orphaned_private_staging_directory_is_not_authoritative_or_retry_blocking() {
+        let root = temporary_root();
+        fs::create_dir_all(&root).expect("run store root");
+        let canonical_root = root.canonicalize().expect("canonical root");
+        let request = request("run:orphaned-initialization");
+        let directory = run_directory(&canonical_root, &request.run_id);
+        let orphan = directory
+            .parent()
+            .expect("run directory parent")
+            .join(".initializing-crash-fixture");
+
+        let failure = RunLedger::create_with_before_publish(
+            &root,
+            "test",
+            &request,
+            &[],
+            |staged, destination| {
+                assert_eq!(destination, directory);
+                fs::rename(staged, &orphan).expect("simulate abandoned private staging");
+                Err("fixture process stopped before publish".to_owned())
+            },
+        );
+        let error = match failure {
+            Ok(_) => panic!("fault fixture must stop publication"),
+            Err(error) => error,
+        };
+        assert_eq!(error, "fixture process stopped before publish");
+        assert!(orphan.is_dir());
+        assert!(!directory.exists());
+        assert!(inspect_run(&root, &request.run_id).is_err());
+
+        let ledger = RunLedger::create(&root, "test", &request, &[])
+            .expect("orphaned private staging must not block a clean retry");
+        assert_eq!(ledger.directory, directory);
+        drop(ledger);
+        assert_eq!(
+            inspect_run(&root, &request.run_id)
+                .expect("published retry")
+                .state,
+            RunRecordState::OpenOrInterrupted
+        );
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
     fn classifies_request_content_tampering_as_repair_required() {
         let root = temporary_root();
         let request = request("run:request-tampering");
@@ -1583,6 +1784,16 @@ mod tests {
     fn serializes_live_execution_ownership_with_an_os_released_lock() {
         let root = temporary_root();
         let first = RunExecutionLock::acquire(&root, "run:locked").expect("first lock");
+        let canonical_root = root.canonicalize().expect("canonical root");
+        assert!(!run_directory(&canonical_root, "run:locked").exists());
+        let digest = crate::change_set_v2::sha256(b"run:locked");
+        assert!(
+            canonical_root
+                .join(".locks")
+                .join(&digest[..2])
+                .join(format!("{digest}.lock"))
+                .is_file()
+        );
         let error = RunExecutionLock::acquire(&root, "run:locked")
             .err()
             .expect("second owner must fail");
