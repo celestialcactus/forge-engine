@@ -5,9 +5,9 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 pub use continuation::{
-    CapabilityDescriptor, CapabilityReplaySafety, InteractionReplaySafety, RecordedRunInteraction,
-    RunContinuationDisposition, RunContinuationInspection, RunContinuationReplay,
-    RunInteractionKind,
+    CapabilityDescriptor, CapabilityReplaySafety, ChangeSetRecoveryPhase, InteractionReplaySafety,
+    RecordedRunInteraction, RunContinuationDisposition, RunContinuationInspection,
+    RunContinuationReplay, RunInteractionKind, RunRecoveryCheckpoint,
 };
 use continuation::{
     ContinuationWriter, build_replay, create_continuation, normalize_capability_descriptors,
@@ -413,6 +413,18 @@ impl RunLedger {
         }
         self.continuation
             .record_retry_intent(interaction_id, kind, replay_safety, payload)
+    }
+
+    pub fn record_interaction_checkpoint(
+        &mut self,
+        interaction_id: &str,
+        checkpoint: RunRecoveryCheckpoint,
+    ) -> Result<(), String> {
+        if self.sealed {
+            return Err("A sealed run ledger cannot accept interaction checkpoints.".to_owned());
+        }
+        self.continuation
+            .record_checkpoint(interaction_id, checkpoint)
     }
 
     pub fn record_interaction_completion(
@@ -1612,6 +1624,141 @@ mod tests {
             );
             fs::remove_dir_all(root).expect("cleanup");
         }
+    }
+
+    #[test]
+    fn durably_projects_a_pending_change_set_transaction_checkpoint() {
+        let root = temporary_root();
+        let request = request("run:pending-change-checkpoint");
+        let descriptors = [CapabilityDescriptor {
+            id: "workspace.change.execute".to_owned(),
+            replay_safety: CapabilityReplaySafety::NonIdempotent,
+        }];
+        let checkpoint = RunRecoveryCheckpoint::ChangeSetTransaction {
+            schema_version: 1,
+            change_set_id: format!("changeset:sha256:{}", "a".repeat(64)),
+            transaction_id: format!("transaction:sha256:{}", "b".repeat(64)),
+            phase: ChangeSetRecoveryPhase::Registered,
+        };
+        let mut ledger = RunLedger::create(&root, "test", &request, &descriptors).expect("ledger");
+        ledger
+            .record_interaction_intent(
+                "capability:call:change",
+                RunInteractionKind::Capability,
+                InteractionReplaySafety::NonIdempotent,
+                serde_json::json!({ "call": { "id": "call:change" } }),
+            )
+            .expect("intent");
+        ledger
+            .record_interaction_checkpoint("capability:call:change", checkpoint.clone())
+            .expect("checkpoint");
+        drop(ledger);
+
+        let continuation = inspect_run(&root, &request.run_id)
+            .expect("inspect")
+            .continuation
+            .expect("continuation");
+        assert_eq!(continuation.schema_version, 2);
+        assert_eq!(
+            continuation.disposition,
+            RunContinuationDisposition::BlockedNonIdempotent
+        );
+        assert_eq!(continuation.interaction_frame_count, 2);
+        assert_eq!(continuation.completed_interaction_count, 0);
+        assert_eq!(continuation.pending_recovery_checkpoint, Some(checkpoint));
+        assert!(
+            continuation
+                .reason
+                .contains("durable ChangeSet transaction")
+        );
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn rejects_invalid_or_misclassified_recovery_checkpoints() {
+        let root = temporary_root();
+        let request = request("run:invalid-change-checkpoint");
+        let descriptors = [CapabilityDescriptor {
+            id: "workspace.read".to_owned(),
+            replay_safety: CapabilityReplaySafety::ReadOnlyRetryable,
+        }];
+        let checkpoint = RunRecoveryCheckpoint::ChangeSetTransaction {
+            schema_version: 1,
+            change_set_id: format!("changeset:sha256:{}", "a".repeat(64)),
+            transaction_id: format!("transaction:sha256:{}", "b".repeat(64)),
+            phase: ChangeSetRecoveryPhase::Registered,
+        };
+        let mut ledger = RunLedger::create(&root, "test", &request, &descriptors).expect("ledger");
+        ledger
+            .record_interaction_intent(
+                "capability:call:read",
+                RunInteractionKind::Capability,
+                InteractionReplaySafety::ReadOnlyRetryable,
+                serde_json::json!({ "call": { "id": "call:read" } }),
+            )
+            .expect("intent");
+        assert!(
+            ledger
+                .record_interaction_checkpoint("capability:call:read", checkpoint)
+                .expect_err("read checkpoint must fail")
+                .contains("pending non-idempotent capability")
+        );
+        drop(ledger);
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn completes_a_checkpointed_interaction_without_leaving_pending_recovery() {
+        let root = temporary_root();
+        let request = request("run:completed-change-checkpoint");
+        let descriptors = [CapabilityDescriptor {
+            id: "workspace.change.execute".to_owned(),
+            replay_safety: CapabilityReplaySafety::NonIdempotent,
+        }];
+        let mut ledger = RunLedger::create(&root, "test", &request, &descriptors).expect("ledger");
+        ledger
+            .record_interaction_intent(
+                "capability:call:change",
+                RunInteractionKind::Capability,
+                InteractionReplaySafety::NonIdempotent,
+                serde_json::json!({ "call": { "id": "call:change" } }),
+            )
+            .expect("intent");
+        ledger
+            .record_interaction_checkpoint(
+                "capability:call:change",
+                RunRecoveryCheckpoint::ChangeSetTransaction {
+                    schema_version: 1,
+                    change_set_id: format!("changeset:sha256:{}", "a".repeat(64)),
+                    transaction_id: format!("transaction:sha256:{}", "b".repeat(64)),
+                    phase: ChangeSetRecoveryPhase::Registered,
+                },
+            )
+            .expect("checkpoint");
+        ledger
+            .record_interaction_completion(
+                "capability:call:change",
+                RunInteractionKind::Capability,
+                serde_json::json!({
+                    "type": "capability.result",
+                    "result": { "callId": "call:change", "success": true, "content": "retained" }
+                }),
+            )
+            .expect("completion");
+        drop(ledger);
+
+        let continuation = inspect_run(&root, &request.run_id)
+            .expect("inspect")
+            .continuation
+            .expect("continuation");
+        assert_eq!(
+            continuation.disposition,
+            RunContinuationDisposition::SafeBoundary
+        );
+        assert_eq!(continuation.interaction_frame_count, 3);
+        assert_eq!(continuation.completed_interaction_count, 1);
+        assert_eq!(continuation.pending_recovery_checkpoint, None);
+        fs::remove_dir_all(root).expect("cleanup");
     }
 
     #[test]

@@ -184,7 +184,7 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
   assert.match(report.kernel.source, /^source-(debug|release)$/u);
   assert.match(report.kernel.path, /forge-kernel(?:\.exe)?$/u);
   assert.equal(report.kernel.version, '0.1.0');
-  assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v9');
+  assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v10');
   assert.equal(report.kernel.protocols.runStore, 'forge.kernel.run-store.v1');
   assert.equal(report.kernel.protocols.sovereignChange, 'forge.kernel.changeset.v3');
   assert.equal(report.runStore.root, resolve(cliEngineRoot, 'runs', 'v1'));

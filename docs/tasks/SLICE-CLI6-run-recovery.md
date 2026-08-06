@@ -1,6 +1,6 @@
 # CLI ship lane 6: outer-run recovery
 
-**Status:** 6A/6B exact-head local/controlled VS Code gates and atomic-initialization local/controlled VS Code gates passed; hosted Windows/macOS/Ubuntu pending.
+**Status:** 6A/6B, atomic initialization, and the bridge-v10 ChangeSet recovery cross-link have passed exact-head local/controlled VS Code gates; hosted Windows/macOS/Ubuntu pending.
 **Branch:** `feature/cli-safe-continuation` (stacked on `feature/cli-run-recovery`)
 **Base:** merged `develop` at `e09826a` (PR #23)
 
@@ -17,8 +17,10 @@ non-idempotent operation to run again.
   admission, outcome assessment, and terminal `RunArtifact`.
 - The bridge streams each Rust-authored event before returning one matching
   terminal artifact.
-- Governed ChangeSet transactions already have their own durable, idempotent Rust
-  recovery journals. They remain authoritative for mutation state.
+- Governed ChangeSet transactions have their own durable, idempotent Rust recovery
+  journals and remain authoritative for mutation state. Bridge v10 can durably
+  cross-link a pending outer capability to one registered ChangeSet transaction
+  without copying or replaying that transaction state.
 - Provider planner messages, pending provider tool-call IDs, and bridge
   request/response boundaries are currently memory-only.
 - `~/.forge` or an explicit `FORGE_ENGINE_ROOT` already supplies the product state
@@ -129,9 +131,11 @@ is no recovery runtime or child logical run.
 - [x] an unresolved explicitly retryable evidence call may be deliberately retried
       once total, and an interrupted retry becomes permanently blocked;
 - [x] unresolved non-idempotent work is surfaced and never replayed;
-- [ ] retained ChangeSet transaction identity is not yet cross-linked from the
-      outer interaction record; the outer capability blocks safely and the
-      existing Rust ChangeSet journal remains authoritative;
+- [x] after the Rust ChangeSet service returns a validated registered transaction,
+      bridge v10 durably records and acknowledges a typed
+      `change_set_transaction` recovery checkpoint before the promotion decision;
+      inspection exposes the ChangeSet and transaction identities while the outer
+      capability remains non-idempotent and is never replayed;
 - [x] provider continuation state reconstructs exact tool-call correlation;
 - [x] local child-crash fixtures prove no duplicated inference, approval, or
       capability work and zero invocation of an unresolved non-idempotent adapter;
@@ -139,7 +143,7 @@ is no recovery runtime or child logical run.
       lock acquisition creates no authoritative run, abandoned staging is invisible,
       and a clean retry is allowed;
 - [x] controlled VS Code exact-head gate passes after restarting the MCP server on
-      the bridge v9 build;
+      the bridge v10 build;
 - [ ] hosted Windows/macOS/Ubuntu exact-head gates pass.
 
 Local exact-head evidence is recorded in
@@ -152,11 +156,21 @@ Code gate pass. Atomic initialization hardening is recorded separately in
 26 focused run-store tests and the full Rust/Node/hybrid gate pass, including
 Windows-compatible close-before-rename behavior and orphaned-staging retry proof.
 
+[Checkpoint 78](../decisions/checkpoints/2026-08-06-78-changeset-recovery-checkpoint-local-gate.md)
+records the bridge-v10 cross-link gate: the outer Rust ledger durably acknowledges
+one validated registered ChangeSet transaction before the interactive workflow may
+continue. The exact local gate passes with 93/93 Node tests, 56/62 hybrid scenarios
+(the remaining six require an explicitly supplied kernel fixture), full zero-warning
+Rust validation, packaged CLI smoke, and a controlled one-call/five-second VS Code
+test.
+
 ## Whole-lane exit
 
 - canonical events/artifacts survive process restart;
 - valid terminal runs replay deterministically without executing work;
 - resumable continuation uses a durable interaction transcript;
+- a pending governed mutation can point to its authoritative ChangeSet transaction
+  without replaying the outer non-idempotent capability;
 - unsafe or corrupt states fail closed with actionable repair evidence;
 - CLI, embedded, and later MCP/session surfaces reuse the same store contract;
 - SQLite and graph views remain derived projections, not competing authorities.

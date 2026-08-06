@@ -10,6 +10,7 @@ import type {
   SovereignCoordinatorArtifact,
   SovereignProposalArtifact,
 } from './hybrid/rust-sovereign-change-runtime.js';
+import type { CapabilityRecoveryCheckpoint } from './slice0/contracts.js';
 
 export interface InteractiveChangeIo {
   question(prompt: string, signal?: AbortSignal): Promise<string | undefined>;
@@ -39,6 +40,7 @@ export interface InteractiveChangeExecutionOptions {
   readonly io: InteractiveChangeIo;
   readonly signal?: AbortSignal;
   readonly callIdFactory?: () => string;
+  readonly onRecoveryCheckpoint?: (checkpoint: CapabilityRecoveryCheckpoint) => Promise<void>;
 }
 
 const approval = (
@@ -208,6 +210,13 @@ export async function executeInteractiveChangePlan(
   if (transactionId === undefined) {
     throw new Error('Verified candidate did not retain a durable transaction ID.');
   }
+  await options.onRecoveryCheckpoint?.({
+    schemaVersion: 1,
+    kind: 'change_set_transaction',
+    changeSetId: prepared.changeSetId,
+    transactionId,
+    phase: 'registered',
+  });
 
   options.io.write(`[forge] verified candidate transaction=${transactionId}; awaiting explicit promotion or discard.`);
   const promotionChoice = await askWithCancellation(

@@ -10,6 +10,8 @@ import type {
   Capability,
   CapabilityCall,
   CapabilityContext,
+  CapabilityInvocationObserver,
+  CapabilityRecoveryCheckpoint,
   CapabilityResult,
   PlannerCheckpoint,
   PlannerRequest,
@@ -20,7 +22,7 @@ import type {
   WorkspaceSnapshot,
 } from '../slice0/contracts.js';
 
-export const rustKernelProtocolVersion = 'forge.kernel.bridge.v9';
+export const rustKernelProtocolVersion = 'forge.kernel.bridge.v10';
 
 
 export interface RustKernelResumeOptions {
@@ -46,6 +48,12 @@ export interface RustKernelRuntimeOptions {
 
 type JsonObject = Record<string, unknown>;
 type ExitState = { readonly code: number | null; readonly signal: NodeJS.Signals | null };
+type PendingCheckpointAcknowledgement = {
+  readonly callId: string;
+  readonly checkpoint: CapabilityRecoveryCheckpoint;
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+};
 const cancelled = Symbol('cancelled');
 
 const isObject = (value: unknown): value is JsonObject =>
@@ -66,6 +74,19 @@ const isOutcomeAssessment = (value: unknown): boolean => {
 };
 
 const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
+const validateRecoveryCheckpoint = (candidate: unknown): CapabilityRecoveryCheckpoint => {
+  if (!isObject(candidate)
+    || candidate.schemaVersion !== 1
+    || candidate.kind !== 'change_set_transaction'
+    || typeof candidate.changeSetId !== 'string'
+    || !/^changeset:sha256:[a-f0-9]{64}$/u.test(candidate.changeSetId)
+    || typeof candidate.transactionId !== 'string'
+    || !/^transaction:sha256:[a-f0-9]{64}$/u.test(candidate.transactionId)
+    || candidate.phase !== 'registered'
+  ) throw new Error('Capability emitted an invalid recovery checkpoint.');
+  return candidate as unknown as CapabilityRecoveryCheckpoint;
+};
 
 const cancellationReason = (signal: AbortSignal): string =>
   signal.reason instanceof Error ? signal.reason.message : 'Cancellation requested.';
@@ -214,6 +235,9 @@ export class RustKernelRuntime {
     let failure: unknown;
     let cancelSent = false;
     let launchError: Error | undefined;
+    let activeCapability: Promise<void> | undefined;
+    let backgroundFailure: unknown;
+    let pendingCheckpointAcknowledgement: PendingCheckpointAcknowledgement | undefined;
 
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', (chunk: string) => {
@@ -359,7 +383,33 @@ export class RustKernelRuntime {
         return;
       }
 
+      if (message.type === 'capability.progress.recorded'
+        || message.type === 'capability.progress.rejected') {
+        const pending = pendingCheckpointAcknowledgement;
+        if (pending === undefined || message.callId !== pending.callId) {
+          throw new Error('Rust kernel returned an unexpected capability progress acknowledgement.');
+        }
+        pendingCheckpointAcknowledgement = undefined;
+        if (message.type === 'capability.progress.recorded') {
+          const checkpoint = validateRecoveryCheckpoint(message.checkpoint);
+          if (!isDeepStrictEqual(checkpoint, pending.checkpoint)) {
+            pending.reject(new Error('Rust kernel acknowledged a different capability recovery checkpoint.'));
+            return;
+          }
+          pending.resolve();
+          return;
+        }
+        pending.reject(new Error(
+          'Rust kernel rejected the capability recovery checkpoint: '
+          + String(message.message ?? 'unknown reason'),
+        ));
+        return;
+      }
+
       if (message.type === 'capability.invoke') {
+        if (activeCapability !== undefined) {
+          throw new Error('Rust kernel requested overlapping capability invocations.');
+        }
         const call = message.call as CapabilityCall;
         const snapshot = message.snapshot as WorkspaceSnapshot;
         const capability = this.#capabilities.get(call.capabilityId);
@@ -372,24 +422,71 @@ export class RustKernelRuntime {
           });
           return;
         }
-        let result: CapabilityResult;
-        try {
-          const invoked = await raceWithCancellation(
-            capability.invoke(call, snapshot, signal, message.context as CapabilityContext),
-            signal,
-          );
-          if (invoked === cancelled) return;
-          result = invoked;
-        } catch (error) {
-          if (signal.aborted) return;
-          result = { callId: call.id, success: false, content: errorMessage(error) };
-        }
-        await writeMessage({
-          type: 'capability.result',
-          protocolVersion: rustKernelProtocolVersion,
-          requestId,
-          result,
-        });
+        const observer: CapabilityInvocationObserver = {
+          checkpoint: async (candidate): Promise<void> => {
+            const checkpoint = validateRecoveryCheckpoint(candidate);
+            if (pendingCheckpointAcknowledgement !== undefined) {
+              throw new Error('Capability emitted overlapping recovery checkpoints.');
+            }
+            await new Promise<void>((resolve, reject) => {
+              const pending: PendingCheckpointAcknowledgement = {
+                callId: call.id,
+                checkpoint,
+                resolve,
+                reject: (error) => reject(error),
+              };
+              pendingCheckpointAcknowledgement = pending;
+              void writeMessage({
+                type: 'capability.progress',
+                protocolVersion: rustKernelProtocolVersion,
+                requestId,
+                callId: call.id,
+                checkpoint,
+              }).catch((error: unknown) => {
+                if (pendingCheckpointAcknowledgement === pending) {
+                  pendingCheckpointAcknowledgement = undefined;
+                  reject(error);
+                }
+              });
+            });
+          },
+        };
+        const operation = (async (): Promise<void> => {
+          let result: CapabilityResult;
+          try {
+            const invoked = await raceWithCancellation(
+              capability.invoke(
+                call,
+                snapshot,
+                signal,
+                message.context as CapabilityContext,
+                observer,
+              ),
+              signal,
+            );
+            if (invoked === cancelled) return;
+            result = invoked;
+          } catch (error) {
+            if (signal.aborted) return;
+            result = { callId: call.id, success: false, content: errorMessage(error) };
+          }
+          await writeMessage({
+            type: 'capability.result',
+            protocolVersion: rustKernelProtocolVersion,
+            requestId,
+            result,
+          });
+        })();
+        let tracked: Promise<void>;
+        tracked = operation
+          .catch((error: unknown) => {
+            backgroundFailure ??= error;
+            if (child.exitCode === null) child.kill();
+          })
+          .finally(() => {
+            if (activeCapability === tracked) activeCapability = undefined;
+          });
+        activeCapability = tracked;
         return;
       }
 
@@ -450,6 +547,10 @@ export class RustKernelRuntime {
       failure = error;
     } finally {
       signal.removeEventListener('abort', sendCancellation);
+      const pending = pendingCheckpointAcknowledgement;
+      pendingCheckpointAcknowledgement = undefined;
+      pending?.reject(new Error('Rust kernel closed before acknowledging the capability recovery checkpoint.'));
+      await activeCapability;
       lines.close();
       if (!child.stdin.destroyed) child.stdin.end();
       if (terminalArtifact === undefined && child.exitCode === null) child.kill();
@@ -460,6 +561,7 @@ export class RustKernelRuntime {
       throw new Error('Rust kernel failed to start: ' + launchError.message);
     }
     if (failed) throw failure;
+    if (backgroundFailure !== undefined) throw backgroundFailure;
     if (exit.code !== 0) {
       const detail = stderr.trim();
       const signalSuffix = exit.signal === null ? '' : ' (' + exit.signal + ')';

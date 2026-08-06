@@ -52,8 +52,14 @@ second recovery coordinator would also violate Forge's one-runtime rule.
    lock is released by the operating system on process death; a persistent lock
    filename is not treated as proof that an owner remains alive.
 8. ChangeSet mutation journals remain the authority for prepared, retained,
-   promoted, discarded, or recovered workspace state. The interaction transcript
-   links their evidence but never reimplements their state machine.
+   promoted, discarded, or recovered workspace state. After the separate Rust
+   ChangeSet service returns a validated registered transaction, TypeScript may
+   forward its content-addressed ChangeSet and transaction identities as a typed
+   recovery checkpoint for the active outer capability. The outer Rust ledger
+   validates the call binding, persists and synchronizes the checkpoint, and
+   acknowledges it before the workflow may ask for promotion, retention, or
+   discard. The transcript links the journals but never reimplements their state
+   machine or makes the outer non-idempotent capability replayable.
 9. Deliver in two bounded increments:
    - **6B-1:** descriptors, durable intent/completion transcript, provider checkpoint,
      inspection validation, and safe-frontier classification; no automatic resume;
@@ -75,8 +81,11 @@ safety but fragment one developer task across competing run identities.
 
 - `continuation.json`: run identity, canonical capability descriptors, transcript
   schema, and manifest digest;
-- `interactions.jsonl`: ordered intent/completion frames with sequence, interaction
-  ID, kind, attempt, replay safety, typed payload, and payload digest.
+- `interactions.jsonl`: ordered intent/checkpoint/completion frames with sequence,
+  interaction ID, kind, attempt, replay safety, typed payload, and payload digest.
+  A schema-2 checkpoint is allowed only once on the currently pending
+  non-idempotent capability and contains bounded digest-shaped ChangeSet and
+  transaction identities.
 
 All files, frames, counts, strings, and opaque planner state are bounded before
 allocation or presentation. A partial, reordered, mismatched, oversized, or
@@ -98,7 +107,9 @@ deleted automatically.
 
 ## Implementation checkpoint
 
-The exact-head local implementation is complete through bridge v9. It adds bounded
+The exact-head local implementation is complete through bridge v10. It retains the
+bridge-v9 continuation contract and adds the durably acknowledged typed ChangeSet
+recovery checkpoint. The broader implementation adds bounded
 `continuation.json` and `interactions.jsonl` records, OS-owned per-run locking,
 planner checkpoint restoration, deterministic completed-response replay, exact
 event-prefix comparison, terminal temporary-artifact recovery, CLI inspect/resume,
@@ -115,12 +126,20 @@ abandoned staging directory is invisible to run inspection and cannot block a cl
 retry. See
 [Checkpoint 77](../checkpoints/2026-08-05-77-atomic-run-initialization-local-gate.md).
 
-Remaining acceptance work is hosted Windows/macOS/Ubuntu and an explicit outer
-interaction-to-ChangeSet transaction cross-link. Automatic cleanup/reporting for
-abandoned private staging is release hardening, not an authority gap. Unresolved
-provider and approval requests remain intentionally non-retryable, same-version
-continuation is required, and cross-device/distributed and general power-loss
-recovery are out of scope.
+The bridge-v10 follow-up closes the outer-to-ChangeSet discoverability gap. The
+interactive workflow waits for the outer Rust ledger's durable acknowledgement
+after ChangeSet registration and before the second human decision. Inspection
+projects that checkpoint for an interrupted non-idempotent call, while resume still
+blocks and never invokes it. Wrong-call, invalid-identity, duplicate, and
+misclassified checkpoints fail closed. See
+[Checkpoint 78](../checkpoints/2026-08-06-78-changeset-recovery-checkpoint-local-gate.md).
+
+Remaining acceptance work is hosted Windows/macOS/Ubuntu. Automatic
+cleanup/reporting for abandoned private staging and policy for registered but
+never-finalized ChangeSet transactions are release hardening, not a reason to
+invent a second recovery coordinator. Unresolved provider and approval requests
+remain intentionally non-retryable, same-version continuation is required, and
+cross-device/distributed and general power-loss recovery are out of scope.
 
 ## Non-goals
 
@@ -144,4 +163,8 @@ recovery are out of scope.
   most once in 6B-2;
 - 6B-2 restart fixtures prove zero duplicate cloud inference, prompts, mutation,
   promotion, Git operation, or external process;
+- a governed-change fixture proves the checkpoint is durably acknowledged after
+  registration and before the promotion/retain/discard prompt;
+- wrong-call and malformed checkpoints are rejected, while crash inspection exposes
+  the exact registered transaction and resume invokes the outer capability zero times;
 - Node Windows/macOS, hybrid Windows/macOS/Ubuntu, and controlled VS Code gates pass.

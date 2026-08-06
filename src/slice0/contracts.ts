@@ -255,6 +255,18 @@ export interface TaskPlanner {
 
 export type CapabilityReplaySafety = 'read_only_retryable' | 'non_idempotent';
 
+export interface CapabilityRecoveryCheckpoint {
+  readonly schemaVersion: 1;
+  readonly kind: 'change_set_transaction';
+  readonly changeSetId: string;
+  readonly transactionId: string;
+  readonly phase: 'registered';
+}
+
+export interface CapabilityInvocationObserver {
+  checkpoint(checkpoint: CapabilityRecoveryCheckpoint): Promise<void>;
+}
+
 export interface Capability {
   readonly id: string;
   readonly replaySafety?: CapabilityReplaySafety;
@@ -263,6 +275,7 @@ export interface Capability {
     snapshot: WorkspaceSnapshot,
     signal: AbortSignal,
     context: CapabilityContext,
+    observer?: CapabilityInvocationObserver,
   ): Promise<CapabilityResult>;
 }
 

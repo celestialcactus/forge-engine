@@ -1,8 +1,8 @@
 # Hybrid runtime candidate: Rust kernel and TypeScript adapters
 
-**Status:** bridge v9 is implemented and has passed the exact-head local and controlled VS Code gates for durable run storage and safe same-runtime continuation. Atomic initial-ledger publication has also passed its local full-hybrid and controlled VS Code gates; hosted Windows/macOS/Ubuntu acceptance remains pending.
+**Status:** bridge v10 is implemented and has passed the exact-head local and controlled VS Code gates for durable run storage, safe same-runtime continuation, atomic initial-ledger publication, and pending ChangeSet recovery cross-linkage; hosted Windows/macOS/Ubuntu acceptance remains pending.
 **Date:** 2026-07-22
-**Updated:** 2026-08-05
+**Updated:** 2026-08-06
 
 ## Architectural claim
 
@@ -20,7 +20,7 @@ VS Code / MCP / future provider SDK / TypeScript compiler
        tools, workflow definitions, presentation,
            provider/compiler/host integration
                          |
-            forge.kernel.bridge.v9 over NDJSON
+            forge.kernel.bridge.v10 over NDJSON
                          |
                  Rust kernel authority
      validate -> authorize -> schedule -> invoke -> record
@@ -29,8 +29,9 @@ VS Code / MCP / future provider SDK / TypeScript compiler
 ```
 
 The bridge is a local child-process protocol for the spike. It is not a public
-network service. Bridge v9 and the Rust run store form one run authority; the
-separate ChangeSet journals retain authority only for their mutation subject.
+network service. Bridge v10 and the Rust run store form one outer-run authority;
+the separate ChangeSet journals retain authority for their mutation subject and
+are referenced through a typed recovery checkpoint rather than duplicated.
 
 ## Why a process protocol
 
@@ -46,11 +47,15 @@ separate ChangeSet journals retain authority only for their mutation subject.
 FFI/N-API is intentionally deferred. It would optimize a boundary before proving
 that the boundary is correct.
 
-## Bridge protocol v9
+## Bridge protocol v10
 
 Every message is one UTF-8 JSON object followed by LF. Every message carries
-`protocolVersion: "forge.kernel.bridge.v9"` and a caller-selected `requestId`.
-Version 9 adds explicit replay-safety descriptors, the bounded durable interaction
+`protocolVersion: "forge.kernel.bridge.v10"` and a caller-selected `requestId`.
+Version 10 adds a bounded capability-progress handshake: after a separately
+validated Rust ChangeSet service registers a transaction, TypeScript forwards its
+typed identities; the outer Rust kernel validates the active call, durably appends
+the recovery checkpoint, and acknowledges it before the workflow may continue.
+Version 9 added explicit replay-safety descriptors, the bounded durable interaction
 transcript, planner checkpoints, `run.resume`, deterministic prefix replay, and
 OS-owned per-run locking. The run store persists the immutable request before
 execution, synchronizes every canonical event before host notification, and seals
@@ -62,7 +67,7 @@ and bounded typed capability evidence. Version 4 added a caller-supplied outcome
 contract and Rust-produced assessment, version 3 added normalized inference
 evidence, and version 2 replaced adapter-computed approval decisions with
 attributable facts. Earlier versions remain historical evidence intentionally
-rejected by a v9 peer.
+rejected by a v10 peer.
 
 ### Host to kernel
 
@@ -75,6 +80,9 @@ rejected by a v9 peer.
 - `approval.facts`: versioned host-policy and user-consent facts bound to the exact
   `callId` and `capabilityId` requested by Rust. It cannot carry a final Forge
   decision.
+- `capability.progress`: one bounded typed recovery checkpoint correlated to the
+  currently active capability call. It cannot report arbitrary progress or alter
+  ChangeSet state.
 - `capability.result`: bounded adapter evidence correlated to the requested call.
 - `run.cancel`: explicit cancellation reason while the kernel awaits an adapter.
 - `runtime.error`: a planner, policy, or integration callback failure that Rust
@@ -92,6 +100,11 @@ rejected by a v9 peer.
   capability context requiring host and user facts.
 - `capability.invoke`: the approved call, immutable workspace snapshot, and the
   same Rust-authored prior capability context.
+- `capability.progress.recorded`: durable acknowledgement of the exact accepted
+  checkpoint; the TypeScript workflow must not cross the recovery boundary before
+  receiving it.
+- `capability.progress.rejected`: fail-closed rejection of a mismatched,
+  duplicate, malformed, or out-of-state checkpoint.
 - `run.result`: the terminal authoritative `RunArtifact`.
 - `protocol.error`: malformed or out-of-state bridge input. If a run exists, the
   error must also become terminal run evidence.
@@ -105,11 +118,14 @@ The separate one-shot inspection discriminator uses
 forge.kernel.run-store.v1. Rust hashes the run ID to locate the bounded record,
 validates request digest, exact event sequence, artifact projections, continuation
 manifest, and interaction transcript, then reports terminal, resumable, explicit
-retry authorization required, blocked incomplete, or repair required. TypeScript
-never treats raw files as authority. Terminal resume returns the existing artifact
-without planner, provider, approval, or capability execution. Non-terminal resume
-is permitted only after Rust classifies the exact frontier and the same runtime
-reproduces the durable prefix.
+retry authorization required, blocked incomplete, or repair required. Continuation
+schema 2 can retain one typed `change_set_transaction` checkpoint for the pending
+non-idempotent call; schema 1 records remain inspectable but cannot contain that
+evidence. TypeScript never treats raw files as authority. Terminal resume returns
+the existing artifact without planner, provider, approval, or capability execution.
+Non-terminal resume is permitted only after Rust classifies the exact frontier and
+the same runtime reproduces the durable prefix. A checkpoint makes the separate
+ChangeSet journal discoverable; it never makes the outer mutation replayable.
 
 Initial execution locks live in a non-authoritative `.locks` namespace. Rust writes
 `request.json`, `continuation.json`, `interactions.jsonl`, and `events.jsonl` into a
@@ -129,7 +145,7 @@ Rust owns:
 - maximum-turn enforcement;
 - final policy evaluation, enforcement, and decision recording;
 - workflow execution state, scheduling, budgets, and cancellation;
-- capability request/result correlation and ordering;
+- capability request/result correlation, durable recovery checkpoints, and ordering;
 - the only transition from adapter answers to run state;
 - lifecycle status and failure taxonomy;
 - outcome-contract validation and the only authoritative outcome assessment;
@@ -144,7 +160,9 @@ TypeScript owns:
 - planner/provider calls requested by Rust;
 - collecting user-consent results and host-policy facts when Rust requests an
   approval input;
-- workflow definitions and rapidly changing orchestration integrations;
+- workflow definitions and rapidly changing orchestration integrations, including
+  forwarding separately validated ChangeSet identities to the outer checkpoint
+  handshake;
 - workspace, Git, TypeScript, and other integration-specific capabilities;
 - MCP schemas and compact host presentation;
 - selection of the absolute engine/run-store root and validation/presentation of

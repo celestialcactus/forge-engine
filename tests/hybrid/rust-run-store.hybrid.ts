@@ -7,7 +7,12 @@ import { createInterface } from 'node:readline';
 import { test } from 'node:test';
 import { RustKernelRuntime } from '../../src/hybrid/rust-kernel-runtime.js';
 import { RustRunStoreRuntime } from '../../src/hybrid/rust-run-store-runtime.js';
-import type { Capability, PlannerCheckpoint, TaskPlanner } from '../../src/slice0/contracts.js';
+import type {
+  Capability,
+  CapabilityRecoveryCheckpoint,
+  PlannerCheckpoint,
+  TaskPlanner,
+} from '../../src/slice0/contracts.js';
 
 const kernelBinary = process.env.FORGE_KERNEL_BINARY
   ?? resolve('target', 'debug', process.platform === 'win32' ? 'forge-kernel.exe' : 'forge-kernel');
@@ -15,6 +20,8 @@ const kernelBinary = process.env.FORGE_KERNEL_BINARY
 const createPendingCapabilityRun = async (
   capabilityId: string,
   replaySafety: 'read_only_retryable' | 'non_idempotent',
+  recoveryCheckpoint?: CapabilityRecoveryCheckpoint,
+  progressCallId = 'call:pending',
 ): Promise<{
   readonly engineRoot: string;
   readonly runStoreRoot: string;
@@ -38,7 +45,7 @@ const createPendingCapabilityRun = async (
   const timeout = setTimeout(() => child.kill(), 10_000);
   child.stdin.write(JSON.stringify({
     type: 'run.start',
-    protocolVersion: 'forge.kernel.bridge.v9',
+    protocolVersion: 'forge.kernel.bridge.v10',
     requestId,
     request: {
       runId,
@@ -62,7 +69,7 @@ const createPendingCapabilityRun = async (
       if (frame.type === 'planner.next') {
         child.stdin.write(JSON.stringify({
           type: 'planner.turn',
-          protocolVersion: 'forge.kernel.bridge.v9',
+          protocolVersion: 'forge.kernel.bridge.v10',
           requestId,
           turn: {
             kind: 'call',
@@ -77,7 +84,7 @@ const createPendingCapabilityRun = async (
       } else if (frame.type === 'approval.facts.request') {
         child.stdin.write(JSON.stringify({
           type: 'approval.facts',
-          protocolVersion: 'forge.kernel.bridge.v9',
+          protocolVersion: 'forge.kernel.bridge.v10',
           requestId,
           facts: {
             schemaVersion: 1,
@@ -96,6 +103,27 @@ const createPendingCapabilityRun = async (
           },
         }) + '\n');
       } else if (frame.type === 'capability.invoke') {
+        if (recoveryCheckpoint === undefined) {
+          child.kill();
+          break;
+        }
+        child.stdin.write(JSON.stringify({
+          type: 'capability.progress',
+          protocolVersion: 'forge.kernel.bridge.v10',
+          requestId,
+          callId: progressCallId,
+          checkpoint: recoveryCheckpoint,
+        }) + '\n');
+      } else if (frame.type === 'capability.progress.recorded') {
+        assert.equal(progressCallId, 'call:pending');
+        assert.equal(frame.callId, 'call:pending');
+        assert.deepEqual(frame.checkpoint, recoveryCheckpoint);
+        child.kill();
+        break;
+      } else if (frame.type === 'capability.progress.rejected') {
+        assert.notEqual(progressCallId, 'call:pending');
+        assert.equal(frame.callId, progressCallId);
+        assert.match(String(frame.message), /does not match/u);
         child.kill();
         break;
       }
@@ -105,6 +133,10 @@ const createPendingCapabilityRun = async (
       .inspect(runId);
     assert.equal(inspection.continuation?.disposition,
       replaySafety === 'read_only_retryable' ? 'retryable_capability' : 'blocked_non_idempotent');
+    assert.deepEqual(
+      inspection.continuation?.pendingRecoveryCheckpoint,
+      progressCallId === 'call:pending' ? recoveryCheckpoint : undefined,
+    );
     return { engineRoot, runStoreRoot, runId };
   } catch (error) {
     await rm(engineRoot, { recursive: true, force: true });
@@ -151,7 +183,7 @@ test('host notification follows durable append and interrupted work remains bloc
   });
   child.stdin.write(JSON.stringify({
     type: 'run.start',
-    protocolVersion: 'forge.kernel.bridge.v9',
+    protocolVersion: 'forge.kernel.bridge.v10',
     requestId,
     request: {
       runId,
@@ -173,7 +205,7 @@ test('host notification follows durable append and interrupted work remains bloc
   try {
     const frame = await firstFrame;
     assert.equal(frame.type, 'run.event');
-    assert.equal(frame.protocolVersion, 'forge.kernel.bridge.v9');
+    assert.equal(frame.protocolVersion, 'forge.kernel.bridge.v10');
     const event = frame.event as { readonly runId: string; readonly sequence: number; readonly type: string };
     assert.equal(event.runId, runId);
     assert.equal(event.sequence, 1);
@@ -333,6 +365,185 @@ test('never resumes an unresolved non-idempotent capability', async () => {
   }
 });
 
+test('rejects a recovery checkpoint bound to a different capability call', async () => {
+  const recoveryCheckpoint: CapabilityRecoveryCheckpoint = {
+    schemaVersion: 1,
+    kind: 'change_set_transaction',
+    changeSetId: `changeset:sha256:${'e'.repeat(64)}`,
+    transactionId: `transaction:sha256:${'f'.repeat(64)}`,
+    phase: 'registered',
+  };
+  const pending = await createPendingCapabilityRun(
+    'workspace.change.execute',
+    'non_idempotent',
+    recoveryCheckpoint,
+    'call:different',
+  );
+  try {
+    const inspection = await new RustRunStoreRuntime({
+      kernelPath: kernelBinary,
+      runStoreRoot: pending.runStoreRoot,
+    }).inspect(pending.runId);
+    assert.equal(inspection.continuation?.disposition, 'blocked_non_idempotent');
+    assert.equal(inspection.continuation?.interactionFrameCount, 5);
+    assert.equal(inspection.continuation?.pendingRecoveryCheckpoint, undefined);
+  } finally {
+    await rm(pending.engineRoot, { recursive: true, force: true });
+  }
+});
+
+test('exposes a durable ChangeSet transaction without replaying the interrupted mutation', async () => {
+  const recoveryCheckpoint: CapabilityRecoveryCheckpoint = {
+    schemaVersion: 1,
+    kind: 'change_set_transaction',
+    changeSetId: `changeset:sha256:${'a'.repeat(64)}`,
+    transactionId: `transaction:sha256:${'b'.repeat(64)}`,
+    phase: 'registered',
+  };
+  const pending = await createPendingCapabilityRun(
+    'workspace.change.execute',
+    'non_idempotent',
+    recoveryCheckpoint,
+  );
+  let capabilityCalls = 0;
+  const runtime = new RustKernelRuntime({
+    planner: {
+      id: 'fixture:resume',
+      async next() {
+        throw new Error('Checkpointed mutation must not reach the planner.');
+      },
+    },
+    capabilities: [{
+      id: 'workspace.change.execute',
+      replaySafety: 'non_idempotent',
+      async invoke(call) {
+        capabilityCalls++;
+        return { callId: call.id, success: true, content: 'must not execute' };
+      },
+    }],
+    approvalFacts: {
+      async collect() {
+        throw new Error('Checkpointed mutation must not request approval.');
+      },
+    },
+    kernelPath: kernelBinary,
+    runStoreRoot: pending.runStoreRoot,
+  });
+
+  try {
+    await assert.rejects(
+      runtime.resume(pending.runId, { allowRetryableCapabilityRetry: true }),
+      /durable ChangeSet transaction checkpoint can be inspected/u,
+    );
+    assert.equal(capabilityCalls, 0);
+    const inspection = await new RustRunStoreRuntime({
+      kernelPath: kernelBinary,
+      runStoreRoot: pending.runStoreRoot,
+    }).inspect(pending.runId);
+    assert.deepEqual(inspection.continuation?.pendingRecoveryCheckpoint, recoveryCheckpoint);
+  } finally {
+    await rm(pending.engineRoot, { recursive: true, force: true });
+  }
+});
+
+test('waits for Rust durability acknowledgement before completing a capability', async () => {
+  const engineRoot = await mkdtemp(join(tmpdir(), 'forge-checkpoint-ack-'));
+  const runStoreRoot = join(engineRoot, 'runs', 'v1');
+  const runId = `run:checkpoint-ack-${process.pid}-${Date.now()}`;
+  const recoveryCheckpoint: CapabilityRecoveryCheckpoint = {
+    schemaVersion: 1,
+    kind: 'change_set_transaction',
+    changeSetId: `changeset:sha256:${'c'.repeat(64)}`,
+    transactionId: `transaction:sha256:${'d'.repeat(64)}`,
+    phase: 'registered',
+  };
+  let turns = 0;
+  const planner: TaskPlanner = {
+    id: 'fixture:checkpoint-ack',
+    async next() {
+      turns++;
+      return turns === 1
+        ? {
+            kind: 'call',
+            call: {
+              id: 'call:checkpoint-ack',
+              capabilityId: 'workspace.change.execute',
+              input: { bounded: true },
+            },
+          }
+        : { kind: 'complete', output: 'Candidate retained.' };
+    },
+    checkpoint() {
+      return {
+        schemaVersion: 1,
+        plannerId: 'fixture:checkpoint-ack',
+        state: { turns },
+      };
+    },
+  };
+  const capability: Capability = {
+    id: 'workspace.change.execute',
+    replaySafety: 'non_idempotent',
+    async invoke(call, _snapshot, _signal, _context, observer) {
+      assert.ok(observer, 'Rust-backed execution must provide a checkpoint observer');
+      await observer.checkpoint(recoveryCheckpoint);
+      return { callId: call.id, success: true, content: 'Durable candidate retained.' };
+    },
+  };
+  const runtime = new RustKernelRuntime({
+    planner,
+    capabilities: [capability],
+    approvalFacts: {
+      async collect(call) {
+        return {
+          schemaVersion: 1,
+          callId: call.id,
+          capabilityId: call.capabilityId,
+          hostPolicy: {
+            posture: 'allow',
+            source: 'fixture.host-policy',
+            reason: 'The fixture permits the registered capability.',
+          },
+          userConsent: {
+            status: 'notRequired',
+            source: 'fixture.host-ui',
+            reason: 'The fixture requires no interactive consent.',
+          },
+        };
+      },
+    },
+    kernelPath: kernelBinary,
+    runStoreRoot,
+  });
+
+  try {
+    const artifact = await runtime.run({
+      runId,
+      task: 'record one acknowledged recovery checkpoint',
+      snapshot: { id: 'workspace:checkpoint-ack', rootLabel: 'fixture', files: [] },
+      contextBudgetBytes: 65_536,
+      maxTurns: 2,
+      executionBudget: {
+        schemaVersion: 1,
+        maxCapabilityCalls: 1,
+        maxReportedInputTokens: 100,
+        maxReportedOutputTokens: 100,
+      },
+    });
+    assert.equal(artifact.status, 'completed');
+    assert.equal(artifact.capabilityResults.length, 1);
+    const inspection = await new RustRunStoreRuntime({ kernelPath: kernelBinary, runStoreRoot })
+      .inspect(runId);
+    assert.equal(inspection.state, 'terminal');
+    assert.equal(inspection.continuation?.schemaVersion, 2);
+    assert.equal(inspection.continuation?.interactionFrameCount, 9);
+    assert.equal(inspection.continuation?.completedInteractionCount, 4);
+    assert.equal(inspection.continuation?.pendingRecoveryCheckpoint, undefined);
+  } finally {
+    await rm(engineRoot, { recursive: true, force: true });
+  }
+});
+
 test('classifies every live host boundary before accepting its response', async () => {
   const engineRoot = await mkdtemp(join(tmpdir(), 'forge-continuation-boundaries-'));
   const runStoreRoot = join(engineRoot, 'runs', 'v1');
@@ -362,7 +573,7 @@ test('classifies every live host boundary before accepting its response', async 
   const timeout = setTimeout(() => child.kill(), 15_000);
   child.stdin.write(JSON.stringify({
     type: 'run.start',
-    protocolVersion: 'forge.kernel.bridge.v9',
+    protocolVersion: 'forge.kernel.bridge.v10',
     requestId,
     request: {
       runId,
@@ -407,7 +618,7 @@ test('classifies every live host boundary before accepting its response', async 
         await assertPending('blocked_ambiguous_planner', 'planner', plannerRequests === 1 ? 1 : 7);
         child.stdin.write(JSON.stringify({
           type: 'planner.turn',
-          protocolVersion: 'forge.kernel.bridge.v9',
+          protocolVersion: 'forge.kernel.bridge.v10',
           requestId,
           turn: plannerRequests === 1
             ? {
@@ -430,7 +641,7 @@ test('classifies every live host boundary before accepting its response', async 
         await assertPending('blocked_ambiguous_approval', 'approval', 3);
         child.stdin.write(JSON.stringify({
           type: 'approval.facts',
-          protocolVersion: 'forge.kernel.bridge.v9',
+          protocolVersion: 'forge.kernel.bridge.v10',
           requestId,
           facts: {
             schemaVersion: 1,
@@ -453,7 +664,7 @@ test('classifies every live host boundary before accepting its response', async 
         await assertPending('retryable_capability', 'capability', 5);
         child.stdin.write(JSON.stringify({
           type: 'capability.result',
-          protocolVersion: 'forge.kernel.bridge.v9',
+          protocolVersion: 'forge.kernel.bridge.v10',
           requestId,
           result: {
             callId: 'call:read-once',
@@ -514,7 +725,7 @@ test('terminal host result follows a validated durable artifact seal', async () 
   const timeout = setTimeout(() => child.kill(), 10_000);
   const startFrame = {
     type: 'run.start',
-    protocolVersion: 'forge.kernel.bridge.v9',
+    protocolVersion: 'forge.kernel.bridge.v10',
     requestId,
     request: {
       runId,
@@ -540,7 +751,7 @@ test('terminal host result follows a validated durable artifact seal', async () 
       if (frame.type === 'planner.next') {
         child.stdin.write(JSON.stringify({
           type: 'planner.turn',
-          protocolVersion: 'forge.kernel.bridge.v9',
+          protocolVersion: 'forge.kernel.bridge.v10',
           requestId,
           turn: { kind: 'complete', output: 'done' },
         }) + '\n');

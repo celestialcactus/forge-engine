@@ -15,8 +15,8 @@ use forge_core::{
     CapabilityCall, CapabilityContext, CapabilityDescriptor, CapabilityReplaySafety,
     CapabilityResult, InteractionReplaySafety, PlannerRequest, PlannerTurn, RecordedRunInteraction,
     RunArtifact, RunContinuationDisposition, RunEvent, RunExecutionLock, RunInteractionKind,
-    RunLedger, RunRequest, RunResumeOpen, RuntimeSignal, Slice0Runtime, TaskPlanner,
-    WorkspaceSnapshot, resolve_approval,
+    RunLedger, RunRecoveryCheckpoint, RunRequest, RunResumeOpen, RuntimeSignal, Slice0Runtime,
+    TaskPlanner, WorkspaceSnapshot, resolve_approval,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -78,6 +78,13 @@ enum HostMessage {
         request_id: String,
         result: CapabilityResult,
     },
+    #[serde(rename = "capability.progress")]
+    CapabilityProgress {
+        protocol_version: String,
+        request_id: String,
+        call_id: String,
+        checkpoint: Value,
+    },
     #[serde(rename = "approval.facts")]
     ApprovalFacts {
         protocol_version: String,
@@ -128,6 +135,11 @@ impl BridgeIo {
                 ..
             }
             | HostMessage::CapabilityResult {
+                protocol_version,
+                request_id,
+                ..
+            }
+            | HostMessage::CapabilityProgress {
                 protocol_version,
                 request_id,
                 ..
@@ -313,6 +325,9 @@ impl TaskPlanner for BridgePlanner {
             HostMessage::CapabilityResult { .. } => Err(RuntimeSignal::Failed(
                 "Received capability.result while awaiting planner.turn.".to_owned(),
             )),
+            HostMessage::CapabilityProgress { .. } => Err(RuntimeSignal::Failed(
+                "Received capability.progress while awaiting planner.turn.".to_owned(),
+            )),
             HostMessage::ApprovalFacts { .. } => Err(RuntimeSignal::Failed(
                 "Received approval.facts while awaiting planner.turn.".to_owned(),
             )),
@@ -399,7 +414,56 @@ impl CapabilityAdapter for BridgeCapabilities {
                         "context": context,
                     }))
                     .map_err(RuntimeSignal::Failed)?;
-                    io.receive().map_err(RuntimeSignal::Failed)?
+                    loop {
+                        match io.receive().map_err(RuntimeSignal::Failed)? {
+                            HostMessage::CapabilityProgress {
+                                call_id,
+                                checkpoint,
+                                ..
+                            } => {
+                                let recorded = (|| -> Result<RunRecoveryCheckpoint, String> {
+                                    if call_id != call.id {
+                                        return Err(format!(
+                                            "Capability progress call ID {call_id} does not match {}.",
+                                            call.id
+                                        ));
+                                    }
+                                    let checkpoint: RunRecoveryCheckpoint =
+                                        serde_json::from_value(checkpoint).map_err(|error| {
+                                            format!(
+                                                "Capability recovery checkpoint is invalid: {error}"
+                                            )
+                                        })?;
+                                    self.ledger.borrow_mut().record_interaction_checkpoint(
+                                        &interaction_id,
+                                        checkpoint.clone(),
+                                    )?;
+                                    Ok(checkpoint)
+                                })();
+                                match recorded {
+                                    Ok(checkpoint) => io
+                                        .send(&json!({
+                                            "type": "capability.progress.recorded",
+                                            "protocolVersion": RUN_PROTOCOL_VERSION,
+                                            "requestId": request_id,
+                                            "callId": call.id,
+                                            "checkpoint": checkpoint,
+                                        }))
+                                        .map_err(RuntimeSignal::Failed)?,
+                                    Err(message) => io
+                                        .send(&json!({
+                                            "type": "capability.progress.rejected",
+                                            "protocolVersion": RUN_PROTOCOL_VERSION,
+                                            "requestId": request_id,
+                                            "callId": call_id,
+                                            "message": message,
+                                        }))
+                                        .map_err(RuntimeSignal::Failed)?,
+                                }
+                            }
+                            incoming => break incoming,
+                        }
+                    }
                 };
                 let completion = serde_json::to_value(&incoming).map_err(|error| {
                     RuntimeSignal::Failed(format!("Cannot encode capability completion: {error}"))
@@ -426,6 +490,9 @@ impl CapabilityAdapter for BridgeCapabilities {
                 Ok(result)
             }
             HostMessage::RunCancel { reason, .. } => Err(RuntimeSignal::Cancelled(reason)),
+            HostMessage::CapabilityProgress { .. } => Err(RuntimeSignal::Failed(
+                "Received capability.progress outside its progress loop.".to_owned(),
+            )),
             HostMessage::PlannerTurn { .. } => Err(RuntimeSignal::Failed(
                 "Received planner.turn while awaiting capability.result.".to_owned(),
             )),
@@ -514,6 +581,9 @@ impl ApprovalPolicy for BridgePolicy {
                 resolve_approval(&facts).map_err(RuntimeSignal::Failed)
             }
             HostMessage::RunCancel { reason, .. } => Err(RuntimeSignal::Cancelled(reason)),
+            HostMessage::CapabilityProgress { .. } => Err(RuntimeSignal::Failed(
+                "Received capability.progress while awaiting approval.facts.".to_owned(),
+            )),
             HostMessage::PlannerTurn { .. } => Err(RuntimeSignal::Failed(
                 "Received planner.turn while awaiting approval.facts.".to_owned(),
             )),
@@ -1050,6 +1120,7 @@ mod replay_tests {
                 kind: RunInteractionKind::Capability,
                 replay_safety: InteractionReplaySafety::ReadOnlyRetryable,
                 intent_payload: intent_payload.clone(),
+                recovery_checkpoint: None,
                 completion_payload: Some(completion_payload),
             }],
             false,
@@ -1091,6 +1162,7 @@ mod replay_tests {
                 kind: RunInteractionKind::Planner,
                 replay_safety: InteractionReplaySafety::NeverRetry,
                 intent_payload: recorded_intent,
+                recovery_checkpoint: None,
                 completion_payload: None,
             }],
             false,

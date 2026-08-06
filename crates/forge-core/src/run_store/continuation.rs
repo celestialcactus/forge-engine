@@ -7,7 +7,8 @@ use serde_json::Value;
 
 use super::{RunLedgerRequest, encode_json, read_bounded, sync_directory, write_new_synced};
 
-pub const CONTINUATION_SCHEMA_VERSION: u8 = 1;
+pub const CONTINUATION_SCHEMA_VERSION: u8 = 2;
+const LEGACY_CONTINUATION_SCHEMA_VERSION: u8 = 1;
 const MAX_CONTINUATION_MANIFEST_BYTES: u64 = 2 * 1_048_576;
 const MAX_INTERACTION_FRAME_BYTES: usize = 16 * 1_048_576;
 const MAX_INTERACTION_LEDGER_BYTES: u64 = 128 * 1_048_576;
@@ -47,7 +48,30 @@ pub enum InteractionReplaySafety {
 #[serde(rename_all = "snake_case")]
 enum RunInteractionPhase {
     Intent,
+    Checkpoint,
     Completed,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum RunRecoveryCheckpoint {
+    ChangeSetTransaction {
+        schema_version: u8,
+        change_set_id: String,
+        transaction_id: String,
+        phase: ChangeSetRecoveryPhase,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChangeSetRecoveryPhase {
+    Registered,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -111,6 +135,8 @@ pub struct RunContinuationInspection {
     pub pending_kind: Option<RunInteractionKind>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending_replay_safety: Option<InteractionReplaySafety>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending_recovery_checkpoint: Option<RunRecoveryCheckpoint>,
     pub capability_descriptors: Vec<CapabilityDescriptor>,
     pub reason: String,
 }
@@ -121,6 +147,7 @@ pub struct RecordedRunInteraction {
     pub kind: RunInteractionKind,
     pub replay_safety: InteractionReplaySafety,
     pub intent_payload: Value,
+    pub recovery_checkpoint: Option<RunRecoveryCheckpoint>,
     pub completion_payload: Option<Value>,
 }
 
@@ -138,16 +165,19 @@ struct PendingInteraction {
     attempt: u32,
     replay_safety: InteractionReplaySafety,
     intent_payload: Value,
+    recovery_checkpoint: Option<RunRecoveryCheckpoint>,
 }
 
 pub(super) struct ContinuationWriter {
     file: File,
+    schema_version: u8,
     next_sequence: u64,
     pending: Option<PendingInteraction>,
 }
 
 #[derive(Clone)]
 pub(super) struct ValidatedContinuation {
+    schema_version: u8,
     capability_descriptors: Vec<CapabilityDescriptor>,
     frame_count: u32,
     completed_count: u32,
@@ -214,6 +244,7 @@ pub(super) fn create_continuation(
     sync_directory(directory)?;
     Ok(ContinuationWriter {
         file,
+        schema_version: CONTINUATION_SCHEMA_VERSION,
         next_sequence: 1,
         pending: None,
     })
@@ -229,6 +260,7 @@ pub(super) fn resume_continuation(
         .map_err(|error| format!("Cannot reopen run interaction ledger: {error}"))?;
     Ok(ContinuationWriter {
         file,
+        schema_version: validated.schema_version,
         next_sequence: validated.last_sequence.unwrap_or(0).saturating_add(1),
         pending: validated.pending.clone(),
     })
@@ -258,6 +290,7 @@ impl ContinuationWriter {
             attempt: 1,
             replay_safety: replay_safety.clone(),
             intent_payload: payload.clone(),
+            recovery_checkpoint: None,
         };
         self.append_frame(
             interaction_id,
@@ -310,7 +343,49 @@ impl ContinuationWriter {
             attempt,
             replay_safety,
             intent_payload: payload,
+            recovery_checkpoint: None,
         });
+        Ok(())
+    }
+
+    pub(super) fn record_checkpoint(
+        &mut self,
+        interaction_id: &str,
+        checkpoint: RunRecoveryCheckpoint,
+    ) -> Result<(), String> {
+        if self.schema_version < CONTINUATION_SCHEMA_VERSION {
+            return Err("Legacy run continuations cannot accept recovery checkpoints.".to_owned());
+        }
+        let pending = self.pending.as_ref().ok_or_else(|| {
+            "Run recovery checkpoint has no durable interaction intent.".to_owned()
+        })?;
+        if pending.interaction_id != interaction_id
+            || pending.kind != RunInteractionKind::Capability
+            || pending.replay_safety != InteractionReplaySafety::NonIdempotent
+        {
+            return Err(
+                "Run recovery checkpoint does not match a pending non-idempotent capability."
+                    .to_owned(),
+            );
+        }
+        if pending.recovery_checkpoint.is_some() {
+            return Err("Run interaction already has a recovery checkpoint.".to_owned());
+        }
+        validate_recovery_checkpoint(&checkpoint)?;
+        let payload = serde_json::to_value(&checkpoint)
+            .map_err(|error| format!("Cannot encode run recovery checkpoint: {error}"))?;
+        self.append_frame(
+            interaction_id,
+            RunInteractionKind::Capability,
+            pending.attempt,
+            InteractionReplaySafety::NonIdempotent,
+            RunInteractionPhase::Checkpoint,
+            payload,
+        )?;
+        self.pending
+            .as_mut()
+            .expect("pending recovery interaction was validated")
+            .recovery_checkpoint = Some(checkpoint);
         Ok(())
     }
 
@@ -356,7 +431,7 @@ impl ContinuationWriter {
         }
         let payload_bytes = encode_json(&payload, "run interaction payload")?;
         let frame = RunInteractionFrame {
-            schema_version: CONTINUATION_SCHEMA_VERSION,
+            schema_version: self.schema_version,
             sequence: self.next_sequence,
             interaction_id: interaction_id.to_owned(),
             kind,
@@ -386,6 +461,35 @@ impl ContinuationWriter {
         self.next_sequence = self.next_sequence.saturating_add(1);
         Ok(())
     }
+}
+
+fn validate_recovery_checkpoint(checkpoint: &RunRecoveryCheckpoint) -> Result<(), String> {
+    let RunRecoveryCheckpoint::ChangeSetTransaction {
+        schema_version,
+        change_set_id,
+        transaction_id,
+        phase: _,
+    } = checkpoint;
+    if *schema_version != 1
+        || !valid_digest_identifier(change_set_id, "changeset:sha256:")
+        || !valid_digest_identifier(transaction_id, "transaction:sha256:")
+    {
+        return Err(
+            "Run recovery checkpoint contains an invalid ChangeSet transaction identity."
+                .to_owned(),
+        );
+    }
+    Ok(())
+}
+
+fn valid_digest_identifier(value: &str, prefix: &str) -> bool {
+    value.strip_prefix(prefix).is_some_and(|digest| {
+        digest.len() == 64
+            && digest
+                .as_bytes()
+                .iter()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
+    })
 }
 
 fn validate_kind_safety(
@@ -454,7 +558,7 @@ pub(super) fn read_continuation(
                 format!("Run interaction ledger contains invalid JSON: {error}")
             })?;
             let expected_sequence = u64::from(frame_count) + 1;
-            if frame.schema_version != CONTINUATION_SCHEMA_VERSION
+            if frame.schema_version != manifest.schema_version
                 || frame.sequence != expected_sequence
             {
                 return Err(format!(
@@ -503,6 +607,7 @@ pub(super) fn read_continuation(
                             kind: frame.kind.clone(),
                             replay_safety: frame.replay_safety.clone(),
                             intent_payload: frame.payload.clone(),
+                            recovery_checkpoint: None,
                             completion_payload: None,
                         });
                     }
@@ -512,7 +617,47 @@ pub(super) fn read_continuation(
                         attempt: frame.attempt,
                         replay_safety: frame.replay_safety,
                         intent_payload: frame.payload,
+                        recovery_checkpoint: None,
                     });
+                }
+                RunInteractionPhase::Checkpoint => {
+                    if manifest.schema_version < CONTINUATION_SCHEMA_VERSION {
+                        return Err(
+                            "Legacy run continuation contains a recovery checkpoint.".to_owned()
+                        );
+                    }
+                    let intent = pending.as_mut().ok_or_else(|| {
+                        "Run recovery checkpoint has no preceding intent.".to_owned()
+                    })?;
+                    if intent.interaction_id != frame.interaction_id
+                        || intent.kind != RunInteractionKind::Capability
+                        || frame.kind != RunInteractionKind::Capability
+                        || intent.attempt != frame.attempt
+                        || intent.replay_safety != InteractionReplaySafety::NonIdempotent
+                        || frame.replay_safety != InteractionReplaySafety::NonIdempotent
+                        || intent.recovery_checkpoint.is_some()
+                    {
+                        return Err("Run recovery checkpoint does not match its pending non-idempotent capability.".to_owned());
+                    }
+                    let checkpoint: RunRecoveryCheckpoint = serde_json::from_value(frame.payload)
+                        .map_err(|error| {
+                        format!("Run recovery checkpoint is invalid: {error}")
+                    })?;
+                    validate_recovery_checkpoint(&checkpoint)?;
+                    intent.recovery_checkpoint = Some(checkpoint.clone());
+                    let recorded = interactions.last_mut().ok_or_else(|| {
+                        "Run recovery checkpoint has no logical interaction.".to_owned()
+                    })?;
+                    if recorded.interaction_id != frame.interaction_id
+                        || recorded.recovery_checkpoint.is_some()
+                        || recorded.completion_payload.is_some()
+                    {
+                        return Err(
+                            "Run recovery checkpoint does not match its logical interaction."
+                                .to_owned(),
+                        );
+                    }
+                    recorded.recovery_checkpoint = Some(checkpoint);
                 }
                 RunInteractionPhase::Completed => {
                     let intent = pending.as_ref().ok_or_else(|| {
@@ -559,6 +704,7 @@ pub(super) fn read_continuation(
         }
     }
     Ok(Some(ValidatedContinuation {
+        schema_version: manifest.schema_version,
         capability_descriptors: manifest.capability_descriptors,
         frame_count,
         completed_count,
@@ -574,7 +720,11 @@ fn validate_manifest(
     manifest: &RunContinuationManifest,
     request: &RunLedgerRequest,
 ) -> Result<(), String> {
-    if manifest.schema_version != CONTINUATION_SCHEMA_VERSION
+    if ![
+        LEGACY_CONTINUATION_SCHEMA_VERSION,
+        CONTINUATION_SCHEMA_VERSION,
+    ]
+    .contains(&manifest.schema_version)
         || manifest.run_id != request.request.run_id
         || manifest.bridge_protocol_version != request.bridge_protocol_version
     {
@@ -662,6 +812,12 @@ pub(super) fn project_continuation(
                     "The unresolved read-only capability already consumed its single retry and will not execute again."
                         .to_owned(),
                 ),
+                (RunInteractionKind::Capability, _)
+                    if pending.recovery_checkpoint.is_some() => (
+                        RunContinuationDisposition::BlockedNonIdempotent,
+                        "The unresolved capability will not be replayed; its durable ChangeSet transaction checkpoint can be inspected for recovery."
+                            .to_owned(),
+                    ),
                 (RunInteractionKind::Capability, _) => (
                     RunContinuationDisposition::BlockedNonIdempotent,
                     "The unresolved capability is not proven retryable and will not be executed again.".to_owned(),
@@ -690,8 +846,12 @@ pub(super) fn project_continuation(
             .pending
             .as_ref()
             .map(|pending| pending.replay_safety.clone());
+        let pending_recovery_checkpoint = validated
+            .pending
+            .as_ref()
+            .and_then(|pending| pending.recovery_checkpoint.clone());
         RunContinuationInspection {
-            schema_version: CONTINUATION_SCHEMA_VERSION,
+            schema_version: validated.schema_version,
             disposition,
             interaction_frame_count: validated.frame_count,
             completed_interaction_count: validated.completed_count,
@@ -699,6 +859,7 @@ pub(super) fn project_continuation(
             pending_interaction_id,
             pending_kind,
             pending_replay_safety,
+            pending_recovery_checkpoint,
             capability_descriptors: validated.capability_descriptors,
             reason,
         }

@@ -87,7 +87,7 @@ export const createGovernedChangeCapability = (
   return {
     id: 'workspace.change.execute',
     replaySafety: 'non_idempotent',
-    async invoke(call, snapshot, signal, context): Promise<CapabilityResult> {
+    async invoke(call, snapshot, signal, context, observer): Promise<CapabilityResult> {
       if (context.basis.snapshotId !== snapshot.id || context.basis.runId.length === 0) {
         throw new Error('Governed change capability received mismatched Rust lifecycle context.');
       }
@@ -110,6 +110,7 @@ export const createGovernedChangeCapability = (
         runtime: options.runtime,
         io: options.io,
         signal,
+        ...(observer === undefined ? {} : { onRecoveryCheckpoint: observer.checkpoint }),
       });
       const transaction = execution.transaction ?? execution.proposal?.transaction;
       const evidence: GovernedChangeExecutionEvidence = {

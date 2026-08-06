@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import type { RunArtifact } from '../slice0/contracts.js';
+import type { CapabilityRecoveryCheckpoint, RunArtifact } from '../slice0/contracts.js';
 
 export const rustRunStoreProtocolVersion = 'forge.kernel.run-store.v1';
 
@@ -23,7 +23,7 @@ export type RunContinuationDisposition =
   | 'blocked_planner_checkpoint_unavailable';
 
 export interface RunContinuationInspection {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 1 | 2;
   readonly disposition: RunContinuationDisposition;
   readonly interactionFrameCount: number;
   readonly completedInteractionCount: number;
@@ -31,6 +31,7 @@ export interface RunContinuationInspection {
   readonly pendingInteractionId?: string;
   readonly pendingKind?: 'planner' | 'approval' | 'capability';
   readonly pendingReplaySafety?: 'never_retry' | 'read_only_retryable' | 'non_idempotent';
+  readonly pendingRecoveryCheckpoint?: CapabilityRecoveryCheckpoint;
   readonly capabilityDescriptors: readonly {
     readonly id: string;
     readonly replaySafety: 'read_only_retryable' | 'non_idempotent';
@@ -77,6 +78,7 @@ const validateContinuation = (candidate: unknown): RunContinuationInspection => 
   const pendingId = value?.pendingInteractionId;
   const pendingKind = value?.pendingKind;
   const pendingSafety = value?.pendingReplaySafety;
+  const pendingRecovery = object(value?.pendingRecoveryCheckpoint);
   const descriptors = value?.capabilityDescriptors;
   const pendingDisposition = [
     'retryable_capability',
@@ -87,7 +89,7 @@ const validateContinuation = (candidate: unknown): RunContinuationInspection => 
   ].includes(String(disposition));
   const pendingEvidenceExpected = pendingDisposition
     || (disposition === 'terminal' && pendingId !== undefined);
-  if (value?.schemaVersion !== 1
+  if (![1, 2].includes(Number(value?.schemaVersion))
     || ![
       'terminal',
       'safe_boundary',
@@ -116,13 +118,24 @@ const validateContinuation = (candidate: unknown): RunContinuationInspection => 
         || !['read_only_retryable', 'non_idempotent'].includes(String(item.replaySafety))
         || (typeof previous?.id === 'string' && previous.id >= item.id);
     })
-    || typeof value.reason !== 'string'
+    || typeof value?.reason !== 'string'
     || (pendingEvidenceExpected
       ? typeof pendingId !== 'string'
         || pendingId.length === 0
         || !['planner', 'approval', 'capability'].includes(String(pendingKind))
         || !['never_retry', 'read_only_retryable', 'non_idempotent'].includes(String(pendingSafety))
       : pendingId !== undefined || pendingKind !== undefined || pendingSafety !== undefined)
+    || (pendingRecovery !== undefined
+      && (value?.schemaVersion !== 2
+        || pendingKind !== 'capability'
+        || pendingSafety !== 'non_idempotent'
+        || pendingRecovery.schemaVersion !== 1
+        || pendingRecovery.kind !== 'change_set_transaction'
+        || typeof pendingRecovery.changeSetId !== 'string'
+        || !/^changeset:sha256:[a-f0-9]{64}$/u.test(pendingRecovery.changeSetId)
+        || typeof pendingRecovery.transactionId !== 'string'
+        || !/^transaction:sha256:[a-f0-9]{64}$/u.test(pendingRecovery.transactionId)
+        || pendingRecovery.phase !== 'registered'))
   ) throw new Error('Rust kernel returned an invalid run continuation assessment.');
   return candidate as RunContinuationInspection;
 };

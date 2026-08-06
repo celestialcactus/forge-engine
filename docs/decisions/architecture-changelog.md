@@ -1,3 +1,22 @@
+# 2026-08-06 - Outer runs cross-link durable ChangeSet recovery
+
+- Advanced the private bridge to v10 with a typed, durably acknowledged
+  `change_set_transaction` checkpoint bound to the active outer capability.
+- The interactive governed-change workflow cannot cross from registered
+  transaction creation to its second human decision until the outer Rust ledger
+  synchronizes and acknowledges the recovery reference.
+- Inspection exposes the exact registered ChangeSet transaction after a crash;
+  resume still blocks the non-idempotent outer capability and invokes it zero
+  times. ChangeSet journals remain the mutation authority.
+- The exact local gate passes: full zero-warning Rust validation, 93/93 Node tests
+  and build, 56/62 hybrid scenarios with six explicit separate-kernel skips,
+  packaged CLI smoke, and a controlled one-call/five-second VS Code gate.
+- Hosted Windows/macOS/Ubuntu, bounded orphan reporting, and cleanup policy for
+  registered-but-never-finalized transactions remain open.
+- See [Checkpoint 78](checkpoints/2026-08-06-78-changeset-recovery-checkpoint-local-gate.md),
+  [ADR-0030](ADRs/ADR-0030-durable-interaction-transcript-and-safe-continuation.md),
+  [hybrid boundary](../architecture/hybrid-rust-kernel-typescript-adapters.md), and
+  [CLI ship lane 6](../tasks/SLICE-CLI6-run-recovery.md).
 # 2026-08-05 - Initial run records publish atomically
 
 - Moved OS execution locks into a non-authoritative `.locks` namespace so lock
