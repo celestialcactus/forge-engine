@@ -205,6 +205,17 @@ test('CLI proposes, persists, inspects, and idempotently accepts one ChangeSet v
     assert.equal(inspected.candidateRetained, true);
     assert.equal((inspected.verification as unknown[]).length, 1);
 
+    const audit = await forge(f, 'change', 'audit');
+    assert.equal(audit.schemaVersion, 1);
+    assert.equal(audit.truncated, false);
+    assert.equal(audit.orphanStagingRemoved, 0);
+    const audited = audit.transactions as Array<Record<string, unknown>>;
+    assert.equal(audited.length, 1);
+    assert.equal(audited[0]?.transactionId, id);
+    assert.equal(audited[0]?.state, 'prepared');
+    assert.equal(audited[0]?.candidateRetained, true);
+    assert.equal(audited[0]?.recommendation, 'review_prepared');
+
     const accepted = await forge(f, 'change', 'accept', id, '--approve');
     assert.equal(accepted.state, 'promoted');
     assert.equal(accepted.candidateRetained, false);
@@ -213,6 +224,14 @@ test('CLI proposes, persists, inspects, and idempotently accepts one ChangeSet v
     const repeated = await forge(f, 'change', 'accept', id, '--approve');
     assert.equal(repeated.state, 'promoted');
     assert.equal(repeated.candidateRetained, false);
+
+    const terminalAudit = await forge(f, 'change', 'audit');
+    const terminal = terminalAudit.transactions as Array<Record<string, unknown>>;
+    assert.equal(terminal.length, 1);
+    assert.equal(terminal[0]?.transactionId, id);
+    assert.equal(terminal[0]?.state, 'promoted');
+    assert.equal(terminal[0]?.candidateRetained, false);
+    assert.equal(terminal[0]?.recommendation, 'none');
   } finally {
     await rm(f.root, { recursive: true, force: true });
   }
@@ -231,6 +250,44 @@ test('CLI discards a verified candidate without mutating the active workspace', 
     assert.equal(await readFile(join(f.repository, 'message.txt'), 'utf8'), 'before\n');
     const repeated = await forge(f, 'change', 'discard', id, '--approve');
     assert.equal(repeated.state, 'discarded');
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
+
+test('CLI audit reports startup cleanup of exact unpublished transaction staging', {
+  skip: kernelBinary === undefined ? 'FORGE_KERNEL_BINARY is required.' : false,
+}, async () => {
+  const f = await fixture();
+  try {
+    const initial = await forge(f, 'change', 'audit');
+    assert.equal(initial.orphanStagingRemoved, 0);
+    const human = await execFileAsync(process.execPath, [
+      cli,
+      'change',
+      'audit',
+      '--workspace', f.repository,
+      '--engine-root', f.engine,
+    ], {
+      env: { ...process.env, FORGE_KERNEL_BINARY: kernelBinary },
+      encoding: 'utf8',
+    });
+    assert.match(human.stdout, /Forge transaction audit: 0/u);
+    assert.match(human.stdout, /No durable ChangeSet transactions found\./u);
+    const entries = await readdir(f.engine, { recursive: true });
+    const relativeState = entries.find((entry) => /(?:^|[\\/])transactions$/u.test(entry));
+    assert.notEqual(relativeState, undefined);
+    const stateRoot = join(f.engine, relativeState as string);
+    const staging = join(
+      stateRoot,
+      `.transaction-${'a'.repeat(64)}-${String(process.pid)}-${String(Date.now())}.tmp`,
+    );
+    await mkdir(staging);
+
+    const audit = await forge(f, 'change', 'audit');
+    assert.equal(audit.orphanStagingRemoved, 1);
+    assert.deepEqual(audit.transactions, []);
+    await assert.rejects(readdir(staging), /ENOENT/u);
   } finally {
     await rm(f.root, { recursive: true, force: true });
   }

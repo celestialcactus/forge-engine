@@ -114,7 +114,7 @@ export const resolveForgeKernelBinary = (
   };
 };
 
-export const forgeKernelProbeProtocolVersion = 'forge.kernel.probe.v1';
+export const forgeKernelProbeProtocolVersion = 'forge.kernel.probe.v2';
 
 export interface ForgeKernelProbe {
   readonly ready: boolean;
@@ -124,6 +124,12 @@ export interface ForgeKernelProbe {
   readonly transactionProtocolVersion?: string;
   readonly candidateProtocolVersion?: string;
   readonly sovereignChangeProtocolVersion?: string;
+  readonly isolationProvider?: {
+    readonly providerId: string;
+    readonly supportedProfiles: readonly string[];
+    readonly restrictedControls: readonly string[];
+    readonly restrictedReady: boolean;
+  };
   readonly message: string;
 }
 
@@ -131,6 +137,8 @@ const probeObject = (value: unknown): Record<string, unknown> | undefined =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined;
+const isolationProfiles = new Set(['trusted', 'host_managed', 'restricted']);
+const isolationControls = new Set(['filesystem', 'process', 'network', 'credentials', 'resources']);
 
 export const probeForgeKernelBinary = async (
   resolution: ForgeKernelResolution,
@@ -192,8 +200,33 @@ export const probeForgeKernelBinary = async (
           || typeof frame.transactionProtocolVersion !== 'string'
           || typeof frame.candidateProtocolVersion !== 'string'
           || typeof frame.sovereignChangeProtocolVersion !== 'string'
+          || probeObject(frame.isolationProvider) === undefined
         ) {
           throw new Error('result frame does not match the Forge kernel probe contract');
+        }
+        const isolationProvider = probeObject(frame.isolationProvider) as Record<string, unknown>;
+        if (typeof isolationProvider.providerId !== 'string'
+          || isolationProvider.providerId.trim().length === 0
+          || !Array.isArray(isolationProvider.supportedProfiles)
+          || isolationProvider.supportedProfiles.some((profile) => typeof profile !== 'string')
+          || isolationProvider.supportedProfiles.length === 0
+          || isolationProvider.supportedProfiles.length > isolationProfiles.size
+          || new Set(isolationProvider.supportedProfiles).size !== isolationProvider.supportedProfiles.length
+          || isolationProvider.supportedProfiles.some((profile) => !isolationProfiles.has(profile as string))
+          || !Array.isArray(isolationProvider.restrictedControls)
+          || isolationProvider.restrictedControls.some((control) => typeof control !== 'string')
+          || isolationProvider.restrictedControls.length > isolationControls.size
+          || new Set(isolationProvider.restrictedControls).size !== isolationProvider.restrictedControls.length
+          || isolationProvider.restrictedControls.some((control) => !isolationControls.has(control as string))
+          || typeof isolationProvider.restrictedReady !== 'boolean') {
+          throw new Error('result frame contains invalid isolation-provider readiness');
+        }
+        const supportedProfiles = isolationProvider.supportedProfiles as string[];
+        const restrictedControls = isolationProvider.restrictedControls as string[];
+        const expectedRestrictedReady = supportedProfiles.includes('restricted')
+          && [...isolationControls].every((control) => restrictedControls.includes(control));
+        if (isolationProvider.restrictedReady !== expectedRestrictedReady) {
+          throw new Error('result frame contains inconsistent isolation-provider readiness');
         }
         finish({
           ready: true,
@@ -203,6 +236,12 @@ export const probeForgeKernelBinary = async (
           transactionProtocolVersion: frame.transactionProtocolVersion,
           candidateProtocolVersion: frame.candidateProtocolVersion,
           sovereignChangeProtocolVersion: frame.sovereignChangeProtocolVersion,
+          isolationProvider: {
+            providerId: isolationProvider.providerId,
+            supportedProfiles,
+            restrictedControls,
+            restrictedReady: isolationProvider.restrictedReady,
+          },
           message: `Forge kernel ${frame.kernelVersion} passed its protocol probe.`,
         });
       } catch (error) {

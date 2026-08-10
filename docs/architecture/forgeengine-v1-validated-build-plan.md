@@ -342,6 +342,11 @@ provider contract.
   `core.ignorecase`; new non-ASCII paths fail closed on case-insensitive
   repositories until native Unicode identity semantics are proven on Windows and
   macOS.
+- CLI ship-lane 7A now cleans exact unpublished staging only under the repository
+  publication lock and exposes a bounded Rust-owned transaction audit. Published
+  prepared work is review-due after 24 hours but is never age-deleted. The local
+  gate passes; exact-head hosted Windows/macOS/Ubuntu and controlled VS Code remain
+  pending.
 - The accepted process-ownership gate replaces Windows `taskkill` with a suspended,
   pre-execution-assigned, kill-on-close Job Object. On Unix, a packaged Rust
   watchdog uses parent-pipe EOF and a dedicated process group to terminate the
@@ -373,7 +378,7 @@ must still have a named architectural home and an objective entry gate:
 | Abrupt macOS/Unix owner-death handling | P1, Slice 2E | **Accepted at `c872a81`.** A packaged Rust watchdog observes parent-pipe EOF, owns the verifier process group, and uses a separate bounded startup acknowledgement. This is lifecycle control, not containment. | Hosted macOS and Ubuntu owner-`SIGKILL` fixtures leave no survivor marker; Windows retains its Job Object path; missing/invalid helper and verifier startup fail closed. |
 | High-level MCP/VS Code mutation workflow | P2, Slice 2F | Add only over the accepted transaction contract; never expose file-write or shell primitives. | Official MCP and controlled VS Code tests prove approvals, cancellation, compact evidence, no retry storm, no hidden promotion, and unchanged read-only behavior on failure. |
 | Authenticated host handshake and enterprise policy adapter | P2, Slice 2F | **Accepted through provider/bridge composition on `develop` at merge `6bc2bfb`.** Rust derives capability/policy bindings, grants are single-use, and transaction v2 carries the host exchange. Policy distribution, credential brokerage, and durable audit export beyond the local ledger remain later platform work. | Spoofed, stale, replayed, incomplete, cross-capability, and policy-incompatible attestations fail closed; exported audit facts reconstruct the decision. |
-| Minimum Forge-restricted execution backend | P2, Slice 2F | Implement and advertise only boundaries proven on Tier-1 platforms. Keep unsupported controls fail-closed. This is necessary for a credible pilot, but it must not block the controlled trusted-mode prototype. | Separate adversarial Windows and macOS process/filesystem/network tests support each advertised control; Ubuntu support may follow behind the same provider interface. |
+| Minimum Forge-restricted execution backend | P2, CLI ship lane 7 / Slice 2F | **Sequenced by ADR-0031.** Kernel probe now derives readiness from the selected Rust provider and the baseline reports trusted-only/no controls. Implement Windows AppContainer and signed macOS App Sandbox helpers as separate native increments; do not treat Job Objects, process groups, worktrees, environment clearing, containers, or host assertions as equivalent boundaries. | Separate adversarial Windows and macOS filesystem/process/network/credential/resource tests support every advertised control. Missing or partial enforcement prevents launch; Ubuntu may follow behind the same provider contract. |
 | Power-loss and filesystem durability | P3, release | Harden the journal/CAS design with crash and power-loss-oriented fault injection, directory durability, corruption detection, and repair tooling. Prefer Git object identity and small Forge journals over a bespoke content database. | Abrupt-termination tests at every durable transition either recover the exact transaction or report an explicit, non-destructive repair state. |
 | Reduced OS identity/privilege | P3, release | Add platform-specific token/credential reduction after containment semantics are stable. Environment minimization remains defense in depth, not a permission boundary. | Platform tests prove effective permissions and descendant cleanup rather than inferring them from configuration. |
 
@@ -408,8 +413,9 @@ promotion/discard. Continue as follows:
 10. Converge the CLI and MCP product surfaces on the Rust runtime; remove implicit
     TypeScript production fallback.
 11. Build the measured inference and live CLI ship lane on that one authority.
-12. Prove the minimum Windows/macOS restricted backend as a separately accepted
-    hardening program; keep it fail-closed until then.
+12. Complete bounded ChangeSet retention/audit, then prove Windows AppContainer and
+    signed macOS App Sandbox providers as separately accepted native increments;
+    keep each unavailable and fail-closed until its own host gate passes.
 13. Add one high-level MCP/VS Code mutation workflow over the accepted transaction
     authority, without publishing raw shell or write powers.
 14. Resume context compiler, sessions, skills, and provider expansion after the
@@ -465,7 +471,7 @@ license rather than being inferred from package metadata.
 
 ## Core completion and delivery forecast
 
-**Forecast date:** 2026-08-06. Completion is measured by accepted behavioral gates,
+**Forecast date:** 2026-08-10. Completion is measured by accepted behavioral gates,
 not source volume or the number of abstractions present.
 
 | Gate group | State | Evidence or open condition |
@@ -474,8 +480,9 @@ not source volume or the number of abstractions present.
 | 5B execution controls | Accepted and merged on `develop` at `74308ca` | Local, hosted Windows/macOS/Ubuntu, live Qwen, conservative credentialed OpenAI, and one-call controlled VS Code gates pass. See Checkpoints 68-70. |
 | 5C policy posture and host callback conformance | Accepted at implementation `2941948` | One fact-producing profile layer serves CLI/service/MCP while Rust alone decides. Local, exact-kernel, live Qwen 1.5B, controlled VS Code, and hosted Windows/macOS/Ubuntu gates pass. See ADR-0028 and Checkpoints 71-72. |
 | Minimum outer-run recovery | 6A/6B, atomic initialization, and ChangeSet cross-link local/VS Code gates passed; hosted pending | Rust durably records request/events/artifact plus the bounded interaction transcript. Terminal return and proven-safe same-runtime continuation work locally; ambiguous and non-idempotent frontiers block. Complete initial state is privately staged and atomically published. A pending governed change now carries one durably acknowledged reference to its registered authoritative ChangeSet transaction while the outer capability remains non-replayable. Hosted Windows/macOS/Ubuntu remains open. |
+| Transaction retention and isolation truth | 7A local gate accepted; hosted/VS Code pending | Lock-safe exact staging cleanup, non-destructive prepared retention, bounded Rust audit, ChangeSet v4, probe v2, and strict doctor readiness pass the full local Rust/Node/hybrid gate. Baseline remains trusted-only and restricted-ready false. See [ADR-0031](../decisions/ADRs/ADR-0031-transaction-retention-and-native-sandbox-sequencing.md), [Checkpoint 79](../decisions/checkpoints/2026-08-10-79-transaction-retention-and-isolation-readiness-local-gate.md), and the [2026-08-10 core audit](../audit/2026-08-10-core-correctness-and-quality-audit.md). |
 | Installable developer alpha | Open | Bundle the native kernel for clean Windows/macOS install/update, resolve the root license, publish effective config/doctor guidance, and ship the developer test kit. |
-| Broader V1 platform | Deferred | Context compiler, skills/memory, MCP client/mutation symmetry, connectors, automation, generalized UI, and restricted execution retain their roadmap gates. |
+| Broader V1 platform | Deferred except the active native-isolation hardening lane | Context compiler, skills/memory, MCP client/mutation symmetry, connectors, automation, and generalized UI retain their later roadmap gates. Windows/macOS restricted providers proceed separately under ADR-0031 and cannot borrow acceptance from trusted mode. |
 
 Percent-complete figures are intentionally not used. They hid the difference
 between many finished internal tests and a few still-blocking product gates.
@@ -494,17 +501,19 @@ expansion, the current planning ranges are:
 - 5B Rust-owned execution budgets: **accepted at implementation `3f2774b` after local 86-test/build/audit, hosted Windows/macOS/Ubuntu, live Qwen normal and tiny-budget gates, conservative credentialed OpenAI, and a controlled one-call seven-tool VS Code gate; merged through PR #22 at `74308ca`**;
 - 5C product approval profiles: **accepted at implementation `2941948` after local 91-test/build, full 54-test retained-kernel hybrid, live Qwen 1.5B grant/decline, controlled one-call VS Code, and hosted Node/hybrid Windows/macOS/Ubuntu gates**;
 - 6A/6B outer-run recovery: **local and controlled VS Code gates pass through bridge v10 with 93 Node tests/build, zero-warning full Rust workspace validation, 62 hybrid scenarios (56 passed and six explicit separate-kernel skips), packaged CLI smoke, deterministic same-runtime replay, one-total evidence retry, OS-owned locking, atomic whole-directory initialization, terminal temporary-artifact recovery, fail-closed ambiguous/non-idempotent frontiers, and a durably acknowledged pending ChangeSet transaction cross-link; the current controlled VS Code gate completed in one Forge call and five seconds; hosted Windows/macOS/Ubuntu acceptance remains pending**;
-- shippable standalone CLI alpha: **2-4 focused weeks from 2026-08-05**, contingent on fast license resolution and keeping OS sandboxing outside the trusted-alpha gate;
+- shippable standalone CLI alpha: **1-3 focused weeks from 2026-08-10**, contingent on a prompt license decision, cross-platform native packaging, and exact-head hosted acceptance; native restricted execution remains a separately gated pilot boundary;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
 
 The source-backed
 [CLI harness comparison](../audit/2026-08-05-cli-harness-core-comparison.md)
 calibrates Forge as a strong narrow evidence/transaction core rather than a mature
-CLI peer. With the outer ChangeSet cross-link now closed at the local and controlled
-VS Code gates, the immediate order is hosted Windows/macOS/Ubuntu continuation
-acceptance, bounded orphan-staging and registered-transaction doctor/cleanup policy,
-then clean native packaging/license and the developer alpha test kit.
+CLI peer. With the outer ChangeSet cross-link and bounded transaction-retention
+policy now closed at their local gates, the immediate order is exact-head hosted
+Windows/macOS/Ubuntu and controlled VS Code acceptance, clean native
+packaging/license and the developer alpha test kit, plus separately accepted
+Windows AppContainer and macOS signed-helper work. The trusted alpha must not wait
+for those native providers, but it also must not advertise restricted execution.
 
 These are ranges, not promises. Host key provisioning, Windows/macOS containment
 mechanics, packaging/signing, or new boundary requirements move the dates. Every accepted
@@ -548,6 +557,9 @@ at PR #22 merge `74308ca`. Increment 5C now has one product fact layer across CL
 service, and MCP, with Rust still resolving every final decision. Implementation
 `2941948` passed the local, exact-kernel, live Qwen 1.5B, controlled VS Code, and
 hosted Node/hybrid Windows/macOS/Ubuntu gates and is accepted as increment 5C.
+CLI ship-lane 7A passes the full local Rust/Node/exact-kernel hybrid and source-built
+CLI smoke gate with bounded transaction audit and truthful isolation readiness;
+hosted/VS Code acceptance is still open.
 `restricted` remains fail-closed until a
 separately proven Windows/macOS backend passes adversarial gates; the trusted developer alpha must name that
 limitation.

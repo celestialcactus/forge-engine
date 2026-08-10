@@ -177,6 +177,15 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
       readonly protocols: { readonly run: string; readonly runStore: string; readonly sovereignChange: string };
     };
     readonly runStore: { readonly root: string; readonly durability: string; readonly recovery: string };
+    readonly configuration: { readonly engineRootOutsideWorkspace: boolean; readonly message: string };
+    readonly isolation: {
+      readonly providerId: string;
+      readonly supportedProfiles: readonly string[];
+      readonly restrictedControls: readonly string[];
+      readonly restrictedReady: boolean;
+      readonly lifecycleOwnership: string;
+      readonly posture: string;
+    };
   };
   assert.equal(report.ok, true);
   assert.equal(report.runtime, 'rust-kernel-typescript-adapter');
@@ -186,16 +195,53 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
   assert.equal(report.kernel.version, '0.1.0');
   assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v10');
   assert.equal(report.kernel.protocols.runStore, 'forge.kernel.run-store.v1');
-  assert.equal(report.kernel.protocols.sovereignChange, 'forge.kernel.changeset.v3');
+  assert.equal(report.kernel.protocols.sovereignChange, 'forge.kernel.changeset.v4');
+  assert.deepEqual(report.isolation, {
+    providerId: 'forge.baseline',
+    supportedProfiles: ['trusted'],
+    restrictedControls: [],
+    restrictedReady: false,
+    lifecycleOwnership: 'forge-owned',
+    posture: 'trusted verification; process lifecycle owned; no Forge-enforced OS sandbox',
+  });
   assert.equal(report.runStore.root, resolve(cliEngineRoot, 'runs', 'v1'));
   assert.equal(report.runStore.durability, 'append-before-notify; terminal-before-result');
   assert.match(report.runStore.recovery, /validated same-runtime continuation/u);
+  assert.equal(report.configuration.engineRootOutsideWorkspace, true);
+  assert.match(report.configuration.message, /Rust revalidates canonical paths/u);
   assert.deepEqual(report.approval, {
     profile: 'developer',
     source: 'default',
     decisionAuthority: 'rust-kernel',
     scope: 'registered capabilities; governed mutations retain exact-change approval',
   });
+
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      resolve('node_modules/tsx/dist/cli.mjs'),
+      resolve('src/cli.ts'),
+      'doctor',
+      '--workspace',
+      fixtureRoot,
+      '--engine-root',
+      resolve(fixtureRoot, '.forge'),
+      '--json',
+    ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment }),
+    (error: unknown) => {
+      const failure = error as { readonly code: number; readonly stdout: string };
+      assert.equal(failure.code, 1);
+      const invalid = JSON.parse(failure.stdout) as {
+        readonly ok: boolean;
+        readonly kernel: { readonly ready: boolean };
+        readonly configuration: { readonly engineRootOutsideWorkspace: boolean; readonly message: string };
+      };
+      assert.equal(invalid.ok, false);
+      assert.equal(invalid.kernel.ready, true);
+      assert.equal(invalid.configuration.engineRootOutsideWorkspace, false);
+      assert.match(invalid.configuration.message, /must be outside/u);
+      return true;
+    },
+  );
 
   await assert.rejects(
     execFileAsync(process.execPath, [

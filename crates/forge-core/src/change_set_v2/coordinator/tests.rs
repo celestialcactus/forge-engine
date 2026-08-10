@@ -465,6 +465,115 @@ fn explicit_discard_is_not_misreported_as_recovery() {
     assert_eq!(repeated.state, ChangeSetV2CoordinatorState::Discarded);
     assert_eq!(repeated.transitions, discarded.transitions);
 }
+
+#[test]
+fn concurrent_startup_cannot_delete_staging_owned_by_the_publication_lock() {
+    let fixture = Fixture::new();
+    let coordinator = fixture.coordinator();
+    let repository_lock = coordinator.repo_lock().unwrap();
+    let staging = fixture.state.join(format!(
+        ".transaction-{}-{}-{}.tmp",
+        "a".repeat(64),
+        std::process::id(),
+        now().unwrap()
+    ));
+    fs::create_dir(&staging).unwrap();
+    let config =
+        ChangeSetV2CoordinatorConfig::new(&fixture.repo, &fixture.state, fixture.store.clone());
+    let error = ChangeSetV2Coordinator::try_new(config)
+        .err()
+        .expect("concurrent coordinator startup must fail closed");
+    assert!(error.contains("already being modified"));
+    assert!(
+        staging.exists(),
+        "a second coordinator must not delete staging owned under the publication lock"
+    );
+    drop(repository_lock);
+    let restarted = fixture.coordinator();
+    assert!(!staging.exists());
+    assert_eq!(restarted.audit().unwrap().orphan_staging_removed, 1);
+}
+
+#[test]
+fn startup_cleanup_rejects_lookalike_staging_names() {
+    let fixture = Fixture::new();
+    let staging = fixture.state.join(".transaction-not-a-digest-1-1.tmp");
+    fs::create_dir(&staging).unwrap();
+    let error = ChangeSetV2Coordinator::try_new(ChangeSetV2CoordinatorConfig::new(
+        &fixture.repo,
+        &fixture.state,
+        fixture.store.clone(),
+    ))
+    .err()
+    .expect("lookalike staging must fail closed");
+    assert!(error.contains("invalid transaction staging name"));
+    assert!(staging.exists(), "unknown state must not be deleted");
+}
+
+#[test]
+fn startup_cleanup_rejects_an_exact_staging_name_that_is_not_a_directory() {
+    let fixture = Fixture::new();
+    let staging = fixture.state.join(format!(
+        ".transaction-{}-{}-{}.tmp",
+        "a".repeat(64),
+        std::process::id(),
+        now().unwrap()
+    ));
+    fs::write(&staging, b"not Forge staging").unwrap();
+    let error = ChangeSetV2Coordinator::try_new(ChangeSetV2CoordinatorConfig::new(
+        &fixture.repo,
+        &fixture.state,
+        fixture.store.clone(),
+    ))
+    .err()
+    .expect("non-directory staging must fail closed");
+    assert!(error.contains("staging path is not a directory"));
+    assert!(staging.exists(), "unknown state must not be deleted");
+}
+
+#[test]
+fn startup_state_scan_fails_closed_at_the_documented_bound() {
+    let fixture = Fixture::new();
+    for index in 0..=MAX_STATE_ENTRIES {
+        fs::write(fixture.state.join(format!("unknown-{index}")), []).unwrap();
+    }
+    let error = ChangeSetV2Coordinator::try_new(ChangeSetV2CoordinatorConfig::new(
+        &fixture.repo,
+        &fixture.state,
+        fixture.store.clone(),
+    ))
+    .err()
+    .expect("unbounded state roots must fail closed");
+    assert!(error.contains("4096-entry safety limit"));
+}
+
+#[test]
+fn audit_reports_old_prepared_transactions_without_deleting_them() {
+    let mut fixture = Fixture::new();
+    let (coordinator, id) = fixture.prepare();
+    let manifest_path = coordinator.tx_dir(&id).unwrap().join("manifest.json");
+    let mut manifest = coordinator.load_manifest(&id).unwrap();
+    manifest.created_at_unix_ms = now()
+        .unwrap()
+        .saturating_sub(u64::try_from(PREPARED_REVIEW_AFTER.as_millis()).unwrap() + 1);
+    fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+
+    let audit = coordinator.audit().unwrap();
+    assert_eq!(audit.schema_version, 1);
+    assert!(!audit.truncated);
+    assert_eq!(audit.transactions.len(), 1);
+    let entry = &audit.transactions[0];
+    assert_eq!(entry.transaction_id, id);
+    assert_eq!(entry.state, ChangeSetV2CoordinatorState::Prepared);
+    assert!(entry.candidate_retained);
+    assert!(entry.review_due);
+    assert_eq!(
+        entry.recommendation,
+        ChangeSetV2AuditRecommendation::ReviewPrepared
+    );
+    assert!(coordinator.tx_dir(&id).unwrap().exists());
+    assert!(Path::new(&coordinator.inspect(&id).unwrap().candidate_path).exists());
+}
 #[cfg(windows)]
 #[test]
 fn windows_mode_change_fails_before_transaction_publication() {

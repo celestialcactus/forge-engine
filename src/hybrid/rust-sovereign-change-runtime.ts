@@ -13,7 +13,7 @@ import type {
 } from '../slice0/contracts.js';
 import type { TrustedVerificationCheckConfiguration } from './verification-configuration.js';
 
-export const rustSovereignChangeProtocolVersion = 'forge.kernel.changeset.v3';
+export const rustSovereignChangeProtocolVersion = 'forge.kernel.changeset.v4';
 
 export interface SovereignChangeProposal {
   readonly schemaVersion: 1;
@@ -41,6 +41,24 @@ export interface SovereignPreparedArtifact {
   readonly changeSetId: string;
   readonly snapshotId: string;
   readonly operations: readonly Record<string, unknown>[];
+}
+
+export interface SovereignChangeAuditArtifact {
+  readonly schemaVersion: 1;
+  readonly generatedAtUnixMs: number;
+  readonly preparedReviewAfterMs: number;
+  readonly transactions: readonly {
+    readonly transactionId: string;
+    readonly changeSetId: string;
+    readonly state: SovereignCoordinatorArtifact['state'];
+    readonly createdAtUnixMs: number;
+    readonly ageMs: number;
+    readonly candidateRetained: boolean;
+    readonly reviewDue: boolean;
+    readonly recommendation: 'none' | 'review_prepared' | 'repair_required';
+  }[];
+  readonly truncated: boolean;
+  readonly orphanStagingRemoved: number;
 }
 
 export interface SovereignProposalArtifact {
@@ -72,12 +90,31 @@ export interface RustSovereignChangeRuntimeOptions {
 }
 
 type JsonObject = Record<string, unknown>;
-type OperationKind = 'prepare' | 'propose' | 'inspect' | 'accept' | 'discard';
+type OperationKind = 'audit' | 'prepare' | 'propose' | 'inspect' | 'accept' | 'discard';
 type ExitState = { readonly code: number | null; readonly signal: NodeJS.Signals | null };
 const maximumOutputFrameBytes = 8 * 1_048_576;
 
 const isObject = (value: unknown): value is JsonObject =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+const coordinatorStates = new Set<SovereignCoordinatorArtifact['state']>([
+  'prepared',
+  'promoting',
+  'operation_applied',
+  'rolling_back',
+  'rolled_back',
+  'discarded',
+  'promoted',
+  'repair_required',
+]);
+const auditRecommendations = new Set<SovereignChangeAuditArtifact['transactions'][number]['recommendation']>([
+  'none',
+  'review_prepared',
+  'repair_required',
+]);
+const isNonnegativeSafeInteger = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+const transactionIdentity = /^transaction:sha256:[0-9a-f]{64}$/u;
+const changeSetIdentity = /^changeset:sha256:[0-9a-f]{64}$/u;
 
 const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
@@ -115,7 +152,8 @@ const validateCoordinator = (candidate: unknown): SovereignCoordinatorArtifact =
     || typeof candidate.changeSetId !== 'string'
     || typeof candidate.baseRevision !== 'string'
     || typeof candidate.state !== 'string'
-    || typeof candidate.operationCount !== 'number'
+    || !coordinatorStates.has(candidate.state as SovereignCoordinatorArtifact['state'])
+    || !isNonnegativeSafeInteger(candidate.operationCount)
     || typeof candidate.candidatePath !== 'string'
     || typeof candidate.candidateRetained !== 'boolean'
     || !Array.isArray(candidate.verification)
@@ -133,6 +171,52 @@ export class RustSovereignChangeRuntime {
   constructor(options: RustSovereignChangeRuntimeOptions) {
     this.#options = options;
     this.#requestIdFactory = options.requestIdFactory ?? (() => 'change-bridge:' + randomUUID());
+  }
+
+  async audit(): Promise<SovereignChangeAuditArtifact> {
+    const artifact = await this.#execute('audit', { kind: 'audit' });
+    if (!isObject(artifact)
+      || artifact.schemaVersion !== 1
+      || !isNonnegativeSafeInteger(artifact.generatedAtUnixMs)
+      || !isNonnegativeSafeInteger(artifact.preparedReviewAfterMs)
+      || !Array.isArray(artifact.transactions)
+      || artifact.transactions.length > 256
+      || typeof artifact.truncated !== 'boolean'
+      || !isNonnegativeSafeInteger(artifact.orphanStagingRemoved)) {
+      throw new Error('Rust kernel returned an invalid sovereign change audit artifact.');
+    }
+    if (artifact.orphanStagingRemoved > 4_096) {
+      throw new Error('Rust kernel returned an invalid sovereign change audit cleanup count.');
+    }
+    for (const entry of artifact.transactions) {
+      if (!isObject(entry)
+        || typeof entry.transactionId !== 'string'
+        || !transactionIdentity.test(entry.transactionId)
+        || typeof entry.changeSetId !== 'string'
+        || !changeSetIdentity.test(entry.changeSetId)
+        || typeof entry.state !== 'string'
+        || !coordinatorStates.has(entry.state as SovereignCoordinatorArtifact['state'])
+        || !isNonnegativeSafeInteger(entry.createdAtUnixMs)
+        || !isNonnegativeSafeInteger(entry.ageMs)
+        || typeof entry.candidateRetained !== 'boolean'
+        || typeof entry.reviewDue !== 'boolean'
+        || typeof entry.recommendation !== 'string'
+        || !auditRecommendations.has(entry.recommendation as SovereignChangeAuditArtifact['transactions'][number]['recommendation'])) {
+        throw new Error('Rust kernel returned an invalid sovereign change audit entry.');
+      }
+      const expectedAge = Math.max(0, artifact.generatedAtUnixMs - entry.createdAtUnixMs);
+      const expectedRecommendation = entry.state === 'prepared'
+        ? 'review_prepared'
+        : entry.state === 'repair_required'
+          ? 'repair_required'
+          : 'none';
+      if (entry.ageMs !== expectedAge
+        || entry.reviewDue !== (entry.state === 'prepared' && entry.ageMs >= artifact.preparedReviewAfterMs)
+        || entry.recommendation !== expectedRecommendation) {
+        throw new Error('Rust kernel returned internally inconsistent sovereign change audit evidence.');
+      }
+    }
+    return artifact as unknown as SovereignChangeAuditArtifact;
   }
 
   async prepare(proposal: SovereignChangeProposal): Promise<SovereignPreparedArtifact> {
@@ -285,7 +369,7 @@ export class RustSovereignChangeRuntime {
         },
         operation,
       });
-      if (kind === 'inspect' || kind === 'prepare') child.stdin.end();
+      if (kind === 'audit' || kind === 'inspect' || kind === 'prepare') child.stdin.end();
       if (!signal.aborted) {
         signal.addEventListener('abort', sendCancellation, { once: true });
         if (signal.aborted) sendCancellation();

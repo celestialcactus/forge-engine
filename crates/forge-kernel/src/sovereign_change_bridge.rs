@@ -103,6 +103,7 @@ struct EnvironmentEntry {
     deny_unknown_fields
 )]
 enum SovereignChangeOperation {
+    Audit,
     Prepare {
         proposal: SovereignChangeProposal,
     },
@@ -327,6 +328,14 @@ pub fn execute(
     let service = build_service(&start.config, &request_id)?;
     let cancellation = Arc::new(CancellationState::default());
     let (operation, artifact) = match start.operation {
+        SovereignChangeOperation::Audit => {
+            let artifact = service.audit().map_err(|message| SovereignChangeFailure {
+                request_id: Some(request_id.clone()),
+                code: "change_audit_failed",
+                message,
+            })?;
+            ("audit", serde_json::to_value(artifact))
+        }
         SovereignChangeOperation::Prepare { proposal } => {
             let artifact =
                 service
@@ -585,5 +594,16 @@ mod tests {
             "verificationChecks": [{ "executable": "untrusted" }]
         }));
         assert!(serde_json::from_value::<SovereignChangeStart>(value).is_err());
+    }
+
+    #[test]
+    fn parses_the_read_only_transaction_audit_operation() {
+        let mut value = start(json!({
+            "schemaVersion": 1,
+            "operations": []
+        }));
+        value["operation"] = json!({ "kind": "audit" });
+        let parsed: SovereignChangeStart = serde_json::from_value(value).expect("audit start");
+        assert!(matches!(parsed.operation, SovereignChangeOperation::Audit));
     }
 }

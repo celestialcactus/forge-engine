@@ -134,10 +134,10 @@ blocks and never invokes it. Wrong-call, invalid-identity, duplicate, and
 misclassified checkpoints fail closed. See
 [Checkpoint 78](../checkpoints/2026-08-06-78-changeset-recovery-checkpoint-local-gate.md).
 
-Remaining acceptance work is hosted Windows/macOS/Ubuntu. Automatic
-cleanup/reporting for abandoned private staging and policy for registered but
-never-finalized ChangeSet transactions are release hardening, not a reason to
-invent a second recovery coordinator. Unresolved provider and approval requests
+Remaining acceptance work is hosted Windows/macOS/Ubuntu. ADR-0031 adds bounded
+reporting for registered but never-finalized ChangeSet transactions and lock-safe
+cleanup for unpublished coordinator staging without inventing a second recovery
+coordinator or age-deleting prepared work. Unresolved provider and approval requests
 remain intentionally non-retryable, same-version continuation is required, and
 cross-device/distributed and general power-loss recovery are out of scope.
 

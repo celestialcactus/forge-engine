@@ -1,3 +1,26 @@
+# 2026-08-10 - Transaction retention and isolation readiness reach the local gate
+
+- Moved exact unpublished transaction staging cleanup under the repository
+  publication lock, added strict staging grammar/state-scan bounds, and retained
+  every published prepared transaction until exact accept/discard.
+- Added a bounded Rust-owned transaction audit, ChangeSet protocol v4, and human/JSON
+  `forge change audit` projections. Prepared work becomes review-due after 24 hours
+  but is never silently deleted.
+- Advanced kernel probe to v2 so isolation readiness comes from the selected Rust
+  provider. The baseline reports trusted-only/no controls/restricted-ready false;
+  no OS sandbox is claimed.
+- The full local gate passes: zero-warning Rust validation, 94/94 Node tests/build,
+  63/63 exact-kernel hybrid tests, official MCP-client conformance, and source-built
+  CLI smoke. Doctor now rejects a state root nested in the governed workspace.
+- The repository audit confirms the npm tarball contains zero native kernel entries
+  and the root license remains unresolved. Hosted Windows/macOS/Ubuntu, controlled
+  VS Code, clean-install packaging, and native AppContainer/App Sandbox providers
+  remain open.
+- See [Checkpoint 79](checkpoints/2026-08-10-79-transaction-retention-and-isolation-readiness-local-gate.md),
+  [ADR-0031](ADRs/ADR-0031-transaction-retention-and-native-sandbox-sequencing.md),
+  [core audit](../audit/2026-08-10-core-correctness-and-quality-audit.md), and
+  [CLI ship lane 7](../tasks/SLICE-CLI7-transaction-retention-and-native-isolation.md).
+
 # 2026-08-06 - Outer runs cross-link durable ChangeSet recovery
 
 - Advanced the private bridge to v10 with a typed, durably acknowledged
