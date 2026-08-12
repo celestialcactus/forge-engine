@@ -12,9 +12,10 @@ use crate::{
     BaselineIsolationProvider, Cancellation, ChangeTransactionRequest,
     HostExecutionAuthorizationEvidence, HostExecutionBinding, HostExecutionGrant,
     IsolatedProcessSpec, IsolationProfile, IsolationProvider, VerificationCheck,
-    VerificationEvidence, VerificationSelection, validate_change_transaction_request,
-    validate_isolation_evidence, validate_isolation_policy, validate_isolation_provider_request,
-    validate_process_environment_policy,
+    VerificationEvidence, VerificationSelection, compile_effective_sandbox_plan,
+    validate_change_transaction_request, validate_isolation_evidence, validate_isolation_policy,
+    validate_isolation_provider_request, validate_process_environment_policy,
+    validate_restricted_plan_evidence,
 };
 
 const MAX_CHECKS: usize = 32;
@@ -150,10 +151,14 @@ impl VerificationRunner {
             environment: check.environment.clone(),
             inherited_environment: check.inherited_environment.clone(),
             working_directory: working_directory.to_path_buf(),
+            readable_roots: Vec::new(),
+            denied_read_roots: Vec::new(),
+            denied_write_roots: Vec::new(),
             timeout: check.timeout,
             max_output_bytes: check.max_output_bytes,
         };
-        let provider_capabilities = self.isolation_provider.capabilities();
+        let provider_status = self.isolation_provider.status();
+        let provider_capabilities = provider_status.capabilities.clone();
         validate_isolation_provider_request(
             &provider_capabilities,
             &check.isolation_policy,
@@ -165,6 +170,7 @@ impl VerificationRunner {
                 check.check_id
             )
         })?;
+        let mut effective_plan = None;
         let result = if selection.isolation.profile == IsolationProfile::HostManaged {
             let pending = self
                 .pending_host_execution
@@ -188,6 +194,24 @@ impl VerificationRunner {
                 &process,
                 cancellation,
             )
+        } else if selection.isolation.profile == IsolationProfile::Restricted {
+            let plan = compile_effective_sandbox_plan(
+                &provider_status,
+                &check.isolation_policy,
+                &selection.isolation,
+                &process,
+            )
+            .map_err(|error| {
+                format!(
+                    "Could not compile restricted verification check {}: {error}",
+                    check.check_id
+                )
+            })?;
+            let result = self
+                .isolation_provider
+                .execute_restricted(&plan, &process, cancellation);
+            effective_plan = Some(plan);
+            result
         } else {
             self.isolation_provider.execute(
                 &check.isolation_policy,
@@ -202,6 +226,14 @@ impl VerificationRunner {
                 check.check_id
             )
         })?;
+        if let Some(plan) = effective_plan.as_ref() {
+            validate_restricted_plan_evidence(plan, &result.isolation).map_err(|error| {
+                format!(
+                    "Policy verification check {} returned unbound restricted evidence: {error}",
+                    check.check_id
+                )
+            })?;
+        }
         validate_isolation_evidence(
             &provider_capabilities,
             &check.isolation_policy,

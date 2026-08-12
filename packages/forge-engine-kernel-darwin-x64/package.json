@@ -1,0 +1,11 @@
+{
+  "name": "forge-engine-kernel-darwin-x64",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ForgeEngine native Rust kernel and watchdog for macOS x64",
+  "forgeTarget": { "platform": "darwin", "architecture": "x64" },
+  "files": ["bin"],
+  "license": "MIT",
+  "publishConfig": { "access": "public" },
+  "repository": { "type": "git", "url": "git+https://github.com/celestialcactus/forge-engine.git" }
+}

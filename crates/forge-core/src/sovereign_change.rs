@@ -11,12 +11,12 @@ use serde_json::json;
 use crate::{
     ApprovalDecision, ApprovalFacts, ApprovalOutcome, CHANGE_SET_V2_SCHEMA_VERSION, Cancellation,
     CandidateOperationApplyEvidence, CandidateOperationBoundaryEvidence, CapabilityCall,
-    ChangeOperationV2, ChangeSetV2, ChangeSetV2CandidateAdapter, ChangeSetV2Coordinator,
-    ChangeSetV2CoordinatorArtifact, ChangeSetV2CoordinatorConfig, ChangeSetV2Registration,
-    FileBlobStore, FileMode, IsolationRequest, OutcomeAssessment, OutcomeCapabilityAttempt,
-    OutcomeContract, OutcomeRequirement, RepositoryPathIdentity, VerificationCheck,
-    VerificationEvidence, VerificationRunner, assess_outcome, change_set_id, resolve_approval,
-    workspace_snapshot_id,
+    ChangeOperationV2, ChangeSetV2, ChangeSetV2AuditArtifact, ChangeSetV2CandidateAdapter,
+    ChangeSetV2Coordinator, ChangeSetV2CoordinatorArtifact, ChangeSetV2CoordinatorConfig,
+    ChangeSetV2Registration, FileBlobStore, FileMode, IsolationRequest, OutcomeAssessment,
+    OutcomeCapabilityAttempt, OutcomeContract, OutcomeRequirement, RepositoryPathIdentity,
+    VerificationCheck, VerificationEvidence, VerificationRunner, assess_outcome, change_set_id,
+    resolve_approval, workspace_snapshot_id,
 };
 
 pub const SOVEREIGN_CHANGE_PROPOSAL_SCHEMA_VERSION: u8 = 1;
@@ -162,10 +162,10 @@ impl SovereignChangeConfig {
 pub struct SovereignChangeService {
     repository_root: PathBuf,
     candidate_parent: PathBuf,
-    state_root: PathBuf,
     blob_store: FileBlobStore,
     git_executable: PathBuf,
     max_diff_bytes: usize,
+    coordinator: ChangeSetV2Coordinator,
 }
 
 impl SovereignChangeService {
@@ -200,16 +200,22 @@ impl SovereignChangeService {
             fs::create_dir_all(path)
                 .map_err(|error| format!("Cannot create Forge change state: {error}"))?;
         }
-        let service = Self {
+        let blob_store = FileBlobStore::new(blob_root);
+        let mut coordinator_config = ChangeSetV2CoordinatorConfig::new(
+            &config.repository_root,
+            &state_root,
+            blob_store.clone(),
+        );
+        coordinator_config.git_executable = config.git_executable.clone();
+        let coordinator = ChangeSetV2Coordinator::try_new(coordinator_config)?;
+        Ok(Self {
             repository_root: config.repository_root,
             candidate_parent,
-            state_root,
-            blob_store: FileBlobStore::new(blob_root),
+            blob_store,
             git_executable: config.git_executable,
             max_diff_bytes: config.max_diff_bytes,
-        };
-        service.coordinator()?;
-        Ok(service)
+            coordinator,
+        })
     }
 
     pub fn prepare(&self, proposal: &SovereignChangeProposal) -> Result<ChangeSetV2, String> {
@@ -321,7 +327,7 @@ impl SovereignChangeService {
                     "Verification evidence exceeds the {MAX_DURABLE_VERIFICATION_BYTES} byte durable limit."
                 ));
             }
-            let transaction = self.coordinator()?.register(&ChangeSetV2Registration {
+            let transaction = self.coordinator.register(&ChangeSetV2Registration {
                 boundary,
                 candidate_path,
                 change_set,
@@ -372,7 +378,11 @@ impl SovereignChangeService {
     }
 
     pub fn inspect(&self, transaction_id: &str) -> Result<ChangeSetV2CoordinatorArtifact, String> {
-        self.coordinator()?.inspect(transaction_id)
+        self.coordinator.inspect(transaction_id)
+    }
+
+    pub fn audit(&self) -> Result<ChangeSetV2AuditArtifact, String> {
+        self.coordinator.audit()
     }
 
     pub fn accept(
@@ -380,7 +390,7 @@ impl SovereignChangeService {
         transaction_id: &str,
         cancellation: &dyn Cancellation,
     ) -> Result<ChangeSetV2CoordinatorArtifact, String> {
-        Ok(self.coordinator()?.promote(transaction_id, cancellation))
+        Ok(self.coordinator.promote(transaction_id, cancellation))
     }
 
     pub fn discard(
@@ -388,17 +398,7 @@ impl SovereignChangeService {
         transaction_id: &str,
         cancellation: &dyn Cancellation,
     ) -> Result<ChangeSetV2CoordinatorArtifact, String> {
-        Ok(self.coordinator()?.discard(transaction_id, cancellation))
-    }
-
-    fn coordinator(&self) -> Result<ChangeSetV2Coordinator, String> {
-        let mut config = ChangeSetV2CoordinatorConfig::new(
-            &self.repository_root,
-            &self.state_root,
-            self.blob_store.clone(),
-        );
-        config.git_executable = self.git_executable.clone();
-        ChangeSetV2Coordinator::try_new(config)
+        Ok(self.coordinator.discard(transaction_id, cancellation))
     }
 
     fn build_change_set(&self, proposal: &SovereignChangeProposal) -> Result<ChangeSetV2, String> {

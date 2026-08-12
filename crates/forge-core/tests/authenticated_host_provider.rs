@@ -220,6 +220,9 @@ fn process(root: &Path) -> IsolatedProcessSpec {
         environment: Vec::new(),
         inherited_environment: Vec::new(),
         working_directory: root.to_path_buf(),
+        readable_roots: Vec::new(),
+        denied_read_roots: Vec::new(),
+        denied_write_roots: Vec::new(),
         timeout: Duration::from_secs(5),
         max_output_bytes: 4_096,
     }

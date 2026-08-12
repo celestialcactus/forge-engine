@@ -41,7 +41,7 @@ const plan: InteractiveChangePlan = {
 
 const prepared: SovereignPreparedArtifact = {
   schemaVersion: 2,
-  changeSetId: 'changeset:sha256:prepared',
+  changeSetId: `changeset:sha256:${'a'.repeat(64)}`,
   snapshotId: 'snapshot:prepared',
   operations: [{
     kind: 'replace',
@@ -63,7 +63,7 @@ const facts = (call: CapabilityCall) => ({
 
 const transaction = (state: SovereignCoordinatorArtifact['state']): SovereignCoordinatorArtifact => ({
   schemaVersion: 1,
-  transactionId: 'transaction:test',
+  transactionId: `transaction:sha256:${'b'.repeat(64)}`,
   changeSetId: prepared.changeSetId,
   baseRevision: 'base',
   state,
@@ -210,7 +210,7 @@ test('cancellation at promotion retains the verified transaction without source 
   controller.abort(new Error('Fixture cancelled promotion approval.'));
   const result = await pending;
   assert.equal(result.status, 'cancelled');
-  assert.equal(result.transactionId, 'transaction:test');
+  assert.equal(result.transactionId, transaction('prepared').transactionId);
   assert.deepEqual(fixture.calls.map((call) => call.kind), ['prepare', 'propose']);
   assert.ok(io.output.some((line) => line.includes('retained after cancellation')));
 });
@@ -230,6 +230,38 @@ test('approved verified candidate requires a second explicit promotion decision'
   assert.equal(result.transaction?.state, 'promoted');
   assert.deepEqual(fixture.calls.map((call) => call.kind), ['prepare', 'propose', 'accept']);
   assert.equal(fixture.calls[2]?.call?.capabilityId, 'workspace.change.accept');
+});
+
+test('records the durable ChangeSet checkpoint before requesting promotion', async () => {
+  const fixture = runtimeFixture(proposal('verified_candidate'));
+  const order: string[] = [];
+  let question = 0;
+  const io: InteractiveChangeIo = {
+    async question() {
+      question++;
+      order.push(`question:${question}`);
+      return question === 1 ? 'yes' : 'keep';
+    },
+    write() {},
+  };
+  const result = await executeInteractiveChangePlan({
+    plan,
+    checkIds: ['typecheck'],
+    runtime: fixture.runtime,
+    io,
+    async onRecoveryCheckpoint(checkpoint) {
+      order.push('checkpoint');
+      assert.deepEqual(checkpoint, {
+        schemaVersion: 1,
+        kind: 'change_set_transaction',
+        changeSetId: prepared.changeSetId,
+        transactionId: transaction('prepared').transactionId,
+        phase: 'registered',
+      });
+    },
+  });
+  assert.equal(result.status, 'retained');
+  assert.deepEqual(order, ['question:1', 'checkpoint', 'question:2']);
 });
 
 test('failed verification cannot reach promotion and explicit discard uses the durable transaction', async () => {

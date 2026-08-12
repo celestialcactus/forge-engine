@@ -17,13 +17,15 @@ import { ForgeWorkspaceService } from '../../src/v1/service.js';
 const kernelBinary = process.env.FORGE_KERNEL_BINARY
   ?? resolve('target', 'debug', process.platform === 'win32' ? 'forge-kernel.exe' : 'forge-kernel');
 const digest = (value: string): string => createHash('sha256').update(value).digest('hex');
+const changeSetId = `changeset:sha256:${digest('hybrid-governed-change-set')}`;
+const transactionId = `transaction:sha256:${digest('hybrid-governed-transaction')}`;
 
 const coordinator = (
   state: SovereignCoordinatorArtifact['state'],
 ): SovereignCoordinatorArtifact => ({
   schemaVersion: 1,
-  transactionId: 'transaction:hybrid-governed',
-  changeSetId: 'changeset:hybrid-governed',
+  transactionId,
+  changeSetId,
   baseRevision: 'base:hybrid-governed',
   state,
   operationCount: 1,
@@ -56,7 +58,7 @@ test('Rust lifecycle retains governed edit approval and promotion evidence befor
   ]);
   const prepared: SovereignPreparedArtifact = {
     schemaVersion: 2,
-    changeSetId: 'changeset:hybrid-governed',
+    changeSetId,
     snapshotId: 'candidate-snapshot:hybrid-governed',
     operations: [{
       kind: 'replace',
@@ -96,7 +98,17 @@ test('Rust lifecycle retains governed edit approval and promotion evidence befor
   };
   const answers = ['yes', 'accept'];
   const service = new ForgeWorkspaceService(workspaceRoot, {
-    runtime: { kind: 'rust_kernel', kernel: { binaryPath: kernelBinary } },
+    runtime: {
+      kind: 'rust_kernel',
+      kernel: {
+        binaryPath: kernelBinary,
+        runStoreRoot: resolve(
+          'target',
+          'hybrid-test-engines',
+          'rust-governed-' + String(process.pid) + '-' + String(Date.now()),
+        ),
+      },
+    },
     runIdFactory: () => 'run:hybrid-governed-change',
   });
   try {

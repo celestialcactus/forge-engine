@@ -12,7 +12,7 @@ use std::{
     io::{BufRead, BufReader, Write},
     path::{Component, Path, PathBuf},
     process::{Command, Stdio},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 const SCHEMA: u8 = 1;
@@ -21,6 +21,9 @@ const MAX_JOURNAL: u64 = 512 * 1024;
 const MAX_GIT: usize = 32 * 1_048_576;
 const MAX_BEFORE: u64 = 1_048_576;
 const MAX_BEFORE_TOTAL: u64 = 4_194_304;
+const MAX_STATE_ENTRIES: usize = 4_096;
+const MAX_AUDIT_TRANSACTIONS: usize = 256;
+const PREPARED_REVIEW_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Clone, Debug)]
 pub struct ChangeSetV2CoordinatorConfig {
@@ -101,6 +104,38 @@ pub struct ChangeSetV2CoordinatorArtifact {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failure: Option<String>,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChangeSetV2AuditRecommendation {
+    None,
+    ReviewPrepared,
+    RepairRequired,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ChangeSetV2AuditEntry {
+    pub transaction_id: String,
+    pub change_set_id: String,
+    pub state: ChangeSetV2CoordinatorState,
+    pub created_at_unix_ms: u64,
+    pub age_ms: u64,
+    pub candidate_retained: bool,
+    pub review_due: bool,
+    pub recommendation: ChangeSetV2AuditRecommendation,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ChangeSetV2AuditArtifact {
+    pub schema_version: u8,
+    pub generated_at_unix_ms: u64,
+    pub prepared_review_after_ms: u64,
+    pub transactions: Vec<ChangeSetV2AuditEntry>,
+    pub truncated: bool,
+    pub orphan_staging_removed: u32,
+}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Manifest {
@@ -154,6 +189,7 @@ impl Hook for Noop {}
 
 pub struct ChangeSetV2Coordinator {
     config: ChangeSetV2CoordinatorConfig,
+    orphan_staging_removed: u32,
 }
 impl ChangeSetV2Coordinator {
     pub fn try_new(mut config: ChangeSetV2CoordinatorConfig) -> Result<Self, String> {
@@ -184,8 +220,15 @@ impl ChangeSetV2Coordinator {
             &["rev-parse", "--show-toplevel"],
             "Git coordinator repository discovery",
         )?;
-        let value = Self { config };
-        value.cleanup_temps()?;
+        let mut value = Self {
+            config,
+            orphan_staging_removed: 0,
+        };
+        {
+            let _repo = value.repo_lock()?;
+            value.orphan_staging_removed = u32::try_from(value.cleanup_temps_locked()?)
+                .map_err(|_| "Coordinator staging cleanup count overflowed u32.".to_owned())?;
+        }
         value.reconcile_all()?;
         Ok(value)
     }
@@ -239,6 +282,62 @@ impl ChangeSetV2Coordinator {
     pub fn inspect(&self, id: &str) -> Result<ChangeSetV2CoordinatorArtifact, String> {
         self.reconcile(id)
     }
+    pub fn audit(&self) -> Result<ChangeSetV2AuditArtifact, String> {
+        let _repo = self.repo_lock()?;
+        let generated_at_unix_ms = now()?;
+        let prepared_review_after_ms = u64::try_from(PREPARED_REVIEW_AFTER.as_millis())
+            .map_err(|_| "Prepared transaction review age overflowed u64.".to_owned())?;
+        let ids = self.transaction_ids_locked()?;
+        let truncated = ids.len() > MAX_AUDIT_TRANSACTIONS;
+        let mut transactions = Vec::with_capacity(ids.len());
+        for id in ids {
+            let _tx = self.tx_lock(&id)?;
+            let manifest = self.load_manifest(&id)?;
+            let transitions = self.read_transitions(&id)?;
+            let state = transitions
+                .last()
+                .ok_or("Coordinator journal has no transition.")?
+                .state;
+            let age_ms = generated_at_unix_ms.saturating_sub(manifest.created_at_unix_ms);
+            let review_due = state == ChangeSetV2CoordinatorState::Prepared
+                && age_ms >= prepared_review_after_ms;
+            let recommendation = match state {
+                ChangeSetV2CoordinatorState::Prepared => {
+                    ChangeSetV2AuditRecommendation::ReviewPrepared
+                }
+                ChangeSetV2CoordinatorState::RepairRequired => {
+                    ChangeSetV2AuditRecommendation::RepairRequired
+                }
+                _ => ChangeSetV2AuditRecommendation::None,
+            };
+            let artifact = self.artifact_from(manifest.clone(), transitions, false, None, None)?;
+            transactions.push(ChangeSetV2AuditEntry {
+                transaction_id: manifest.transaction_id,
+                change_set_id: manifest.change_set.change_set_id,
+                state,
+                created_at_unix_ms: manifest.created_at_unix_ms,
+                age_ms,
+                candidate_retained: artifact.candidate_retained,
+                review_due,
+                recommendation,
+            });
+        }
+        transactions.sort_by(|left, right| {
+            audit_priority(left)
+                .cmp(&audit_priority(right))
+                .then(left.created_at_unix_ms.cmp(&right.created_at_unix_ms))
+                .then(left.transaction_id.cmp(&right.transaction_id))
+        });
+        transactions.truncate(MAX_AUDIT_TRANSACTIONS);
+        Ok(ChangeSetV2AuditArtifact {
+            schema_version: 1,
+            generated_at_unix_ms,
+            prepared_review_after_ms,
+            transactions,
+            truncated,
+            orphan_staging_removed: self.orphan_staging_removed,
+        })
+    }
     pub fn promote(&self, id: &str, c: &dyn Cancellation) -> ChangeSetV2CoordinatorArtifact {
         self.promote_hook(id, c, &mut Noop)
     }
@@ -287,10 +386,25 @@ impl ChangeSetV2Coordinator {
     }
     pub fn reconcile_all(&self) -> Result<Vec<ChangeSetV2CoordinatorArtifact>, String> {
         let _repo = self.repo_lock()?;
+        let ids = self.transaction_ids_locked()?;
+        let mut out = Vec::new();
+        for id in ids {
+            out.push(self.reconcile_locked(&id)?)
+        }
+        Ok(out)
+    }
+    fn transaction_ids_locked(&self) -> Result<Vec<String>, String> {
         let mut ids = Vec::new();
+        let mut entries = 0usize;
         for entry in fs::read_dir(&self.config.state_root)
             .map_err(|e| format!("Cannot scan coordinator state root: {e}"))?
         {
+            entries = entries.saturating_add(1);
+            if entries > MAX_STATE_ENTRIES {
+                return Err(format!(
+                    "Coordinator state root exceeds the {MAX_STATE_ENTRIES}-entry safety limit."
+                ));
+            }
             let entry = entry.map_err(|e| format!("Cannot scan coordinator entry: {e}"))?;
             if !entry
                 .file_type()
@@ -312,11 +426,7 @@ impl ChangeSetV2Coordinator {
             ids.push(format!("transaction:sha256:{d}"));
         }
         ids.sort();
-        let mut out = Vec::new();
-        for id in ids {
-            out.push(self.reconcile_locked(&id)?)
-        }
-        Ok(out)
+        Ok(ids)
     }
     pub fn reconcile(&self, id: &str) -> Result<ChangeSetV2CoordinatorArtifact, String> {
         let _repo = self.repo_lock()?;
@@ -1333,25 +1443,61 @@ impl ChangeSetV2Coordinator {
             .state_root
             .join(format!("transaction-{}", tx_digest(id)?)))
     }
-    fn cleanup_temps(&self) -> Result<(), String> {
+    fn cleanup_temps_locked(&self) -> Result<usize, String> {
+        let mut removed = 0usize;
+        let mut entries = 0usize;
         for entry in fs::read_dir(&self.config.state_root)
             .map_err(|e| format!("Cannot scan coordinator state root: {e}"))?
         {
+            entries = entries.saturating_add(1);
+            if entries > MAX_STATE_ENTRIES {
+                return Err(format!(
+                    "Coordinator state root exceeds the {MAX_STATE_ENTRIES}-entry safety limit."
+                ));
+            }
             let entry = entry.map_err(|e| format!("Cannot scan coordinator entry: {e}"))?;
             let name = entry.file_name();
             let Some(name) = name.to_str() else { continue };
-            if name.starts_with(".transaction-")
-                && name.ends_with(".tmp")
-                && entry
+            if name.starts_with(".transaction-") && name.ends_with(".tmp") {
+                if parse_staging_name(name).is_none() {
+                    return Err(
+                        "Coordinator state contains an invalid transaction staging name."
+                            .to_owned(),
+                    );
+                }
+                if !entry
                     .file_type()
                     .map_err(|e| format!("Cannot inspect temporary transaction: {e}"))?
                     .is_dir()
-            {
+                {
+                    return Err(
+                        "Coordinator transaction staging path is not a directory.".to_owned()
+                    );
+                }
                 fs::remove_dir_all(entry.path())
-                    .map_err(|e| format!("Cannot remove incomplete transaction: {e}"))?
+                    .map_err(|e| format!("Cannot remove incomplete transaction: {e}"))?;
+                removed = removed.saturating_add(1);
             }
         }
-        Ok(())
+        Ok(removed)
+    }
+}
+
+fn parse_staging_name(name: &str) -> Option<(&str, u32, u64)> {
+    let body = name.strip_prefix(".transaction-")?.strip_suffix(".tmp")?;
+    let mut parts = body.rsplitn(3, '-');
+    let created_at_unix_ms = parts.next()?.parse().ok()?;
+    let process_id = parts.next()?.parse().ok()?;
+    let digest = parts.next()?;
+    digest_ok(digest).then_some((digest, process_id, created_at_unix_ms))
+}
+
+fn audit_priority(entry: &ChangeSetV2AuditEntry) -> u8 {
+    match (entry.recommendation, entry.review_due) {
+        (ChangeSetV2AuditRecommendation::RepairRequired, _) => 0,
+        (ChangeSetV2AuditRecommendation::ReviewPrepared, true) => 1,
+        (ChangeSetV2AuditRecommendation::ReviewPrepared, false) => 2,
+        (ChangeSetV2AuditRecommendation::None, _) => 3,
     }
 }
 

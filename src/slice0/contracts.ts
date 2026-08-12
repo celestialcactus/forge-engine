@@ -240,18 +240,42 @@ export type PlannerTurn =
   | { readonly kind: 'complete'; readonly output: string; readonly inference?: InferenceEvidence }
   | { readonly kind: 'call'; readonly call: CapabilityCall; readonly inference?: InferenceEvidence };
 
+export interface PlannerCheckpoint {
+  readonly schemaVersion: 1;
+  readonly plannerId: string;
+  readonly state: unknown;
+}
+
 export interface TaskPlanner {
   readonly id: string;
   next(request: PlannerRequest, signal: AbortSignal): Promise<PlannerTurn>;
+  checkpoint?(): PlannerCheckpoint;
+  restore?(checkpoint: PlannerCheckpoint): void;
+}
+
+export type CapabilityReplaySafety = 'read_only_retryable' | 'non_idempotent';
+
+export interface CapabilityRecoveryCheckpoint {
+  readonly schemaVersion: 1;
+  readonly kind: 'change_set_transaction';
+  readonly changeSetId: string;
+  readonly transactionId: string;
+  readonly phase: 'registered';
+}
+
+export interface CapabilityInvocationObserver {
+  checkpoint(checkpoint: CapabilityRecoveryCheckpoint): Promise<void>;
 }
 
 export interface Capability {
   readonly id: string;
+  readonly replaySafety?: CapabilityReplaySafety;
   invoke(
     call: CapabilityCall,
     snapshot: WorkspaceSnapshot,
     signal: AbortSignal,
     context: CapabilityContext,
+    observer?: CapabilityInvocationObserver,
   ): Promise<CapabilityResult>;
 }
 

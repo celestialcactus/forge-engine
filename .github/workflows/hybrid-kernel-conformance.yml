@@ -19,6 +19,24 @@ permissions:
   contents: read
 
 jobs:
+  rustsec:
+    name: RustSec advisory audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.97.1 --profile minimal
+
+      - name: Install pinned cargo-audit
+        run: cargo install cargo-audit --version 0.22.2 --locked
+
+      - name: Audit locked Rust dependencies
+        run: cargo audit --deny warnings
+
   hybrid:
     name: Rust kernel + TypeScript adapter / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -71,11 +89,25 @@ jobs:
       - name: Build optimized kernel
         run: npm run rust:build:release
 
+      - name: Prove clean-install native package discovery
+        run: npm run package:smoke:prepared
+
+      - name: Build host-native npm package
+        run: npm run package:native:pack
+
       - name: Retain optimized kernel for exact-host validation
         uses: actions/upload-artifact@v7
         with:
           name: forge-kernel-${{ runner.os }}-${{ runner.arch }}
           path: target/release/forge-kernel${{ matrix.binary-suffix }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Retain host-native npm package
+        uses: actions/upload-artifact@v7
+        with:
+          name: forge-native-package-${{ runner.os }}-${{ runner.arch }}
+          path: target/native-package-archives/*.tgz
           if-no-files-found: error
           retention-days: 7
 

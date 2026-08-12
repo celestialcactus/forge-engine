@@ -10,16 +10,21 @@ slice by slice from the contracts in `docs/architecture/`.
 
 ## Current implementation
 
-The accepted core currently provides:
+The current implementation provides; acceptance status is recorded by the linked checkpoints:
 
 - a Rust-owned run, approval, event, artifact, transaction, and recovery authority;
+- a bridge-v10 Rust outer-run ledger at its local gate: request-before-run,
+  append-before-notify events, terminal-before-result artifacts, bounded interaction
+  transcripts, deterministic same-runtime continuation, and read-only
+  terminal/open/repair inspection; exact-head hosted acceptance remains pending;
 - deterministic workspace inventory, literal search, bounded line reads,
   TypeScript declarations/diagnostics, and read-only Git evidence;
 - a seven-tool stdio MCP evidence adapter tested with VS Code;
 - explicit local Ollama and direct OpenAI Responses inference routed through the
   same Rust-owned run and evidence contract, with no implicit provider fallback;
 - complete bounded ChangeSet v2 operations through a disposable Git worktree,
-  verification, durable local transaction state, and explicit accept or discard;
+  verification, durable local transaction state, explicit accept or discard, and a
+  bounded read-only transaction audit;
 - supervised verifier process-tree cleanup on Windows, macOS, and Linux;
 - authenticated, replay-resistant host-managed execution grants for embedding in a
   boundary supplied by another host.
@@ -33,8 +38,11 @@ selected conformance fixture.
 Plain `forge` starts an interactive local-first prompt shell and auto-discovers an
 installed Ollama model when no route is supplied. Each prompt creates a separate
 Rust-authoritative run; tool continuation is preserved within the run, but
-cross-prompt conversation context is not yet retained. `forge run <task>` remains
-the explicit non-interactive and JSON automation surface.
+cross-prompt conversation context is not yet retained. Each outer run is durably
+inspectable. `forge runs resume` replays validated completed interactions through
+the same Rust runtime; ambiguous provider/approval work and unresolved
+non-idempotent capabilities remain blocked rather than guessed. `forge run <task>`
+remains the explicit non-interactive and JSON automation surface.
 
 ## Honest limitations
 
@@ -46,8 +54,9 @@ the explicit non-interactive and JSON automation surface.
 - `restricted` execution remains unavailable and fails closed until native platform
   providers pass adversarial gates.
 - There is no public MCP mutation tool, generic shell, unrestricted write tool,
-  cross-prompt conversational memory, durable/resumable session projection,
-  skills, compression, connector, or automation surface yet.
+  cross-prompt conversational memory, skills, compression, connector, or automation
+  surface yet. Safe continuation is bounded; ambiguous provider/approval requests
+  and unresolved mutation capabilities are intentionally not retried.
 - OpenAI transport conformance is tested, but a live cloud acceptance run requires
   the user's own `OPENAI_API_KEY`; Forge does not accept credentials as CLI flags or
   write them into run evidence.
@@ -68,18 +77,23 @@ npm run smoke
 ```
 
 `npm run build:product` builds the Rust kernel and TypeScript adapter. `forge doctor`
-reports the exact kernel path, discovery source, runtime posture, and isolation
-limitation.
+reports the exact kernel path, discovery source, runtime posture, isolation
+limitation, effective run-store root/recovery posture, and whether the state root is
+outside the governed workspace. Rust revalidates canonical paths when opening the
+transaction authority.
 
 Useful commands after the product build:
 
 ```powershell
 node dist/src/cli.js --workspace C:\path\to\repo
 node dist/src/cli.js doctor --json
+node dist/src/cli.js runs inspect run:the-id-from-a-prior-result --json
+node dist/src/cli.js runs resume run:the-id --provider ollama --model qwen2.5-coder:7b --json
 node dist/src/cli.js inspect --workspace C:\path\to\repo --json
 node dist/src/cli.js search "literal text" --workspace C:\path\to\repo --json
 node dist/src/cli.js run "Inspect this workspace" --provider ollama --model qwen2.5-coder:7b --workspace C:\path\to\repo --json
 node dist/src/cli.js change propose proposal.json --policy verification-policy.json --approve --json
+node dist/src/cli.js change audit --workspace C:\path\to\repo --json
 ```
 
 The Ollama route expects a locally running Ollama API and an installed model.
@@ -102,5 +116,7 @@ VS Code uses the workspace-local `.vscode/mcp.json` after a product build. See
   worker-platform exploration without expanding Forge V1.
 - `docs/decisions/ADRs/ADR-0017-product-runtime-authority-and-restricted-sequencing.md`
   records Rust product authority and the honest sandbox sequencing decision.
+- `docs/decisions/ADRs/ADR-0031-transaction-retention-and-native-sandbox-sequencing.md`
+  records the non-destructive transaction policy and Tier-1 native sandbox gates.
 - `docs/decisions/architecture-changelog.md` indexes checkpoints and ADRs.
 - `docs/archive/prototype/` preserves the preliminary implementation.

@@ -6,6 +6,7 @@ pub mod context;
 pub mod contracts;
 pub mod host_authority;
 pub mod isolation;
+pub mod run_store;
 pub mod runtime;
 pub mod sovereign_change;
 pub mod verification_runner;
@@ -19,6 +20,7 @@ pub use context::{compile_context, required_context_bytes};
 pub use contracts::*;
 pub use host_authority::*;
 pub use isolation::*;
+pub use run_store::*;
 pub use runtime::{
     ApprovalPolicy, Cancellation, CapabilityAdapter, EventSink, NoCancellation, NoopEventSink,
     RuntimeSignal, Slice0Runtime, TaskPlanner, assess_outcome, resolve_approval,

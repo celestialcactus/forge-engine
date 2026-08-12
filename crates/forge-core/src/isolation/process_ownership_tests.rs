@@ -18,14 +18,14 @@ use crate::{Cancellation, NoCancellation};
 
 static FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-struct CancelAfter {
-    started: Instant,
-    delay: Duration,
+struct CancelWhenMarkerExists {
+    marker: PathBuf,
 }
 
-impl Cancellation for CancelAfter {
+impl Cancellation for CancelWhenMarkerExists {
     fn reason(&self) -> Option<String> {
-        (self.started.elapsed() >= self.delay)
+        self.marker
+            .exists()
             .then(|| "Process ownership cancellation fixture.".to_owned())
     }
 }
@@ -67,6 +67,9 @@ fn tree_spec(root: &Path, timeout: Duration) -> IsolatedProcessSpec {
         ],
         inherited_environment: Vec::new(),
         working_directory: root.to_path_buf(),
+        readable_roots: Vec::new(),
+        denied_read_roots: Vec::new(),
+        denied_write_roots: Vec::new(),
         timeout,
         max_output_bytes: 16_384,
     }
@@ -109,9 +112,8 @@ fn repeated_timeout_and_cancellation_terminate_nested_process_trees() {
         assert_descendant_cannot_finish(&timeout_root);
 
         let cancellation_root = fixture_root(&format!("cancellation-{iteration}"));
-        let cancellation = CancelAfter {
-            started: Instant::now(),
-            delay: Duration::from_millis(500),
+        let cancellation = CancelWhenMarkerExists {
+            marker: cancellation_root.join("tree-started.txt"),
         };
         let cancelled = BaselineIsolationProvider::default()
             .execute(

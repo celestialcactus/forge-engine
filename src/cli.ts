@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { ApprovalFacts, CapabilityCall, ExecutionBudget, RunArtifact } from './slice0/contracts.js';
 import { developerEvidenceTools, developerGovernedChangeTools } from './inference/developer-tools.js';
@@ -23,6 +23,7 @@ import {
   requireForgeKernelBinary,
   resolveForgeKernelBinary,
 } from './hybrid/kernel-binary.js';
+import { RustRunStoreRuntime } from './hybrid/rust-run-store-runtime.js';
 
 import type { TrustedVerificationCheckConfiguration } from './hybrid/verification-configuration.js';
 import {
@@ -63,6 +64,7 @@ const { positionals, values } = parseArgs({
     'engine-root': { type: 'string' },
     'approval-profile': { type: 'string' },
     approve: { type: 'boolean', default: false },
+    'retry-evidence': { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
   },
 });
@@ -108,7 +110,13 @@ const approvalConfiguration = (interactiveConsent = true): ProductApprovalConfig
   };
 };
 const productServiceOptions = (interactiveConsent = true): ForgeWorkspaceServiceOptions => ({
-  runtime: { kind: 'rust_kernel', kernel: { binaryPath: requireKernel() } },
+  runtime: {
+    kind: 'rust_kernel',
+    kernel: {
+      binaryPath: requireKernel(),
+      runStoreRoot: join(engineRoot(), 'runs', 'v1'),
+    },
+  },
   approval: approvalConfiguration(interactiveConsent),
 });
 let service: ForgeWorkspaceService | undefined;
@@ -175,6 +183,25 @@ const engineRoot = (): string => resolve(
     ?? process.env.FORGE_ENGINE_ROOT
     ?? join(homedir(), '.forge'),
 );
+
+const pathIsWithin = (parent: string, candidate: string): boolean => {
+  const fromParent = relative(parent, candidate);
+  return fromParent === ''
+    || (fromParent !== '..' && !fromParent.startsWith(`..${sep}`) && !isAbsolute(fromParent));
+};
+
+const changeStateSeparation = (repositoryRoot: string, stateRoot: string): {
+  readonly valid: boolean;
+  readonly message: string;
+} => {
+  const valid = !pathIsWithin(repositoryRoot, stateRoot) && !pathIsWithin(stateRoot, repositoryRoot);
+  return {
+    valid,
+    message: valid
+      ? 'Forge state is lexically disjoint from the governed workspace; Rust revalidates canonical paths.'
+      : 'Forge engine root must be outside and must not contain the governed workspace.',
+  };
+};
 
 
 const sovereignChangeRuntime = (
@@ -286,6 +313,21 @@ const printChangeArtifact = (artifact: unknown): void => {
     return;
   }
   const value = asRecord(artifact);
+  if (Array.isArray(value?.transactions)) {
+    const transactions = value.transactions.map(asRecord).filter((entry) => entry !== undefined);
+    console.log(`Forge transaction audit: ${transactions.length}${value.truncated === true ? '+' : ''}`);
+    console.log(`Unpublished staging removed: ${String(value.orphanStagingRemoved ?? 0)}`);
+    if (transactions.length === 0) console.log('No durable ChangeSet transactions found.');
+    for (const transaction of transactions) {
+      const review = transaction.reviewDue === true ? '; review due' : '';
+      console.log(
+        `${String(transaction.state ?? 'unknown')} ${String(transaction.transactionId ?? 'unknown')}`
+        + `; candidate retained=${String(transaction.candidateRetained ?? false)}`
+        + `; recommendation=${String(transaction.recommendation ?? 'unknown')}${review}`,
+      );
+    }
+    return;
+  }
   const transaction = asRecord(value?.transaction) ?? value;
   console.log(`Forge change: ${String(value?.status ?? transaction?.state ?? 'unknown')}`);
   if (typeof transaction?.transactionId === 'string') console.log(`Transaction: ${transaction.transactionId}`);
@@ -322,8 +364,13 @@ try {
     throw new Error('--json cannot be combined with --approval-profile review because consent prompts require human-mode output.');
   }
   if (command === 'doctor') {
+    const configuredEngineRoot = engineRoot();
+    const stateSeparation = changeStateSeparation(workspaceRoot, configuredEngineRoot);
+    const isolationCandidateSummary = (kernelProbe?.isolationCandidates ?? [])
+      .map((candidate) => `${candidate.providerId}:${candidate.availability}:restricted-ready=${candidate.restrictedReady}`)
+      .join(', ') || 'none';
     const report = {
-      ok: kernelProbe?.ready === true,
+      ok: kernelProbe?.ready === true && stateSeparation.valid,
       node: process.version,
       platform: process.platform,
       runtime: kernelProbe?.ready === true ? 'rust-kernel-typescript-adapter' : 'unavailable',
@@ -335,6 +382,7 @@ try {
         version: kernelProbe?.kernelVersion ?? null,
         protocols: {
           run: kernelProbe?.runProtocolVersion ?? null,
+          runStore: kernelProbe?.runStoreProtocolVersion ?? null,
           transaction: kernelProbe?.transactionProtocolVersion ?? null,
           candidate: kernelProbe?.candidateProtocolVersion ?? null,
           sovereignChange: kernelProbe?.sovereignChangeProtocolVersion ?? null,
@@ -343,7 +391,16 @@ try {
       },
       mcp: 'stdio',
       workspaceRoot,
-      engineRoot: engineRoot(),
+      engineRoot: configuredEngineRoot,
+      configuration: {
+        engineRootOutsideWorkspace: stateSeparation.valid,
+        message: stateSeparation.message,
+      },
+      runStore: {
+        root: join(configuredEngineRoot, 'runs', 'v1'),
+        durability: 'append-before-notify; terminal-before-result',
+        recovery: 'terminal-return; validated same-runtime continuation; unsafe frontiers blocked',
+      },
       executionDefaults: defaultExecutionBudget,
       approval: {
         profile: approvalProfile,
@@ -352,14 +409,111 @@ try {
         scope: 'registered capabilities; governed mutations retain exact-change approval',
       },
       readOnlyFeatures: ['summary', 'search', 'read', 'symbols', 'typescript-diagnostics', 'git-status', 'git-diff'],
-      changeFlow: kernelProbe?.ready === true ? 'forge.kernel.changeset.v3' : 'unavailable',
-      isolation: 'trusted verification; process lifecycle owned; no Forge-enforced OS sandbox',
+      changeFlow: kernelProbe?.ready === true ? 'forge.kernel.changeset.v4' : 'unavailable',
+      isolation: {
+        providerId: kernelProbe?.isolationProvider?.providerId ?? null,
+        providerClass: kernelProbe?.isolationProvider?.providerClass ?? null,
+        availability: kernelProbe?.isolationProvider?.availability ?? 'unsupported',
+        supportedProfiles: kernelProbe?.isolationProvider?.supportedProfiles ?? [],
+        restrictedControls: kernelProbe?.isolationProvider?.restrictedControls ?? [],
+        restrictedReady: kernelProbe?.isolationProvider?.restrictedReady ?? false,
+        limitations: kernelProbe?.isolationProvider?.limitations ?? ['Kernel isolation status is unavailable.'],
+        candidates: kernelProbe?.isolationCandidates ?? [],
+        lifecycleOwnership: 'forge-owned',
+        posture: kernelProbe?.isolationProvider?.restrictedReady === true
+          ? 'Forge native restricted execution is available and all five controls are advertised.'
+          : 'trusted verification; process lifecycle owned; no accepted Forge-enforced OS sandbox',
+      },
     };
     if (!report.ok) process.exitCode = 1;
     console.log(values.json
       ? JSON.stringify(report)
-      : `ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}\nNode: ${report.node}\nRuntime: ${report.runtime}\nKernel: ${report.kernel.path ?? report.kernel.message}\nMCP: ${report.mcp}\nExecution defaults: calls=${report.executionDefaults.maxCapabilityCalls}, input=${report.executionDefaults.maxReportedInputTokens}, output=${report.executionDefaults.maxReportedOutputTokens}\nApproval profile: ${report.approval.profile} (${report.approval.source}); authority=${report.approval.decisionAuthority}\nChange flow: ${report.changeFlow}\nIsolation: ${report.isolation}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
-  } else if (command === 'inspect') {
+      : `ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}\nNode: ${report.node}\nRuntime: ${report.runtime}\nKernel: ${report.kernel.path ?? report.kernel.message}\nMCP: ${report.mcp}\nRun store: ${report.runStore.root} (${report.runStore.recovery})\nState separation: ${report.configuration.message}\nExecution defaults: calls=${report.executionDefaults.maxCapabilityCalls}, input=${report.executionDefaults.maxReportedInputTokens}, output=${report.executionDefaults.maxReportedOutputTokens}\nApproval profile: ${report.approval.profile} (${report.approval.source}); authority=${report.approval.decisionAuthority}\nChange flow: ${report.changeFlow}\nIsolation: ${report.isolation.posture}; provider=${report.isolation.providerId ?? 'unavailable'}; class=${report.isolation.providerClass ?? 'unknown'}; availability=${report.isolation.availability}; restricted-ready=${report.isolation.restrictedReady}\nIsolation candidates: ${isolationCandidateSummary}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
+  } else if (command === 'runs') {
+    const operation = positionals[1];
+    const runId = positionals[2]?.trim() ?? '';
+    if (!['inspect', 'resume'].includes(operation ?? '') || runId.length === 0) {
+      throw new Error('Usage: forge runs <inspect|resume> <run-id> [--json] [--engine-root <path>]');
+    }
+    const store = new RustRunStoreRuntime({
+      kernelPath: requireKernel(),
+      runStoreRoot: join(engineRoot(), 'runs', 'v1'),
+    });
+    const inspection = await store.inspect(runId);
+    if (operation === 'inspect') {
+      if (values.json) {
+        console.log(JSON.stringify(inspection, null, 2));
+      } else {
+        console.log(`Forge run ${inspection.runId}`);
+        console.log(`State: ${inspection.state}`);
+        console.log(`Recovery: ${inspection.resumeDisposition}`);
+        console.log(`Durable events: ${inspection.eventCount}`);
+        if (inspection.continuation !== undefined) {
+          console.log(`Continuation: ${inspection.continuation.disposition}`);
+        }
+        console.log(`Reason: ${inspection.reason}`);
+        if (inspection.artifact !== undefined) {
+          console.log(`Terminal status: ${inspection.artifact.status}`);
+        }
+      }
+      if (inspection.state === 'repair_required') process.exitCode = 1;
+    } else if (inspection.artifact !== undefined) {
+      if (values.json) printArtifact(inspection.artifact);
+      else {
+        const presenter = new LiveCliPresenter();
+        if (inspection.artifact.output !== undefined) {
+          presenter.printAssistantOutput(inspection.artifact.output);
+        }
+        presenter.printSummary(inspection.artifact);
+      }
+    } else {
+      const route = resolveInferenceRoute(values.provider, values.model);
+      const verificationPolicyPath = values.policy ?? process.env.FORGE_VERIFICATION_POLICY;
+      if (values.check !== undefined && verificationPolicyPath === undefined) {
+        throw new Error('--check requires --policy or FORGE_VERIFICATION_POLICY when resuming.');
+      }
+      const verificationChecks = verificationPolicyPath === undefined
+        ? []
+        : await loadVerificationPolicy(verificationPolicyPath);
+      const checkIds = verificationChecks.length === 0 ? [] : selectedChecks(verificationChecks);
+      const governedChanges = verificationChecks.length > 0;
+      const presenter = values.json ? undefined : new LiveCliPresenter();
+      const planner = new ProviderTaskPlanner({
+        provider: createInferenceProvider(route),
+        route,
+        tools: governedChanges ? developerGovernedChangeTools : developerEvidenceTools,
+        ...(presenter === undefined || governedChanges
+          ? {}
+          : { onInferenceEvent: (observation) => presenter.onInferenceEvent(observation) }),
+      });
+      const cancellation = createRunCancellation(
+        integerOption(values['timeout-ms'], 120_000, '--timeout-ms'),
+      );
+      try {
+        const artifact = await workspaceService().resumeTask(runId, planner, {
+          allowRetryableCapabilityRetry: values['retry-evidence'],
+          ...(presenter === undefined
+            ? {}
+            : { onEvent: (event: RunArtifact['events'][number]) => presenter.onRunEvent(event) }),
+          ...(governedChanges
+            ? {
+                governedChange: {
+                  checkIds,
+                  runtime: sovereignChangeRuntime(verificationChecks),
+                  io: interactiveIo(),
+                },
+              }
+            : {}),
+        }, cancellation.signal);
+        if (presenter === undefined) printArtifact(artifact);
+        else presenter.printSummary(artifact);
+        if (artifact.status !== 'completed' || artifact.outcome.status === 'unmet') {
+          process.exitCode = 1;
+        }
+      } finally {
+        cancellation.dispose();
+      }
+    }  } else if (command === 'inspect') {
     printArtifact(await workspaceService().inspect(integerOption(values['max-files'], 200, '--max-files')));
   } else if (command === 'search') {
     const query = positionals.slice(1).join(' ').trim();
@@ -396,7 +550,9 @@ try {
     }));
   } else if (command === 'change') {
     const action = positionals[1];
-    if (action === 'propose') {
+    if (action === 'audit') {
+      printChangeArtifact(await sovereignChangeRuntime().audit());
+    } else if (action === 'propose') {
       const proposalPath = positionals[2];
       if (proposalPath === undefined || values.policy === undefined) {
         throw new Error('Usage: forge change propose <proposal.json> --policy <verification-policy.json> --approve [--check <id,id>]');
@@ -423,7 +579,7 @@ try {
     } else {
       const transactionId = positionals[2]?.trim();
       if (transactionId === undefined || transactionId.length === 0) {
-        throw new Error('Usage: forge change <inspect|accept|discard> <transaction-id> [--approve]');
+        throw new Error('Usage: forge change <audit|inspect|accept|discard> [transaction-id] [--approve]');
       }
       const runtime = sovereignChangeRuntime();
       if (action === 'inspect') {
@@ -436,7 +592,7 @@ try {
           ? await runtime.accept(transactionId, exact.call, exact.approvalFacts)
           : await runtime.discard(transactionId, exact.call, exact.approvalFacts));
       } else {
-        throw new Error('Usage: forge change <propose|inspect|accept|discard> ...');
+        throw new Error('Usage: forge change <audit|propose|inspect|accept|discard> ...');
       }
     }
 
@@ -529,6 +685,7 @@ try {
       '    Slash controls: /help, /status, /permissions, /model, /clear, /exit.',
       '',
       'Core change flow:',
+      '  forge change audit [--json]',
       '  forge change propose <proposal.json> --policy <policy.json> --approve [--check <id,id>] [--json]',
       '  forge change inspect <transaction-id> [--json]',
       '  forge change accept <transaction-id> --approve [--json]',
@@ -536,6 +693,10 @@ try {
       '',
       'Evidence commands:',
       '  forge doctor [--json] [--workspace <path>]',
+      '  forge runs inspect <run-id> [--json] [--engine-root <path>]',
+      '  forge runs resume <run-id> --provider <ollama|openai> --model <model> [--retry-evidence] [--json]',
+      '    Resume replays validated completions through the same Rust runtime; ambiguous provider, approval, and mutation work stays blocked.',
+      '    --retry-evidence deliberately retries one unresolved capability explicitly classified read-only; it is accepted only once.',
       '  forge inspect [--json] [--max-files <count>]',
       '  forge search <literal query> [--json] [--max-matches <count>]',
       '  forge read <path> [--json] [--start-line <line>] [--max-lines <count>]',
