@@ -180,9 +180,21 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
     readonly configuration: { readonly engineRootOutsideWorkspace: boolean; readonly message: string };
     readonly isolation: {
       readonly providerId: string;
+      readonly providerClass: string;
+      readonly availability: string;
       readonly supportedProfiles: readonly string[];
       readonly restrictedControls: readonly string[];
       readonly restrictedReady: boolean;
+      readonly limitations: readonly string[];
+      readonly candidates: readonly {
+        readonly providerId: string;
+        readonly providerClass: string;
+        readonly availability: string;
+        readonly supportedProfiles: readonly string[];
+        readonly restrictedControls: readonly string[];
+        readonly restrictedReady: boolean;
+        readonly limitations: readonly string[];
+      }[];
       readonly lifecycleOwnership: string;
       readonly posture: string;
     };
@@ -196,14 +208,48 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
   assert.equal(report.kernel.protocols.run, 'forge.kernel.bridge.v10');
   assert.equal(report.kernel.protocols.runStore, 'forge.kernel.run-store.v1');
   assert.equal(report.kernel.protocols.sovereignChange, 'forge.kernel.changeset.v4');
-  assert.deepEqual(report.isolation, {
+  const { candidates, ...selectedIsolation } = report.isolation;
+  assert.deepEqual(selectedIsolation, {
     providerId: 'forge.baseline',
+    providerClass: 'trusted_baseline',
+    availability: 'available',
     supportedProfiles: ['trusted'],
     restrictedControls: [],
     restrictedReady: false,
+    limitations: ['Trusted execution has no Forge-enforced operating-system permission boundary.'],
     lifecycleOwnership: 'forge-owned',
-    posture: 'trusted verification; process lifecycle owned; no Forge-enforced OS sandbox',
+    posture: 'trusted verification; process lifecycle owned; no accepted Forge-enforced OS sandbox',
   });
+  if (process.platform === 'win32') {
+    assert.deepEqual(candidates.map((candidate) => ({
+      providerId: candidate.providerId,
+      providerClass: candidate.providerClass,
+      availability: candidate.availability,
+      supportedProfiles: candidate.supportedProfiles,
+      restrictedControls: candidate.restrictedControls,
+      restrictedReady: candidate.restrictedReady,
+    })), [
+      {
+        providerId: 'forge.windows.managed.preview',
+        providerClass: 'native_strong',
+        availability: 'setup_required',
+        supportedProfiles: ['restricted'],
+        restrictedControls: ['filesystem', 'process', 'network', 'credentials', 'resources'],
+        restrictedReady: false,
+      },
+      {
+        providerId: 'forge.windows.appcontainer.preview',
+        providerClass: 'native_strong',
+        availability: 'setup_required',
+        supportedProfiles: ['restricted'],
+        restrictedControls: ['filesystem', 'process', 'network', 'credentials', 'resources'],
+        restrictedReady: false,
+      },
+    ]);
+    assert.ok(candidates.every((candidate) => candidate.limitations.length > 0));
+  } else {
+    assert.deepEqual(candidates, []);
+  }
   assert.equal(report.runStore.root, resolve(cliEngineRoot, 'runs', 'v1'));
   assert.equal(report.runStore.durability, 'append-before-notify; terminal-before-result');
   assert.match(report.runStore.recovery, /validated same-runtime continuation/u);

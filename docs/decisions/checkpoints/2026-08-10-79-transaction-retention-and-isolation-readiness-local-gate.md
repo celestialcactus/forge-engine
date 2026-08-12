@@ -4,8 +4,8 @@
 
 **Branch:** `codex/transaction-sandbox-hardening`
 
-**Decision:** accept CLI ship-lane 7A locally; retain native sandbox, hosted, VS Code,
-packaging, and license gates
+**Decision:** accept CLI ship-lane 7A and Windows x64 clean packaging locally; retain
+native sandbox, hosted, VS Code, cross-platform publication, and license gates
 
 ## Objective
 
@@ -50,7 +50,9 @@ environment clearing, worktrees, or host attestations as OS containment.
 - Source-tree CLI smoke reported bridge v10, ChangeSet v4, valid external state-root
   separation, trusted-only baseline isolation, and an empty bounded transaction
   audit. The nested-state negative smoke failed with exit 1 as intended.
-- `npm audit --omit=dev` reported zero vulnerabilities.
+- `npm audit --omit=dev` reported zero vulnerabilities. The follow-up installed
+  cargo-audit 0.22.2; its locked 46-package RustSec scan also reported zero
+  vulnerabilities and zero warnings, and the same deny-warnings gate is now in CI.
 - Changed-source debt-marker scan and `git diff --check` were clean.
 
 ## Audit findings
@@ -60,10 +62,12 @@ found and corrected the startup race, duplicate coordinator lifecycle, human aud
 rendering, probe versioning, strict host validation, and doctor configuration drift.
 It did not find an open transaction-state correctness failure after those changes.
 
-The audit also confirmed two P0 alpha blockers: the 134-entry npm package contains
-zero native kernel/watchdog entries, and the repository has no root license while
-metadata still declares MIT. These were not papered over with a Windows-only debug
-binary or an unapproved license choice.
+The audit initially confirmed two P0 alpha blockers: the 134-entry npm package
+contained zero native kernel/watchdog entries, and the repository has no root license
+while metadata still declares MIT. ADR-0032 now closes the first defect at the local
+Windows x64 contract gate with staged release-only native packages and an
+empty-directory smoke. Cross-platform hosted packaging and the license decision stay
+open; neither was papered over with a debug binary or invented license.
 
 ## Complications and what they meant
 
@@ -90,17 +94,16 @@ binary or an unapproved license choice.
    acceptance plans, not implemented providers.
 3. Exact-head hosted Windows/macOS/Ubuntu and controlled VS Code acceptance remain
    pending.
-4. The npm package is structurally valid but unusable as a standalone Forge product
-   because it omits the required Rust kernel/watchdog.
+4. The Windows x64 package contract passes locally, but other target packages,
+   signing/notarization, provenance, publication, and update behavior remain open.
 5. The root open-source license needs an explicit owner/legal decision.
-6. RustSec advisory scanning did not run because `cargo audit` is not installed.
-7. The 4,096-entry state ceiling needs an archive/export policy before sustained
+6. The 4,096-entry state ceiling needs an archive/export policy before sustained
    enterprise use.
 
 ## Next gate
 
-Publish and run this exact head through hosted Windows/macOS/Ubuntu plus the
-controlled VS Code read-only regression. In parallel, define the cross-platform
-native package contract and obtain the license decision. The following machinery
-increment is the real Windows AppContainer provider; the macOS signed helper must be
-implemented and accepted on macOS rather than inferred from Windows.
+Publish and run this exact head through hosted Windows/macOS/Ubuntu package and
+runtime gates plus the controlled VS Code read-only regression. Obtain the license
+decision and add signed publication provenance. The following machinery increment is
+the real Windows AppContainer provider; the macOS signed helper must be implemented
+and accepted on macOS rather than inferred from Windows.

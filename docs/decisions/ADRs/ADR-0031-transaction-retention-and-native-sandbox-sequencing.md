@@ -1,6 +1,6 @@
 # ADR-0031: Transaction retention and native sandbox sequencing
 
-- **Status:** Transaction local gate accepted; native backends and hosted acceptance open
+- **Status:** Transaction local gate accepted; native backend contract amended by ADR-0033; hosted acceptance open
 - **Date:** 2026-08-10
 - **Scope:** CLI ship-lane release hardening, ChangeSet v2 retention, Tier-1 restricted execution
 
@@ -41,16 +41,35 @@ process group, Job Object, or authenticated host assertion is not that boundary.
    advertises the restricted profile and all five controls: filesystem, process,
    network, credentials, and resources. The baseline provider must report trusted
    only, no controls, and `restrictedReady=false`. Because this adds required probe
-   output, the kernel probe protocol advances to `forge.kernel.probe.v2`.
-6. Windows restricted execution will use an AppContainer-derived boundary with
-   explicit workspace access, network default-deny, reduced credential access, and
-   existing Job Object lifecycle/resource ownership. Microsoft's new composable
-   sandbox process API is not a V1 dependency while it remains experimental and its
-   public header is unavailable.
-7. macOS restricted execution will use Apple's supported signed App Sandbox helper
-   model with explicit entitlements. Forge will not build a durable product claim on
-   deprecated or private `sandbox-exec`/Seatbelt behavior.
-8. Windows and macOS providers are separate acceptance increments behind the same
+   output, the kernel probe protocol advanced to `forge.kernel.probe.v2`. ADR-0033
+   advances it again to `forge.kernel.probe.v3` for provider class, availability, and
+   bounded limitations. The later managed-provider local gate advances to
+   `forge.kernel.probe.v4`, preserving the selected baseline while reporting bounded
+   candidate statuses separately; candidate reporting does not select or execute one.
+6. Windows restricted execution uses a provider hierarchy rather than making one
+   Windows primitive the product contract. The preferred managed provider combines a
+   dedicated lower-privilege identity, explicit disposable-candidate ACLs, a private
+   desktop, outbound network enforcement, explicit handle/environment construction,
+   and the existing Job Object lifecycle/resource ownership. A zero-admin restricted
+   token provider may serve as a clearly labelled compatibility fallback only for the
+   controls it can prove. AppContainer remains an optional stricter experiment, not
+   the only Windows architecture. Microsoft's new composable sandbox process API is
+   not a V1 dependency while it remains experimental and its public header is
+   unavailable.
+7. macOS alpha restricted execution may use a bounded Seatbelt profile because this
+   is the proven CLI-oriented mechanism used by current agent harnesses. It is a
+   preview backend with native adversarial acceptance, not a promise that a private
+   profile language is the permanent distribution contract. A signed App Sandbox
+   helper remains the durable release path if signing, entitlements, and developer
+   workflow compatibility pass their own gate.
+8. Linux restricted execution uses bubblewrap namespaces, `no_new_privs`, seccomp,
+   and a separately governed network path where the host supports them. It is a
+   Tier-2 compatibility backend and does not weaken Windows/macOS acceptance.
+9. All native providers consume the same compiled effective plan and report a
+   bounded availability/strength posture. No provider advertises a control merely
+   because its code compiled, configuration exists, or a weaker primitive reduced
+   exposure.
+10. Windows, macOS, and Linux providers are separate acceptance increments behind the same
    `IsolationProvider` contract. Unsupported platforms and controls continue to fail
    before launch. Neither provider is considered complete from compilation or
    configuration alone; adversarial filesystem, network, credential, descendant,
@@ -88,7 +107,20 @@ produce a portable API with non-portable security claims.
   minimum is Windows 11, the API is explicitly subject to change, and the header is not
   public; that is not an adequate Tier-1 compatibility contract yet.
 - **Use `sandbox-exec` on macOS:** it is not Apple's supported durable product path for
-  a new signed CLI/helper architecture.
+  a new signed CLI/helper architecture. Amended by ADR-0033: it is acceptable only as
+  a bounded alpha/preview provider with explicit limitations and native conformance;
+  it does not replace the signed-helper release decision.
+
+## 2026-08-10 amendment: provider-pattern audit
+
+ADR-0033 supersedes the single-primitive portions of decisions 6-8 after reviewing
+the public architectures of Codex, Claude Code, Gemini CLI, and Copilot's hosted
+agent boundary. The audit did not import their source code. It established three
+reusable architectural facts: policy must compile into a backend-specific plan;
+filesystem and network isolation are distinct controls; and host-attested isolation
+must remain distinguishable from a Forge-created native boundary. Forge will keep an
+influence record, implement its providers independently, and add source-level NOTICE
+or attribution only if a later change deliberately incorporates licensed code.
 
 ## Acceptance gates
 
@@ -121,3 +153,8 @@ produce a portable API with non-portable security claims.
 - [Microsoft: experimental Create Process in Sandbox APIs](https://learn.microsoft.com/en-us/windows/win32/secauthz/createprocessinsandbox)
 - [Apple: App Sandbox](https://developer.apple.com/documentation/security/app-sandbox)
 - [Apple: Embedding a command-line tool in a sandboxed app](https://developer.apple.com/documentation/xcode/embedding-a-helper-tool-in-a-sandboxed-app)
+- [OpenAI: Codex sandboxing](https://learn.chatgpt.com/docs/sandboxing)
+- [OpenAI: Codex Windows sandbox](https://learn.chatgpt.com/docs/windows/windows-sandbox)
+- [Anthropic: Claude Code sandboxing](https://code.claude.com/docs/en/sandboxing)
+- [Google: Gemini CLI sandboxing](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/sandbox.md)
+- [GitHub: Copilot coding-agent firewall](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-the-firewall)

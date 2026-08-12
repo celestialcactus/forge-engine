@@ -18,24 +18,26 @@ presentation, and the audit found no second production runtime. The transaction
 retention increment closes a real startup race and gives operators a bounded,
 non-destructive inventory of durable work.
 
-The repository is not yet a distributable or sandboxed alpha. The npm package omits
-the Rust kernel, the repository has no root license file, native Windows/macOS
-containment is absent, and this exact head has not passed hosted or controlled VS
-Code acceptance. Those are release blockers, not wording issues.
+The repository is not yet a distributable or sandboxed alpha. The Windows x64 local
+clean-install gap is closed by an exact-version platform-native package, but hosted
+Windows/macOS/Linux packaging, signing/provenance, a root license, native
+Windows/macOS containment, and exact-head hosted/controlled VS Code acceptance remain
+open. Those are release blockers, not wording issues.
 
 ## Findings
 
-### P0: npm package is not a usable product package
+### Closed locally on Windows x64: npm clean-install contract
 
-`npm pack --dry-run --json` produced 134 entries, 135,835 packed bytes, and **zero
-native kernel/watchdog entries**. The declared `forge` executable therefore cannot
-discover its required Rust authority after a clean npm-only install.
+The initial `npm pack --dry-run --json` produced 134 entries, 135,835 packed bytes,
+and **zero native kernel/watchdog entries**. That defect is now addressed by the
+platform-native package contract in ADR-0032. The universal package names exact
+optional native dependencies; target staging adds npm `os`/`cpu` guards and release
+executables; the adapter rejects target/version mismatches.
 
-Required remediation: define one cross-platform binary distribution contract,
-package or download only integrity-pinned Windows x64/arm64 and macOS x64/arm64
-artifacts, make installation failure explicit, and run clean-install/update/doctor
-smokes on each supported platform. Do not solve this by silently shipping only the
-current Windows debug binary.
+An empty-directory Windows x64 smoke packed and installed the two tarballs with
+install scripts disabled, reported `kernel.source=packaged` through `doctor`, and
+completed a real Rust-backed inspection. Hosted target smokes, signing/notarization,
+release provenance, and publication remain open; this is not yet a public package.
 
 ### P0: open-source license is unresolved
 
@@ -80,16 +82,18 @@ Required remediation: before an enterprise pilot, add an explicit archive/export
 projection with corruption checks and a tested migration path. Do not silently
 delete prepared or repair-required transactions.
 
-### P2: Rust dependency advisory coverage is not installed locally
+### Closed in the follow-up: repeatable RustSec advisory coverage
 
 `npm audit --omit=dev` reported zero production vulnerabilities across 95 production
-dependencies. `cargo audit` is not installed, so no RustSec result is claimed.
+dependencies. `cargo-audit` 0.22.2 is now installed locally, and the locked 46-package
+Rust graph returned zero vulnerabilities and zero warnings against the 1,200-entry
+RustSec database snapshot. The repository exposes `npm run rust:audit`, and hosted CI
+installs that exact cargo-audit version before running `cargo audit --deny warnings`.
+
 `cargo tree --duplicates` reports only the expected `syn` v2/v3 split through
 `curve25519-dalek` and `serde`; no forced dependency rewrite is justified by that
-fact alone.
-
-Required remediation: add a pinned RustSec advisory job to hosted CI and define the
-exception/update policy before release.
+fact alone. Any future advisory exception must be explicit, ID-scoped, explained,
+and time-bounded rather than hidden in a broad warning allowance.
 
 ## Correctness defects found and fixed in this pass
 
@@ -105,8 +109,11 @@ exception/update policy before release.
    renderer. It now presents transaction count, cleanup count, retained candidate,
    state, recommendation, and review-due status.
 5. Required isolation probe fields were initially added without a protocol advance.
-   The probe is now `forge.kernel.probe.v2`, and the TypeScript adapter rejects
-   malformed, duplicated, unknown, or internally inconsistent capability claims.
+   The readiness probe first advanced to `forge.kernel.probe.v2`; ADR-0033 now uses
+   `forge.kernel.probe.v3`; the managed-provider local gate advances it to
+   `forge.kernel.probe.v4` so the Rust-selected provider is distinct from bounded,
+   fail-closed candidate diagnostics. The TypeScript adapter rejects malformed,
+   duplicated, unknown, or internally inconsistent capability claims.
 6. `doctor` initially accepted an engine root nested in the governed workspace even
    though Rust correctly rejected transaction commands. Doctor now fails that
    lexical preflight and states that Rust revalidates canonical paths.
@@ -124,12 +131,53 @@ exception/update policy before release.
 - Packaged source-tree smoke: valid external engine root passed; nested engine root
   failed with exit 1; empty transaction audit rendered correctly.
 - npm production dependency audit: zero reported vulnerabilities.
+- RustSec: cargo-audit 0.22.2 reported zero vulnerabilities and zero warnings for
+  the locked 46-package graph; the same deny-warnings gate is now in hosted CI.
+- Clean package: an empty Windows x64 npm project installed packed main/native
+  artifacts without scripts, Cargo, or source discovery; packaged `doctor` and one
+  real Rust-backed inspection passed.
 - Active `src` and `crates` debt-marker scan: no TODO/FIXME/HACK/XXX matches.
 - `git diff --check`: passed.
 
 ## Release decision
 
-Accept transaction-retention increment 7A at the **local gate only**. Do not claim
-native sandbox completion or installable alpha completion. The next defensible gates
-are exact-head hosted/VS Code acceptance, native binary packaging plus the owner
-license decision, and the separately proven Windows/macOS restricted providers.
+Accept transaction-retention increment 7A and the Windows x64 packaging contract at
+their **local gates only**. Do not claim native sandbox or cross-platform installable
+alpha completion. The next defensible gates are exact-head hosted/VS Code acceptance,
+hosted signed native packages plus the owner license decision, and separately proven
+Windows/macOS restricted providers.
+
+## 2026-08-11 addendum: Windows preview and second correctness pass
+
+The AppContainer work changes the wording but not the release decision. Forge now has
+a real, conformance-only Windows boundary experiment with nine passing local tests;
+the production provider remains `setup_required`, `doctor` remains
+`restrictedReady=false`, and ordinary Node/npm/Cargo toolchains are not yet projected
+into that boundary. “No production-selectable OS sandbox” remains the accurate claim.
+
+The second repository pass found and fixed four additional correctness issues:
+
+1. `validate_effective_sandbox_plan` verified a plan's self-hash but did not re-derive
+   every path and limit from the requested process. A caller able to re-hash a changed
+   plan could therefore present an escaped writable root, raised resource ceiling, or
+   substituted executable as internally consistent. Validation now canonicalizes and
+   compares executable/working-directory identity, exact writable/protected paths,
+   ordered unique controls, exact timeout/output, and fixed resource ceilings.
+2. The AppContainer launcher created the Job Object after the suspended process.
+   Job-creation failure could leave a suspended process without kill-on-close
+   ownership. Job creation/configuration now precedes `CreateProcessW`; assignment
+   failure explicitly terminates, waits for, and drains the failed launch.
+3. Recovery records did not reject duplicate grant/protected paths or protected paths
+   outside the four compiled metadata names. Schema-v2 validation now enforces exact,
+   unique candidate-scoped entries. Failure to derive an abandoned profile SID no
+   longer removes the journal as if cleanup succeeded.
+4. Local source discovery always preferred `target/release`, allowing a stale probe-v2
+   binary to mask a freshly built probe-v3 debug kernel. Explicit and packaged paths
+   retain priority; source discovery now selects the newest debug/release build and
+   has a regression.
+
+After these fixes, the exact head again passes strict Rust format/clippy, the full
+workspace Rust test/build gate, 96/96 Node tests/build, and 56/56 executed hybrid tests
+with seven explicit environment-dependent skips. RustSec still reports no advisory
+for the 46 locked dependencies. The final rebuilt Windows x64 staged package selected
+the packaged kernel and completed a real inspection (`run:c6bc06a0-db1a-4fab-9f2d-86ce6e9e0e5b`).

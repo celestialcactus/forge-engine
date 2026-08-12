@@ -13,12 +13,14 @@ use std::sync::{Arc, Mutex};
 use forge_core::{
     ApprovalDecision, ApprovalFacts, ApprovalPolicy, BaselineIsolationProvider, Cancellation,
     CapabilityAdapter, CapabilityCall, CapabilityContext, CapabilityDescriptor,
-    CapabilityReplaySafety, CapabilityResult, InteractionReplaySafety, IsolationControl,
-    IsolationProfile, IsolationProvider, PlannerRequest, PlannerTurn, RecordedRunInteraction,
-    RunArtifact, RunContinuationDisposition, RunEvent, RunExecutionLock, RunInteractionKind,
-    RunLedger, RunRecoveryCheckpoint, RunRequest, RunResumeOpen, RuntimeSignal, Slice0Runtime,
-    TaskPlanner, WorkspaceSnapshot, resolve_approval,
+    CapabilityReplaySafety, CapabilityResult, InteractionReplaySafety, IsolationProvider,
+    IsolationProviderStatus, PlannerRequest, PlannerTurn, RecordedRunInteraction, RunArtifact,
+    RunContinuationDisposition, RunEvent, RunExecutionLock, RunInteractionKind, RunLedger,
+    RunRecoveryCheckpoint, RunRequest, RunResumeOpen, RuntimeSignal, Slice0Runtime, TaskPlanner,
+    WorkspaceSnapshot, isolation_provider_restricted_ready, resolve_approval,
 };
+#[cfg(windows)]
+use forge_core::{WindowsAppContainerIsolationProvider, WindowsManagedIsolationProvider};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -907,6 +909,19 @@ fn execute_resume(
         }
     }
 }
+fn isolation_provider_probe(status: IsolationProviderStatus) -> Value {
+    let restricted_ready = isolation_provider_restricted_ready(&status);
+    json!({
+        "providerId": status.capabilities.provider_id,
+        "providerClass": status.provider_class,
+        "availability": status.availability,
+        "supportedProfiles": status.capabilities.supported_profiles,
+        "restrictedControls": status.capabilities.restricted_controls,
+        "restrictedReady": restricted_ready,
+        "limitations": status.limitations,
+    })
+}
+
 fn main() {
     let mut reader = BufReader::new(io::stdin());
     let mut writer = BufWriter::new(io::stdout());
@@ -950,19 +965,14 @@ fn main() {
     if discriminator.message_type == "probe.start"
         && discriminator.protocol_version == PROBE_PROTOCOL_VERSION
     {
-        let isolation = BaselineIsolationProvider::default().capabilities();
-        let restricted_ready = isolation
-            .supported_profiles
-            .contains(&IsolationProfile::Restricted)
-            && [
-                IsolationControl::Filesystem,
-                IsolationControl::Process,
-                IsolationControl::Network,
-                IsolationControl::Credentials,
-                IsolationControl::Resources,
-            ]
-            .iter()
-            .all(|control| isolation.restricted_controls.contains(control));
+        let isolation = BaselineIsolationProvider::default().status();
+        #[cfg(windows)]
+        let isolation_candidates = vec![
+            isolation_provider_probe(WindowsManagedIsolationProvider::preview_status()),
+            isolation_provider_probe(WindowsAppContainerIsolationProvider::preview_status()),
+        ];
+        #[cfg(not(windows))]
+        let isolation_candidates: Vec<Value> = Vec::new();
         if send_json(
             &mut writer,
             &json!({
@@ -974,12 +984,8 @@ fn main() {
                 "transactionProtocolVersion": protocol::TRANSACTION_PROTOCOL_VERSION,
                 "candidateProtocolVersion": protocol::CANDIDATE_PROTOCOL_VERSION,
                 "sovereignChangeProtocolVersion": protocol::SOVEREIGN_CHANGE_PROTOCOL_VERSION,
-                "isolationProvider": {
-                    "providerId": isolation.provider_id,
-                    "supportedProfiles": isolation.supported_profiles,
-                    "restrictedControls": isolation.restricted_controls,
-                    "restrictedReady": restricted_ready,
-                },
+                "isolationProvider": isolation_provider_probe(isolation),
+                "isolationCandidates": isolation_candidates,
             }),
         )
         .is_err()

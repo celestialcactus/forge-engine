@@ -366,6 +366,9 @@ try {
   if (command === 'doctor') {
     const configuredEngineRoot = engineRoot();
     const stateSeparation = changeStateSeparation(workspaceRoot, configuredEngineRoot);
+    const isolationCandidateSummary = (kernelProbe?.isolationCandidates ?? [])
+      .map((candidate) => `${candidate.providerId}:${candidate.availability}:restricted-ready=${candidate.restrictedReady}`)
+      .join(', ') || 'none';
     const report = {
       ok: kernelProbe?.ready === true && stateSeparation.valid,
       node: process.version,
@@ -409,17 +412,23 @@ try {
       changeFlow: kernelProbe?.ready === true ? 'forge.kernel.changeset.v4' : 'unavailable',
       isolation: {
         providerId: kernelProbe?.isolationProvider?.providerId ?? null,
+        providerClass: kernelProbe?.isolationProvider?.providerClass ?? null,
+        availability: kernelProbe?.isolationProvider?.availability ?? 'unsupported',
         supportedProfiles: kernelProbe?.isolationProvider?.supportedProfiles ?? [],
         restrictedControls: kernelProbe?.isolationProvider?.restrictedControls ?? [],
         restrictedReady: kernelProbe?.isolationProvider?.restrictedReady ?? false,
+        limitations: kernelProbe?.isolationProvider?.limitations ?? ['Kernel isolation status is unavailable.'],
+        candidates: kernelProbe?.isolationCandidates ?? [],
         lifecycleOwnership: 'forge-owned',
-        posture: 'trusted verification; process lifecycle owned; no Forge-enforced OS sandbox',
+        posture: kernelProbe?.isolationProvider?.restrictedReady === true
+          ? 'Forge native restricted execution is available and all five controls are advertised.'
+          : 'trusted verification; process lifecycle owned; no accepted Forge-enforced OS sandbox',
       },
     };
     if (!report.ok) process.exitCode = 1;
     console.log(values.json
       ? JSON.stringify(report)
-      : `ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}\nNode: ${report.node}\nRuntime: ${report.runtime}\nKernel: ${report.kernel.path ?? report.kernel.message}\nMCP: ${report.mcp}\nRun store: ${report.runStore.root} (${report.runStore.recovery})\nState separation: ${report.configuration.message}\nExecution defaults: calls=${report.executionDefaults.maxCapabilityCalls}, input=${report.executionDefaults.maxReportedInputTokens}, output=${report.executionDefaults.maxReportedOutputTokens}\nApproval profile: ${report.approval.profile} (${report.approval.source}); authority=${report.approval.decisionAuthority}\nChange flow: ${report.changeFlow}\nIsolation: ${report.isolation.posture}; restricted-ready=${report.isolation.restrictedReady}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
+      : `ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}\nNode: ${report.node}\nRuntime: ${report.runtime}\nKernel: ${report.kernel.path ?? report.kernel.message}\nMCP: ${report.mcp}\nRun store: ${report.runStore.root} (${report.runStore.recovery})\nState separation: ${report.configuration.message}\nExecution defaults: calls=${report.executionDefaults.maxCapabilityCalls}, input=${report.executionDefaults.maxReportedInputTokens}, output=${report.executionDefaults.maxReportedOutputTokens}\nApproval profile: ${report.approval.profile} (${report.approval.source}); authority=${report.approval.decisionAuthority}\nChange flow: ${report.changeFlow}\nIsolation: ${report.isolation.posture}; provider=${report.isolation.providerId ?? 'unavailable'}; class=${report.isolation.providerClass ?? 'unknown'}; availability=${report.isolation.availability}; restricted-ready=${report.isolation.restrictedReady}\nIsolation candidates: ${isolationCandidateSummary}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
   } else if (command === 'runs') {
     const operation = positionals[1];
     const runId = positionals[2]?.trim() ?? '';

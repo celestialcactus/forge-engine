@@ -67,6 +67,9 @@ fn tree_spec(root: &Path, timeout: Duration) -> IsolatedProcessSpec {
         ],
         inherited_environment: Vec::new(),
         working_directory: root.to_path_buf(),
+        readable_roots: Vec::new(),
+        denied_read_roots: Vec::new(),
+        denied_write_roots: Vec::new(),
         timeout,
         max_output_bytes: 16_384,
     }

@@ -1,0 +1,11 @@
+{
+  "name": "forge-engine-kernel-linux-x64",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ForgeEngine native Rust kernel and watchdog for Linux x64",
+  "forgeTarget": { "platform": "linux", "architecture": "x64" },
+  "files": ["bin"],
+  "license": "MIT",
+  "publishConfig": { "access": "public" },
+  "repository": { "type": "git", "url": "git+https://github.com/celestialcactus/forge-engine.git" }
+}

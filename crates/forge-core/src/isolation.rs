@@ -24,19 +24,35 @@ mod host_managed_provider;
 #[cfg(target_os = "macos")]
 mod macos_process_group;
 #[cfg(windows)]
+mod windows_appcontainer;
+#[cfg(windows)]
 mod windows_job;
+#[cfg(windows)]
+mod windows_managed;
 
 pub use host_managed_provider::*;
+#[cfg(windows)]
+pub use windows_appcontainer::WindowsAppContainerIsolationProvider;
+#[cfg(windows)]
+pub use windows_managed::WindowsManagedIsolationProvider;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::{AuthenticatedHostAuthorityEvidence, Cancellation};
 
 const MAX_ARGUMENTS: usize = 64;
 const MAX_ENVIRONMENT_ENTRIES: usize = 128;
+const MAX_READABLE_ROOTS: usize = 32;
+const MAX_DENIED_READ_ROOTS: usize = 32;
+const MAX_DENIED_WRITE_ROOTS: usize = 32;
 const MIN_OUTPUT_BYTES: usize = 1_024;
 const MAX_OUTPUT_BYTES: usize = 1_048_576;
 const MAX_TIMEOUT: Duration = Duration::from_secs(600);
+const RESTRICTED_MAX_ACTIVE_PROCESSES: u32 = 64;
+const RESTRICTED_MAX_PROCESS_MEMORY_BYTES: usize = 1_073_741_824;
+const RESTRICTED_PROTECTED_PATHS: [&str; 5] =
+    [".git", ".forge", ".agents", ".codex", ".forge-toolchain"];
 #[cfg(unix)]
 const PROCESS_TERMINATION_TIMEOUT: Duration = Duration::from_secs(2);
 #[cfg(unix)]
@@ -62,6 +78,23 @@ pub enum IsolationControl {
     Resources,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IsolationProviderClass {
+    TrustedBaseline,
+    ExternalAttested,
+    NativeFallback,
+    NativeStrong,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IsolationProviderAvailability {
+    Available,
+    SetupRequired,
+    Unsupported,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct IsolationProviderCapabilities {
@@ -69,6 +102,15 @@ pub struct IsolationProviderCapabilities {
     pub supported_profiles: Vec<IsolationProfile>,
     pub authenticates_host_attestations: bool,
     pub restricted_controls: Vec<IsolationControl>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct IsolationProviderStatus {
+    pub capabilities: IsolationProviderCapabilities,
+    pub provider_class: IsolationProviderClass,
+    pub availability: IsolationProviderAvailability,
+    pub limitations: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,6 +190,8 @@ pub struct IsolationEvidence {
     pub provider_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub boundary_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_digest: Option<String>,
     pub forge_enforced: bool,
     pub controls: Vec<IsolationControl>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -165,6 +209,7 @@ impl IsolationEvidence {
                 self.enforcement == IsolationEnforcement::None
                     && !self.forge_enforced
                     && self.boundary_id.is_none()
+                    && self.plan_digest.is_none()
                     && self.controls.is_empty()
                     && self.host_authority.is_none()
             }
@@ -180,6 +225,7 @@ impl IsolationEvidence {
                     && self.provider_id == provider_id
                     && authority.challenge.provider_id == provider_id
                     && self.boundary_id.as_deref() == Some(authority.statement.boundary_id.as_str())
+                    && self.plan_digest.is_none()
                     && self.controls == authority.statement.attested_controls
             }
             IsolationProfile::Restricted => {
@@ -189,6 +235,7 @@ impl IsolationEvidence {
                         .boundary_id
                         .as_ref()
                         .is_some_and(|value| !value.is_empty())
+                    && self.plan_digest.as_deref().is_some_and(is_lower_sha256)
                     && !self.provider_id.is_empty()
                     && !self.controls.is_empty()
                     && self.host_authority.is_none()
@@ -204,8 +251,54 @@ pub struct IsolatedProcessSpec {
     pub environment: Vec<(String, String)>,
     pub inherited_environment: Vec<String>,
     pub working_directory: PathBuf,
+    pub readable_roots: Vec<PathBuf>,
+    pub denied_read_roots: Vec<PathBuf>,
+    pub denied_write_roots: Vec<PathBuf>,
     pub timeout: Duration,
     pub max_output_bytes: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SandboxNetworkPlan {
+    Inherit,
+    DenyDirect,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SandboxCredentialPlan {
+    ExplicitEnvironmentOnly,
+    DenyAmbient,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EffectiveSandboxPlan {
+    pub schema_version: u32,
+    pub provider_id: String,
+    pub provider_class: IsolationProviderClass,
+    pub executable: PathBuf,
+    pub working_directory: PathBuf,
+    pub readable_roots: Vec<PathBuf>,
+    pub denied_read_roots: Vec<PathBuf>,
+    pub denied_write_roots: Vec<PathBuf>,
+    pub writable_roots: Vec<PathBuf>,
+    pub protected_relative_paths: Vec<PathBuf>,
+    pub deny_filesystem_outside_roots: bool,
+    pub network: SandboxNetworkPlan,
+    pub credentials: SandboxCredentialPlan,
+    pub own_descendant_processes: bool,
+    pub enforce_resource_limits: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_active_processes: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_process_memory_bytes: Option<usize>,
+    pub timeout_milliseconds: u64,
+    pub max_output_bytes: usize,
+    pub required_controls: Vec<IsolationControl>,
+    pub launch_digest: String,
+    pub plan_digest: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -234,7 +327,11 @@ pub struct IsolatedProcessOutcome {
 }
 
 pub trait IsolationProvider: Send + Sync {
-    fn capabilities(&self) -> IsolationProviderCapabilities;
+    fn status(&self) -> IsolationProviderStatus;
+
+    fn capabilities(&self) -> IsolationProviderCapabilities {
+        self.status().capabilities
+    }
 
     fn authorize_host_managed(
         &self,
@@ -256,6 +353,15 @@ pub trait IsolationProvider: Send + Sync {
         _cancellation: &dyn Cancellation,
     ) -> Result<IsolatedProcessOutcome, String> {
         Err("Isolation provider does not consume authenticated host execution grants.".to_owned())
+    }
+
+    fn execute_restricted(
+        &self,
+        _plan: &EffectiveSandboxPlan,
+        _process: &IsolatedProcessSpec,
+        _cancellation: &dyn Cancellation,
+    ) -> Result<IsolatedProcessOutcome, String> {
+        Err("Isolation provider does not implement compiled restricted execution.".to_owned())
     }
 
     fn execute(
@@ -291,12 +397,20 @@ impl BaselineIsolationProvider {
 }
 
 impl IsolationProvider for BaselineIsolationProvider {
-    fn capabilities(&self) -> IsolationProviderCapabilities {
-        IsolationProviderCapabilities {
-            provider_id: "forge.baseline".to_owned(),
-            supported_profiles: vec![IsolationProfile::Trusted],
-            authenticates_host_attestations: false,
-            restricted_controls: Vec::new(),
+    fn status(&self) -> IsolationProviderStatus {
+        IsolationProviderStatus {
+            capabilities: IsolationProviderCapabilities {
+                provider_id: "forge.baseline".to_owned(),
+                supported_profiles: vec![IsolationProfile::Trusted],
+                authenticates_host_attestations: false,
+                restricted_controls: Vec::new(),
+            },
+            provider_class: IsolationProviderClass::TrustedBaseline,
+            availability: IsolationProviderAvailability::Available,
+            limitations: vec![
+                "Trusted execution has no Forge-enforced operating-system permission boundary."
+                    .to_owned(),
+            ],
         }
     }
 
@@ -317,6 +431,7 @@ impl IsolationProvider for BaselineIsolationProvider {
                 enforcement: IsolationEnforcement::None,
                 provider_id: "forge.baseline".to_owned(),
                 boundary_id: None,
+                plan_digest: None,
                 forge_enforced: false,
                 controls: Vec::new(),
                 host_authority: None,
@@ -344,6 +459,8 @@ impl IsolationProvider for BaselineIsolationProvider {
             cancellation,
             #[cfg(unix)]
             &self.resolve_unix_watchdog()?,
+            #[cfg(windows)]
+            None,
         )?;
         Ok(IsolatedProcessOutcome {
             status: execution.status,
@@ -627,6 +744,496 @@ pub fn validate_isolation_provider_capabilities(
     Ok(())
 }
 
+pub fn validate_isolation_provider_status(status: &IsolationProviderStatus) -> Result<(), String> {
+    validate_isolation_provider_capabilities(&status.capabilities)?;
+    if status.limitations.is_empty()
+        || status.limitations.len() > 16
+        || status
+            .limitations
+            .iter()
+            .any(|item| item.trim().is_empty() || item.len() > 1_024)
+    {
+        return Err("Isolation provider status requires bounded explicit limitations.".to_owned());
+    }
+    let supports_trusted = status
+        .capabilities
+        .supported_profiles
+        .contains(&IsolationProfile::Trusted);
+    let supports_host = status
+        .capabilities
+        .supported_profiles
+        .contains(&IsolationProfile::HostManaged);
+    let supports_restricted = status
+        .capabilities
+        .supported_profiles
+        .contains(&IsolationProfile::Restricted);
+    let class_matches = match status.provider_class {
+        IsolationProviderClass::TrustedBaseline => {
+            supports_trusted && !supports_host && !supports_restricted
+        }
+        IsolationProviderClass::ExternalAttested => supports_host && !supports_restricted,
+        IsolationProviderClass::NativeFallback | IsolationProviderClass::NativeStrong => {
+            supports_restricted && !supports_host
+        }
+    };
+    if !class_matches {
+        return Err(
+            "Isolation provider class is inconsistent with its supported profiles.".to_owned(),
+        );
+    }
+    Ok(())
+}
+
+pub fn isolation_provider_restricted_ready(status: &IsolationProviderStatus) -> bool {
+    validate_isolation_provider_status(status).is_ok()
+        && status.availability == IsolationProviderAvailability::Available
+        && status.provider_class == IsolationProviderClass::NativeStrong
+        && status
+            .capabilities
+            .supported_profiles
+            .contains(&IsolationProfile::Restricted)
+        && [
+            IsolationControl::Filesystem,
+            IsolationControl::Process,
+            IsolationControl::Network,
+            IsolationControl::Credentials,
+            IsolationControl::Resources,
+        ]
+        .iter()
+        .all(|control| status.capabilities.restricted_controls.contains(control))
+}
+
+pub fn compile_effective_sandbox_plan(
+    status: &IsolationProviderStatus,
+    policy: &IsolationPolicy,
+    request: &IsolationRequest,
+    process: &IsolatedProcessSpec,
+) -> Result<EffectiveSandboxPlan, String> {
+    validate_isolation_provider_status(status)?;
+    validate_isolation_provider_request(&status.capabilities, policy, request)?;
+    validate_process(process)?;
+    if request.profile != IsolationProfile::Restricted {
+        return Err("An effective sandbox plan is valid only for restricted execution.".to_owned());
+    }
+    if status.availability != IsolationProviderAvailability::Available {
+        return Err(format!(
+            "Isolation provider {} is {:?}; restricted execution was not started.",
+            status.capabilities.provider_id, status.availability
+        ));
+    }
+    if !matches!(
+        status.provider_class,
+        IsolationProviderClass::NativeFallback | IsolationProviderClass::NativeStrong
+    ) {
+        return Err("Restricted execution requires a Forge native isolation provider.".to_owned());
+    }
+    if !process.executable.is_absolute() {
+        return Err(
+            "Restricted execution requires an absolute policy-owned executable path.".to_owned(),
+        );
+    }
+    let executable = process.executable.canonicalize().map_err(|error| {
+        format!(
+            "Restricted executable {} is unavailable: {error}",
+            process.executable.display()
+        )
+    })?;
+    if !executable
+        .metadata()
+        .map_err(|error| format!("Could not inspect restricted executable: {error}"))?
+        .is_file()
+    {
+        return Err("Restricted executable is not a regular file.".to_owned());
+    }
+    let working_directory = process.working_directory.canonicalize().map_err(|error| {
+        format!(
+            "Restricted working directory {} is unavailable: {error}",
+            process.working_directory.display()
+        )
+    })?;
+    if !working_directory
+        .metadata()
+        .map_err(|error| format!("Could not inspect restricted working directory: {error}"))?
+        .is_dir()
+    {
+        return Err("Restricted working directory is not a directory.".to_owned());
+    }
+    let mut required_controls = policy.required_controls.clone();
+    required_controls.sort_by_key(|control| isolation_control_order(*control));
+    let filesystem = required_controls.contains(&IsolationControl::Filesystem);
+    let timeout_milliseconds = u64::try_from(process.timeout.as_millis())
+        .map_err(|_| "Restricted process timeout overflowed.".to_owned())?;
+    let mut readable_roots = process
+        .readable_roots
+        .iter()
+        .map(|path| {
+            let canonical = path.canonicalize().map_err(|error| {
+                format!(
+                    "Restricted readable root {} is unavailable: {error}",
+                    path.display()
+                )
+            })?;
+            if !canonical
+                .metadata()
+                .map_err(|error| format!("Could not inspect restricted readable root: {error}"))?
+                .is_dir()
+            {
+                return Err(format!(
+                    "Restricted readable root {} is not a directory.",
+                    canonical.display()
+                ));
+            }
+            Ok(canonical)
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    readable_roots.push(working_directory.clone());
+    readable_roots.sort();
+    readable_roots.dedup();
+    let mut denied_read_roots = process
+        .denied_read_roots
+        .iter()
+        .map(|path| {
+            let canonical = path.canonicalize().map_err(|error| {
+                format!(
+                    "Restricted denied-read root {} is unavailable: {error}",
+                    path.display()
+                )
+            })?;
+            if !canonical
+                .metadata()
+                .map_err(|error| format!("Could not inspect restricted denied-read root: {error}"))?
+                .is_dir()
+            {
+                return Err(format!(
+                    "Restricted denied-read root {} is not a directory.",
+                    canonical.display()
+                ));
+            }
+            Ok(canonical)
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    denied_read_roots.sort();
+    denied_read_roots.dedup();
+    let mut denied_write_roots = process
+        .denied_write_roots
+        .iter()
+        .map(|path| {
+            let canonical = path.canonicalize().map_err(|error| {
+                format!(
+                    "Restricted denied-write root {} is unavailable: {error}",
+                    path.display()
+                )
+            })?;
+            if !canonical
+                .metadata()
+                .map_err(|error| {
+                    format!("Could not inspect restricted denied-write root: {error}")
+                })?
+                .is_dir()
+            {
+                return Err(format!(
+                    "Restricted denied-write root {} is not a directory.",
+                    canonical.display()
+                ));
+            }
+            Ok(canonical)
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    denied_write_roots.sort();
+    denied_write_roots.dedup();
+    let launch_digest = hash_serializable(&(
+        &executable,
+        &process.arguments,
+        &process.environment,
+        &process.inherited_environment,
+        &working_directory,
+        &readable_roots,
+        &denied_read_roots,
+        &denied_write_roots,
+        timeout_milliseconds,
+        process.max_output_bytes,
+    ))?;
+    let mut plan = EffectiveSandboxPlan {
+        schema_version: 4,
+        provider_id: status.capabilities.provider_id.clone(),
+        provider_class: status.provider_class,
+        executable,
+        working_directory: working_directory.clone(),
+        readable_roots: if filesystem {
+            readable_roots
+        } else {
+            Vec::new()
+        },
+        denied_read_roots: if filesystem {
+            denied_read_roots
+        } else {
+            Vec::new()
+        },
+        denied_write_roots: if filesystem {
+            denied_write_roots
+        } else {
+            Vec::new()
+        },
+        writable_roots: if filesystem {
+            vec![working_directory]
+        } else {
+            Vec::new()
+        },
+        protected_relative_paths: if filesystem {
+            RESTRICTED_PROTECTED_PATHS
+                .into_iter()
+                .map(PathBuf::from)
+                .collect()
+        } else {
+            Vec::new()
+        },
+        deny_filesystem_outside_roots: filesystem,
+        network: if required_controls.contains(&IsolationControl::Network) {
+            SandboxNetworkPlan::DenyDirect
+        } else {
+            SandboxNetworkPlan::Inherit
+        },
+        credentials: if required_controls.contains(&IsolationControl::Credentials) {
+            SandboxCredentialPlan::DenyAmbient
+        } else {
+            SandboxCredentialPlan::ExplicitEnvironmentOnly
+        },
+        own_descendant_processes: required_controls.contains(&IsolationControl::Process),
+        enforce_resource_limits: required_controls.contains(&IsolationControl::Resources),
+        max_active_processes: required_controls
+            .contains(&IsolationControl::Resources)
+            .then_some(RESTRICTED_MAX_ACTIVE_PROCESSES),
+        max_process_memory_bytes: required_controls
+            .contains(&IsolationControl::Resources)
+            .then_some(RESTRICTED_MAX_PROCESS_MEMORY_BYTES),
+        timeout_milliseconds,
+        max_output_bytes: process.max_output_bytes,
+        required_controls,
+        launch_digest,
+        plan_digest: String::new(),
+    };
+    plan.plan_digest = hash_serializable(&plan)?;
+    validate_effective_sandbox_plan(&plan, status, process)?;
+    Ok(plan)
+}
+
+pub fn validate_effective_sandbox_plan(
+    plan: &EffectiveSandboxPlan,
+    status: &IsolationProviderStatus,
+    process: &IsolatedProcessSpec,
+) -> Result<(), String> {
+    validate_isolation_provider_status(status)?;
+    validate_process(process)?;
+    if status.availability != IsolationProviderAvailability::Available {
+        return Err(format!(
+            "Isolation provider {} is {:?}; restricted execution was not started.",
+            status.capabilities.provider_id, status.availability
+        ));
+    }
+    if !process.executable.is_absolute() {
+        return Err(
+            "Restricted execution requires an absolute policy-owned executable path.".to_owned(),
+        );
+    }
+    let executable = process.executable.canonicalize().map_err(|error| {
+        format!(
+            "Restricted executable {} is unavailable: {error}",
+            process.executable.display()
+        )
+    })?;
+    if !executable
+        .metadata()
+        .map_err(|error| format!("Could not inspect restricted executable: {error}"))?
+        .is_file()
+    {
+        return Err("Restricted executable is not a regular file.".to_owned());
+    }
+    let working_directory = process.working_directory.canonicalize().map_err(|error| {
+        format!(
+            "Restricted working directory {} is unavailable: {error}",
+            process.working_directory.display()
+        )
+    })?;
+    if !working_directory
+        .metadata()
+        .map_err(|error| format!("Could not inspect restricted working directory: {error}"))?
+        .is_dir()
+    {
+        return Err("Restricted working directory is not a directory.".to_owned());
+    }
+    let timeout_milliseconds = u64::try_from(process.timeout.as_millis())
+        .map_err(|_| "Restricted process timeout overflowed.".to_owned())?;
+    if plan.schema_version != 4
+        || plan.provider_id != status.capabilities.provider_id
+        || plan.provider_class != status.provider_class
+        || plan.executable != executable
+        || plan.working_directory != working_directory
+        || plan.timeout_milliseconds != timeout_milliseconds
+        || plan.max_output_bytes != process.max_output_bytes
+        || !is_lower_sha256(&plan.launch_digest)
+        || !is_lower_sha256(&plan.plan_digest)
+    {
+        return Err("Effective sandbox plan identity is invalid.".to_owned());
+    }
+    let mut unsigned = plan.clone();
+    let expected_plan_digest = unsigned.plan_digest.clone();
+    unsigned.plan_digest.clear();
+    if hash_serializable(&unsigned)? != expected_plan_digest {
+        return Err("Effective sandbox plan digest does not match its contents.".to_owned());
+    }
+    let mut expected_readable_roots = process
+        .readable_roots
+        .iter()
+        .map(|path| path.canonicalize())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Restricted readable root is unavailable: {error}"))?;
+    expected_readable_roots.push(working_directory.clone());
+    expected_readable_roots.sort();
+    expected_readable_roots.dedup();
+    let mut expected_denied_read_roots = process
+        .denied_read_roots
+        .iter()
+        .map(|path| path.canonicalize())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Restricted denied-read root is unavailable: {error}"))?;
+    expected_denied_read_roots.sort();
+    expected_denied_read_roots.dedup();
+    let mut expected_denied_write_roots = process
+        .denied_write_roots
+        .iter()
+        .map(|path| path.canonicalize())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Restricted denied-write root is unavailable: {error}"))?;
+    expected_denied_write_roots.sort();
+    expected_denied_write_roots.dedup();
+    let expected_launch_digest = hash_serializable(&(
+        &executable,
+        &process.arguments,
+        &process.environment,
+        &process.inherited_environment,
+        &working_directory,
+        &expected_readable_roots,
+        &expected_denied_read_roots,
+        &expected_denied_write_roots,
+        timeout_milliseconds,
+        process.max_output_bytes,
+    ))?;
+    if expected_launch_digest != plan.launch_digest {
+        return Err(
+            "Effective sandbox plan does not match the requested process launch.".to_owned(),
+        );
+    }
+    if !plan
+        .required_controls
+        .iter()
+        .all(|control| status.capabilities.restricted_controls.contains(control))
+    {
+        return Err("Effective sandbox plan exceeds provider capabilities.".to_owned());
+    }
+    let filesystem = plan
+        .required_controls
+        .contains(&IsolationControl::Filesystem);
+    let process_control = plan.required_controls.contains(&IsolationControl::Process);
+    let network = plan.required_controls.contains(&IsolationControl::Network);
+    let credentials = plan
+        .required_controls
+        .contains(&IsolationControl::Credentials);
+    let resources = plan
+        .required_controls
+        .contains(&IsolationControl::Resources);
+    let expected_writable_roots = if filesystem {
+        vec![working_directory.clone()]
+    } else {
+        Vec::new()
+    };
+    let expected_protected_paths = if filesystem {
+        RESTRICTED_PROTECTED_PATHS
+            .into_iter()
+            .map(PathBuf::from)
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    let mut ordered_controls = plan.required_controls.clone();
+    ordered_controls.sort_by_key(|control| isolation_control_order(*control));
+    let unique_controls = plan
+        .required_controls
+        .iter()
+        .copied()
+        .collect::<HashSet<_>>();
+    if ordered_controls != plan.required_controls
+        || unique_controls.len() != plan.required_controls.len()
+        || plan.deny_filesystem_outside_roots != filesystem
+        || plan.readable_roots
+            != if filesystem {
+                expected_readable_roots
+            } else {
+                Vec::new()
+            }
+        || plan.denied_read_roots
+            != if filesystem {
+                expected_denied_read_roots
+            } else {
+                Vec::new()
+            }
+        || plan.denied_write_roots
+            != if filesystem {
+                expected_denied_write_roots
+            } else {
+                Vec::new()
+            }
+        || plan.writable_roots != expected_writable_roots
+        || plan.protected_relative_paths != expected_protected_paths
+        || plan.own_descendant_processes != process_control
+        || (plan.network == SandboxNetworkPlan::DenyDirect) != network
+        || (plan.credentials == SandboxCredentialPlan::DenyAmbient) != credentials
+        || plan.enforce_resource_limits != resources
+        || plan.max_active_processes != resources.then_some(RESTRICTED_MAX_ACTIVE_PROCESSES)
+        || plan.max_process_memory_bytes != resources.then_some(RESTRICTED_MAX_PROCESS_MEMORY_BYTES)
+    {
+        return Err(
+            "Effective sandbox plan does not exactly represent its required controls.".to_owned(),
+        );
+    }
+    Ok(())
+}
+
+pub fn validate_restricted_plan_evidence(
+    plan: &EffectiveSandboxPlan,
+    evidence: &IsolationEvidence,
+) -> Result<(), String> {
+    if evidence.plan_digest.as_deref() != Some(plan.plan_digest.as_str()) {
+        return Err(
+            "Restricted isolation evidence is not bound to the effective sandbox plan.".to_owned(),
+        );
+    }
+    Ok(())
+}
+
+fn isolation_control_order(control: IsolationControl) -> u8 {
+    match control {
+        IsolationControl::Filesystem => 0,
+        IsolationControl::Process => 1,
+        IsolationControl::Network => 2,
+        IsolationControl::Credentials => 3,
+        IsolationControl::Resources => 4,
+    }
+}
+
+fn hash_serializable(value: &impl Serialize) -> Result<String, String> {
+    let bytes = serde_json::to_vec(value)
+        .map_err(|_| "Could not encode sandbox plan identity.".to_owned())?;
+    let digest = Sha256::digest(bytes);
+    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn is_lower_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
 pub fn validate_isolation_provider_request(
     capabilities: &IsolationProviderCapabilities,
     policy: &IsolationPolicy,
@@ -786,6 +1393,36 @@ fn validate_process(process: &IsolatedProcessSpec) -> Result<(), String> {
         return Err("Isolated process arguments are invalid.".to_owned());
     }
     validate_process_environment_policy(&process.environment, &process.inherited_environment)?;
+    if process.readable_roots.len() > MAX_READABLE_ROOTS
+        || process
+            .readable_roots
+            .iter()
+            .any(|path| !path.is_absolute())
+    {
+        return Err(format!(
+            "Isolated process readable roots must contain at most {MAX_READABLE_ROOTS} absolute paths."
+        ));
+    }
+    if process.denied_read_roots.len() > MAX_DENIED_READ_ROOTS
+        || process
+            .denied_read_roots
+            .iter()
+            .any(|path| !path.is_absolute())
+    {
+        return Err(format!(
+            "Isolated process denied-read roots must contain at most {MAX_DENIED_READ_ROOTS} absolute paths."
+        ));
+    }
+    if process.denied_write_roots.len() > MAX_DENIED_WRITE_ROOTS
+        || process
+            .denied_write_roots
+            .iter()
+            .any(|path| !path.is_absolute())
+    {
+        return Err(format!(
+            "Isolated process denied-write roots must contain at most {MAX_DENIED_WRITE_ROOTS} absolute paths."
+        ));
+    }
     if process.timeout.is_zero() || process.timeout > MAX_TIMEOUT {
         return Err("Isolated process timeout must be from 1 ms to 600 seconds.".to_owned());
     }
@@ -817,10 +1454,14 @@ struct OwnedProcessTree {
 }
 
 impl OwnedProcessTree {
-    fn spawn(command: &mut Command, #[cfg(unix)] owner_liveness: OwnedFd) -> Result<Self, String> {
+    fn spawn(
+        command: &mut Command,
+        #[cfg(unix)] owner_liveness: OwnedFd,
+        #[cfg(windows)] resource_limits: Option<(u32, usize)>,
+    ) -> Result<Self, String> {
         #[cfg(windows)]
         {
-            let job = windows_job::WindowsJob::create()?;
+            let job = windows_job::WindowsJob::create_with_resource_limits(resource_limits)?;
             windows_job::WindowsJob::configure_command(command);
             let mut child = command
                 .spawn()
@@ -918,6 +1559,7 @@ fn run_bounded_process(
     process: &IsolatedProcessSpec,
     cancellation: &dyn Cancellation,
     #[cfg(unix)] watchdog_executable: &Path,
+    #[cfg(windows)] resource_limits: Option<(u32, usize)>,
 ) -> Result<(BoundedProcessResult, ProcessEnvironmentEvidence), String> {
     let (inherited_environment, environment_evidence) = minimal_process_environment(process)?;
     #[cfg(unix)]
@@ -960,7 +1602,11 @@ fn run_bounded_process(
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        OwnedProcessTree::spawn(&mut command)?
+        OwnedProcessTree::spawn(
+            &mut command,
+            #[cfg(windows)]
+            resource_limits,
+        )?
     };
     let stdout = process_tree
         .child

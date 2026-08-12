@@ -159,6 +159,7 @@ impl ChangeTransactionAdapter for FakeAdapter {
                 },
                 provider_id: "fixture.provider".to_owned(),
                 boundary_id: None,
+                plan_digest: None,
                 forge_enforced: false,
                 controls: Vec::new(),
                 host_authority: None,

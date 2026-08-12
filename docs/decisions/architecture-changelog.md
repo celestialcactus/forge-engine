@@ -1,5 +1,186 @@
+# 2026-08-12 - Consolidated transaction and sandbox hardening passes the local publication gate
+
+- Revalidated the seven local recovery/continuation commits together with the
+  transaction-retention, Windows sandbox evaluation, native-package, and
+  disposable-lab preparation changes as one Rust-authoritative core-hardening line.
+- The complete product gate, clean-install native package smoke, npm and RustSec
+  audits, optimized bridge budget, script parsers, and fresh five-control
+  AppContainer/managed Windows corpora pass locally.
+- Both Windows candidates remain `setup_required` and restricted-ready false.
+  Clean-VM lifecycle, hosted cross-platform, macOS containment, exact-head VS Code,
+  signing, and provider-promotion gates remain open.
+- See [Checkpoint 85](checkpoints/2026-08-12-85-consolidated-transaction-sandbox-local-gate.md),
+  [Checkpoint 84](checkpoints/2026-08-12-84-packaged-provider-lifecycle-gate-preparation.md),
+  and [ADR-0033](ADRs/ADR-0033-sandbox-policy-compilation-and-provider-conformance.md).
+
+# 2026-08-12 - Packaged provider lifecycle gate is prepared, not accepted
+
+- Added an evaluation-only payload builder for exact cached published archives,
+  package/version/license identities, license texts, third-party notices, adapter
+  hash, and explicit no-verbatim-external-source provenance. The dependency remains
+  absent from Forge's application manifest/lock.
+- Advanced the disposable lab to bundle/evidence schema 2. Bundles bind the provider
+  payload separately and reject missing, changed, duplicate, reparse-point, or
+  unmanifested payload files.
+- Added write-once guest lifecycle phases for verify, elevated install, post-install
+  hard reboot, the Rust-owned same corpus against both evaluation providers,
+  uninstall, post-uninstall hard reboot/residue, and fail-closed finalization.
+- Added chained host lifecycle evidence and a read-only finalizer that requires both
+  resets, exact guest artifact hashes, one unsandboxed canary control, a real upgrade,
+  export, shutdown, and clone destruction.
+- Local non-elevated payload, bundle, offline-install, exact-package, rejection, and
+  fail-closed tests pass. No VM/hypervisor, UAC, account, WFP, network, or host setup
+  mutation was performed. A second approved exact pin and real VM run remain blockers,
+  so both candidates remain `setup_required` and the recommendation stays `adapt`.
+- See [Checkpoint 84](checkpoints/2026-08-12-84-packaged-provider-lifecycle-gate-preparation.md),
+  [ADR-0033](ADRs/ADR-0033-sandbox-policy-compilation-and-provider-conformance.md),
+  and the [evaluation lab](../testing/forge-evaluation-lab.md).
+
+# 2026-08-12 - Rust-owned managed Windows adapter passes the local same-plan gate
+
+- Classified the managed Windows, AppContainer, and shared conformance paths as
+  evaluation modules. Forge independently reproduces useful architecture,
+  composition patterns, and obvious structural ideas against public APIs/platform
+  contracts; it does not copy implementation source verbatim or mirror private
+  internals. Any later substantial source reuse requires a separate adoption and
+  legal/provenance decision.
+- Added a conformance-only Rust managed-provider adapter that validates the complete
+  schema-v4 plan, launches the provider-prepared executable inside Forge's
+  process-count/memory-limited Job, and retains Rust timeout, cancellation,
+  descendant, cleanup, evidence, and fail-closed selection authority.
+- A fresh five-control corpus passed 17/17 against managed Windows and 17/17 against
+  AppContainer, including separate owner death, shell/Node/npm/Git/Cargo/rustc,
+  and clean ACL/process/recovery/descendant residue.
+- Measured cold mean/P95 at 8,940.12/19,711.26 ms for managed Windows and
+  1,972.14/4,277.12 ms for AppContainer. Both reports record zero harness retries
+  and null tokens because no inference provider participated.
+- Probe v4 reports candidates separately from the trusted selected baseline. Both
+  candidates remain `setup_required` and `restrictedReady=false`; doctor executes
+  no environment-selected adapter code and production selection remains closed.
+- Kept `@anthropic-ai/sandbox-runtime@0.0.71` outside the application dependency
+  graph. Recommendation remains `adapt`; the next gate is a separately packaged
+  payload's install/reboot/same-corpus/upgrade/uninstall lifecycle in the disposable
+  Windows lab.
+- See [Checkpoint 83](checkpoints/2026-08-12-83-managed-windows-provider-adapter-local-gate.md),
+  [ADR-0033](ADRs/ADR-0033-sandbox-policy-compilation-and-provider-conformance.md),
+  and [ADR-0034](ADRs/ADR-0034-commodity-sandbox-and-differentiated-learning-lane.md).
+
+# 2026-08-12 - Commodity sandbox spike reaches its bounded recommendation gate
+
+- Added Rust schema-v4 read/deny/write boundary binding and a 17-case exact-plan
+  corpus. The final SRT run passed 17/17 with clean ACL, recovery, helper/broker
+  process, descendant, and pre/post account/WFP behavior evidence.
+- Measured mean setup/reset/launch at 1,196.59/1,116.80/325.05 ms; the compatibility
+  projection was 632,868,524 bytes. Native AppContainer 9/9, Job lifecycle 3/3,
+  isolation authority 11/11, full Rust 174/0, Node 96/0, and exact hybrid 63/0 gates
+  passed.
+- Recommendation remains `adapt`: preserve Rust authority and compose managed
+  identity/WFP/broker machinery with Forge Job/resource limits later. SRT cannot
+  express full resource limits through its published API, so production readiness
+  and provider promotion remain closed.
+- Removed `@anthropic-ai/sandbox-runtime@0.0.71` from the Forge application
+  manifest/lock. The new fail-closed VirtualBox lab scaffold installs it offline
+  with `--no-save`; no VM, hypervisor, firmware, image, network, or firewall change
+  was made.
+- See [Checkpoint 82](checkpoints/2026-08-12-82-commodity-sandbox-conformance-completion.md),
+  [ADR-0033](ADRs/ADR-0033-sandbox-policy-compilation-and-provider-conformance.md),
+  and the [evaluation lab](../testing/forge-evaluation-lab.md).
+
+# 2026-08-11 - Commodity sandbox conformance spike remains setup-blocked
+
+- Added a temporary provider-neutral exact-plan harness at
+  `scripts/sandbox-conformance.mjs` with adversarial and representative toolchain
+  case IDs, setup/launch/bytes/residue metrics, and fail-closed adapter behavior.
+- Probed the pinned `@anthropic-ai/sandbox-runtime@0.0.71` only through published
+  APIs. The vendored Windows helper was present, but status/dependency/WFP probes
+  failed with `EPERM` at process creation; no UAC, account, WFP, ACL, or profile
+  mutation was attempted.
+- Audited Apache-2.0 licensing, four direct runtime dependencies plus nested zod,
+  145 lockfile package records, and zero known vulnerabilities in the repository
+  audit. The package remains an unmerged temporary spike input, not a promoted
+  Forge provider.
+- Recommendation is `adapt`: preserve Rust policy/transaction/evidence authority,
+  evaluate a dedicated-identity/WFP/broker implementation behind the same contract
+  in a later approved slice, and keep restricted readiness fail-closed.
+- See [ADR-0033](ADRs/ADR-0033-sandbox-policy-compilation-and-provider-conformance.md),
+  [ADR-0034](ADRs/ADR-0034-commodity-sandbox-and-differentiated-learning-lane.md),
+  and [Checkpoint 81](checkpoints/2026-08-11-81-commodity-sandbox-conformance-spike.md).
+
+# 2026-08-11 - Product critical path moves from custom sandboxing to the learning loop
+
+- Accepted [ADR-0034](ADRs/ADR-0034-commodity-sandbox-and-differentiated-learning-lane.md):
+  sandboxing remains a required, separately accepted platform boundary, but is not
+  Forge's product innovation lane.
+- Froze the custom AppContainer implementation—not the sandbox program—at
+  conformance quality and retained it as an optional strict backend. The actively
+  scheduled Windows follow-up evaluates the established dedicated low-privilege
+  identity, broker/runner, restricted-token/Job, recoverable ACL, WFP, and proxy
+  pattern behind the existing Rust provider contract.
+- Kept all restricted readiness claims fail-closed. The trusted developer alpha does
+  not wait for native providers and must continue to state that it provides no
+  Forge-enforced OS containment.
+- Moved the post-alpha critical path to one evaluated, attributable loop: evidence to
+  scoped candidate memory, measured retrieval, repeated-pattern recognition,
+  developer-reviewed skill promotion, and measurable reuse through the canonical
+  runtime.
+- Retained Windows/macOS sandbox completion as a bounded parity lane. It does not
+  block a truthfully labeled trusted alpha, but it remains mandatory for restricted
+  beta and enterprise-readiness claims.
+- Added sovereign/small-model efficiency guardrails: sandbox governed capability
+  processes rather than inference by default, keep policy mechanics out of model
+  context, avoid per-invocation workspace/toolchain copies, preflight failures in
+  `doctor`, and compare provider overhead/retries/outcomes with trusted execution.
+- Automatic unreviewed skills, uncorrectable memory, and opaque learning remain
+  outside the first slice. The bounded implementation and evaluation gate are in
+  [Slice CLI8](../tasks/SLICE-CLI8-differentiated-learning-loop.md).
+
+# 2026-08-11 - Windows AppContainer preview reaches focused conformance
+
+- Implemented a conformance-only disposable AppContainer launcher behind the existing
+  Rust `IsolationProvider`/`EffectiveSandboxPlan` contract. Production status remains
+  `setup_required`, so restricted transactions still fail before launch.
+- Added unique profile/SID lifecycle, bounded pre-mutation recovery journals,
+  positive-only candidate ACL grants, explicit handles/environment, suspended Job
+  assignment, resource bounds, cancellation, and cleanup recovery.
+- Rejected the first recursive-root/deny-ACE design after a live test showed the
+  restricted package SID did not protect `.git` as intended. The corrected preview
+  grants the root without inheritance and only existing safe top-level entries; it
+  does not move metadata, restore whole DACLs, or alter active-repository/tool ACLs.
+- Focused Windows conformance passes 9/9, including outside/protected denial,
+  loopback denial, timeout/cancellation, requested cwd, and abandoned-boundary
+  recovery. General toolchain projection, Windows credential breadth, forced owner
+  death, resource-ceiling fixtures, packaging/doctor, hosted, and VS Code gates remain
+  open.
+- Fixed source-kernel discovery to choose the newest debug/release build instead of a
+  stale release binary, and updated the hybrid doctor assertion for probe v3. The
+  exact local head passes strict Rust validation, 96/96 Node tests/build, 56/56
+  executed hybrid tests (seven explicit skips), RustSec audit of 46 locked
+  dependencies, and the staged Windows x64 package smoke.
+- The repository correctness pass then removed self-hash trust from sandbox-plan
+  validation: exact process/path/control/limit semantics are re-derived, including
+  regressions for a re-hashed escaped root, raised limit, and swapped executable. Job
+  creation now precedes process creation, assignment failure drains explicitly, and
+  recovery records reject duplicate/non-compiled paths. The full gate and rebuilt
+  package smoke remain green after these fixes.
+- Explicit architectural debt and improvement paths are recorded in
+  [ADR-0033](ADRs/ADR-0033-sandbox-policy-compilation-and-provider-conformance.md),
+  [Checkpoint 80](checkpoints/2026-08-11-80-windows-appcontainer-preview-conformance.md),
+  and the [CLI ship-lane 7 task](../tasks/SLICE-CLI7-transaction-retention-and-native-isolation.md).
+
 # 2026-08-10 - Transaction retention and isolation readiness reach the local gate
 
+- Accepted [ADR-0033](ADRs/ADR-0033-sandbox-policy-compilation-and-provider-conformance.md)
+  after a primary-source audit of Codex, Claude Code, Gemini CLI, and Copilot's hosted
+  boundary. Forge will adopt the recurring architecture patterns, not their source:
+  one compiled effective plan, explicit backend strength/availability, separate
+  network and credential controls, fail-closed exact representation, and native
+  adversarial conformance.
+- Replaced the single-primitive sandbox assumption with a provider hierarchy:
+  managed plus honest fallback on Windows, a Seatbelt preview plus durable signed
+  helper decision on macOS, and bubblewrap on Linux. AppContainer remains an optional
+  strict Windows experiment. No backend is accepted by compilation or configuration.
+- Recorded an independent-implementation rule: public designs may inform Forge, but
+  literal code adoption requires an explicit provenance and license/NOTICE review.
 - Moved exact unpublished transaction staging cleanup under the repository
   publication lock, added strict staging grammar/state-scan bounds, and retained
   every published prepared transaction until exact accept/discard.
@@ -16,6 +197,11 @@
   and the root license remains unresolved. Hosted Windows/macOS/Ubuntu, controlled
   VS Code, clean-install packaging, and native AppContainer/App Sandbox providers
   remain open.
+- Closed the Windows x64 clean-install defect locally with exact-version
+  platform-native npm packages, target/version validation, no install-time downloader
+  or Rust build, and an empty-directory packaged `doctor` plus real kernel inspection
+  smoke. Hosted targets, signing/provenance, publication, and the root license remain
+  open; see [ADR-0032](ADRs/ADR-0032-platform-native-npm-packages.md).
 - See [Checkpoint 79](checkpoints/2026-08-10-79-transaction-retention-and-isolation-readiness-local-gate.md),
   [ADR-0031](ADRs/ADR-0031-transaction-retention-and-native-sandbox-sequencing.md),
   [core audit](../audit/2026-08-10-core-correctness-and-quality-audit.md), and

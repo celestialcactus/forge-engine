@@ -15,7 +15,8 @@ use super::BaselineIsolationProvider;
 
 use super::{
     IsolatedProcessOutcome, IsolatedProcessSpec, IsolationEnforcement, IsolationEvidence,
-    IsolationPolicy, IsolationProfile, IsolationProvider, IsolationProviderCapabilities,
+    IsolationPolicy, IsolationProfile, IsolationProvider, IsolationProviderAvailability,
+    IsolationProviderCapabilities, IsolationProviderClass, IsolationProviderStatus,
     IsolationRequest, process_ownership_limitation, run_bounded_process,
     validate_isolation_provider_request, validate_process,
 };
@@ -155,8 +156,16 @@ impl AuthenticatedHostIsolationProvider {
 }
 
 impl IsolationProvider for AuthenticatedHostIsolationProvider {
-    fn capabilities(&self) -> IsolationProviderCapabilities {
-        host_capabilities(&self.provider_id)
+    fn status(&self) -> IsolationProviderStatus {
+        IsolationProviderStatus {
+            capabilities: host_capabilities(&self.provider_id),
+            provider_class: IsolationProviderClass::ExternalAttested,
+            availability: IsolationProviderAvailability::Available,
+            limitations: vec![
+                "The authenticated host, not Forge, creates and attests the operating-system boundary."
+                    .to_owned(),
+            ],
+        }
     }
 
     fn authorize_host_managed(
@@ -253,6 +262,7 @@ impl IsolationProvider for AuthenticatedHostIsolationProvider {
             enforcement: IsolationEnforcement::HostAttested,
             provider_id: self.provider_id.clone(),
             boundary_id: Some(authority.statement.boundary_id.clone()),
+            plan_digest: None,
             forge_enforced: false,
             controls: authority.statement.attested_controls.clone(),
             host_authority: Some(authority),
@@ -269,6 +279,8 @@ impl IsolationProvider for AuthenticatedHostIsolationProvider {
             cancellation,
             #[cfg(unix)]
             &self.process_supervisor.resolve_unix_watchdog()?,
+            #[cfg(windows)]
+            None,
         )?;
         Ok(IsolatedProcessOutcome {
             status: execution.status,
