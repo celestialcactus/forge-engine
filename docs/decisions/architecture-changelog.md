@@ -1,3 +1,20 @@
+# 2026-08-13 - ForgeEngine and Project Sybil are separate projects
+
+- Corrected the product identity: ForgeEngine remains an independent sovereign,
+  context-aware developer CLI and software-evidence harness. Project Sybil is an
+  independent sovereign agent-orchestration platform, not Forge's starshot,
+  generalized mode, repository subproject, or eventual rename.
+- Forge pilot results may inform Sybil, but concepts, protocols, evaluations,
+  packages, or source components transfer only through an explicit adopt/adapt/
+  reject decision. Neither project is a mandatory runtime, release, or schedule
+  dependency of the other.
+- Removed Sybil from Forge's V1 gate table and revised the Sybil start condition to
+  require its own repository/product boundary and lesson-transfer record rather
+  than completion of every Forge milestone.
+- See the [Forge platform direction](../architecture/forgeengine-platform-direction-amendment.md),
+  [Project Sybil working specification](../architecture/project-sybil-working-spec.md),
+  and [Grok Bot pattern review](../audit/2026-08-13-grok-bot-sybil-pattern-review.md).
+
 # 2026-08-13 - Grok Bot patterns enter the Project Sybil research roadmap
 
 - Reviewed the official Grok Bot launch and product FAQ as a competitive product
@@ -12,9 +29,9 @@
   default. Workers instead receive scoped cell leases and exchange attributable
   artifacts and delegated capabilities.
 - Preserved Forge scope: the installable CLI and CLI8 single-worker
-  memory/retrieval/reviewed-skill gate remain prerequisites. Sybil implementation
-  does not begin from this documentation update and may not create a parallel
-  runtime.
+  memory/retrieval/reviewed-skill work remain an independent pilot and source of
+  lessons. Sybil implementation does not begin from this documentation update and
+  belongs to its own project roadmap.
 - See the [Grok Bot pattern review](../audit/2026-08-13-grok-bot-sybil-pattern-review.md),
   [Project Sybil working specification](../architecture/project-sybil-working-spec.md),
   and [ForgeEngine V1 build plan](../architecture/forgeengine-v1-validated-build-plan.md).

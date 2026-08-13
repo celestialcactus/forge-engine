@@ -11,15 +11,16 @@ Grok Bot validates the product demand behind Project Sybil more than it changes
 ForgeEngine's immediate implementation plan. The strongest patterns are persistent
 task continuity, teach-by-demonstration routines, durable asynchronous work,
 cross-surface conversations, and coordinated specialist workers. Those patterns
-should enter Sybil's research roadmap after Forge's standalone CLI and first
-attributable learning loop are stable.
+should enter Sybil's independent research roadmap, informed by evidence from
+Forge's standalone CLI and attributable-learning pilot where applicable.
 
 The correct decision is **adapt, not copy**. The public material is an early-beta
 product description, not a technical architecture, threat model, or quality study.
 It does not establish memory correctness, recovery semantics, worker isolation,
 routing efficiency, or whether parallel workers outperform one capable worker.
 
-Forge and Sybil can differentiate by making these behaviors inspectable: a routine
+Sybil can apply Forge's central evidence lesson by making these behaviors
+inspectable: a routine
 must cite the demonstrations that produced it, a worker handoff must identify the
 artifacts and authority transferred, and a proactive action must explain its
 trigger, policy decision, cost, and verified outcome.
@@ -120,9 +121,11 @@ decision, and cancellation/budget propagation is part of the graph contract.
 
 This is a future sequence, not an expansion of Forge V1:
 
-1. **Foundation reuse:** complete Forge's installable alpha and CLI8 attributable
-   memory/retrieval/reviewed-skill fixture. Prove Sybil can consume those contracts
-   without a second runtime.
+1. **Pilot lesson transfer:** catalogue results from Forge's installable alpha and
+   CLI8 attributable memory/retrieval/reviewed-skill fixture. Record which concepts,
+   protocols, evaluations, or components Sybil adopts, adapts, or rejects. Sybil
+   remains a separate runtime and product rather than a Forge mode or mandatory
+   contract consumer.
 2. **Single persistent worker:** resume one task across process restart and two
    surfaces using one canonical task thread and one scoped execution cell.
 3. **Teach-by-demonstration:** capture one bounded workflow, produce a reviewed
