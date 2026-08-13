@@ -1,3 +1,24 @@
+# 2026-08-13 - Grok Bot patterns enter the Project Sybil research roadmap
+
+- Reviewed the official Grok Bot launch and product FAQ as a competitive product
+  signal, not as implementation authority. The described patterns include an
+  always-on worker computer, cross-surface threads, teach-by-demonstration routines,
+  scheduled work, accumulating context, approval-aware application use, and
+  coordinated specialist bots.
+- Accepted adapted Sybil candidates for canonical task threads, portable execution
+  cells, reviewed routine candidates, durable trigger/recovery machinery,
+  evidence-producing UI fallback, and typed multi-worker work graphs.
+- Rejected one shared mutable computer and ambient credential pool as Sybil's
+  default. Workers instead receive scoped cell leases and exchange attributable
+  artifacts and delegated capabilities.
+- Preserved Forge scope: the installable CLI and CLI8 single-worker
+  memory/retrieval/reviewed-skill gate remain prerequisites. Sybil implementation
+  does not begin from this documentation update and may not create a parallel
+  runtime.
+- See the [Grok Bot pattern review](../audit/2026-08-13-grok-bot-sybil-pattern-review.md),
+  [Project Sybil working specification](../architecture/project-sybil-working-spec.md),
+  and [ForgeEngine V1 build plan](../architecture/forgeengine-v1-validated-build-plan.md).
+
 # 2026-08-12 - Consolidated transaction and sandbox hardening passes the local publication gate
 
 - Revalidated the seven local recovery/continuation commits together with the

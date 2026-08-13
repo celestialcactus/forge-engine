@@ -2,7 +2,7 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
-**Last groomed:** 2026-08-12 after consolidated transaction/sandbox local publication acceptance
+**Last groomed:** 2026-08-13 after the Grok Bot competitive pattern review
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
 
@@ -280,6 +280,22 @@ reuse the same run, evidence, policy, capability, and artifact contracts; none m
 create a parallel runtime. Project Sybil is tracked separately as a future
 exploration and is not Forge V1 authority.
 
+The [Grok Bot competitive review](../audit/2026-08-13-grok-bot-sybil-pattern-review.md)
+adds explicit long-range Sybil candidates: canonical task threads that continue
+across surfaces, portable persistent execution cells, reviewed
+demonstration-to-routine compilation, durable schedules and proactive triggers,
+API/MCP-first application control with an evidence-producing browser/computer
+fallback, and typed multi-worker delegation. The corresponding
+[Project Sybil working specification](project-sybil-working-spec.md) defines their
+order and gates.
+
+These are downstream consumers of Forge and CLI8 contracts, not reasons to expand
+the current CLI slice. Forge first proves attributable memory and a reviewed skill
+in a single-worker developer workflow. Sybil then proves a single persistent worker
+and restart/cross-surface continuity before schedules, UI operation, or multiple
+workers. Multi-worker execution must beat a single-worker baseline after counting
+coordination calls, context, latency, recovery failures, and total cost.
+
 ## Historical first build target: Slice 0 and the narrow Slice 1 spine
 
 This was the deliberate initial vertical slice and is retained to explain the
@@ -556,6 +572,7 @@ not source volume or the number of abstractions present.
 | Installable developer alpha | Windows x64 package contract passes locally; release gate open | ADR-0032 packages exact-version target-native release binaries without postinstall download/build. Hosted Windows/macOS target smokes, signing/notarization/provenance, root license, effective config/doctor guidance, update tests, and the developer test kit remain open. |
 | Differentiated learning loop | Next after installable trusted alpha | Attributable scoped memory, measured retrieval, pattern recognition, and reviewed skill promotion become the product critical path under ADR-0034. | One repeated-workflow fixture proves quality/effort improvement over a no-memory baseline without hidden instructions or policy bypass. |
 | Broader V1 platform | Deferred beyond the bounded learning loop | Advanced compression/retrieval, MCP client/mutation symmetry, connectors, automation, and generalized UI retain their later roadmap gates. Windows/macOS restricted providers continue as a bounded, actively scheduled commodity-platform lane under ADR-0031/0033/0034 and cannot borrow acceptance from trusted mode. |
+| Project Sybil research | Documentation and disposable research only until the Forge CLI and CLI8 value gates pass | Future persistent workers, execution cells, teach-by-demonstration routines, durable triggers, human-tool fallback, cross-surface threads, and typed worker teams reuse Forge authority. Grok Bot is a product signal, not implementation authority. | A single persistent worker must resume one attributable task across restart and two surfaces before any schedule, UI-fallback, or multi-worker product build is authorized. |
 
 Percent-complete figures are intentionally not used. They hid the difference
 between many finished internal tests and a few still-blocking product gates.
