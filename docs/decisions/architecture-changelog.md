@@ -1,3 +1,19 @@
+# 2026-08-17 - Documentation ground truth and lane baselines are reconciled
+
+- Reconciled the ForgeEngine documentation hierarchy and active-lane truth on top
+  of accepted implementation baseline `4e15226`. The V1 build plan remains the
+  architecture/roadmap authority; `docs/execution/current.md` is now the short
+  operational index, and release profiles define permitted containment and
+  distribution claims.
+- Release candidate `a023119` and learning candidate `b5effea` are explicitly
+  replay-required because their worktrees were created from stale baseline
+  `aa73e0e`; neither is accepted state. The sandbox lifecycle lane remains
+  independent and unpromoted. See Checkpoint 88.
+- Recorded a not-yet-accepted ADR-0033 refinement gate separating provider-neutral
+  sandbox requirements, provider support facts, provider binding, and lifecycle
+  receipts. Existing `EffectiveSandboxPlan` authority remains unchanged until the
+  VM/conformance lane proves the refinement.
+
 # 2026-08-13 - ForgeEngine and Project Sybil are separate projects
 
 - Corrected the product identity: ForgeEngine remains an independent sovereign,

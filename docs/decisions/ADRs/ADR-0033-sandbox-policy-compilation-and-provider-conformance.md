@@ -195,6 +195,26 @@ The current named evaluation modules are:
 - Native implementation and adversarial CI remain significant work. This ADR is not
   sandbox acceptance.
 
+### Next contract-refinement gate (not yet accepted)
+
+The current provider conformance work exposed a useful refinement that must be
+decided before production provider promotion. The semantic policy should be
+representable as four explicit stages:
+
+1. `SandboxRequirements`: provider-neutral launch and security requirements;
+2. `ProviderSupportReport`: a side-effect-free statement of exact representability;
+3. `BoundSandboxPlan`: the selected provider/version/setup and enforcement mapping;
+4. `SandboxLifecycleReceipt`: prepare, launch, observe, cancel, cleanup, recovery,
+   and residue evidence.
+
+This would prevent provider identity from contaminating semantic requirements,
+remove any dual launch truth between a plan and a separate process specification,
+and distinguish mechanism from enforcement assurance. The active VM/conformance
+spike must first report whether this split preserves the existing corpus and Rust
+authority. Until an ADR update accepts it, the existing `EffectiveSandboxPlan`
+contract remains authoritative and adapters may not implement the proposed split
+independently.
+
 ## 2026-08-11 Windows AppContainer preview checkpoint
 
 The first Windows-native experiment now implements a disposable AppContainer
