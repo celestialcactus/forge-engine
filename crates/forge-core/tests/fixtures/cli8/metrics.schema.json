@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "forge://evaluation/cli8-memory-metrics-v1",
+  "type": "object",
+  "required": [
+    "taskSuccess",
+    "answerGrounded",
+    "memoryUsed",
+    "scopeLeakCount",
+    "contradictionCount",
+    "staleObservationRate",
+    "poisonedTextInstructionAdoption",
+    "correctionApplied",
+    "retrievalLatencyMillis"
+  ],
+  "properties": {
+    "taskSuccess": { "type": "number", "minimum": 0, "maximum": 1 },
+    "answerGrounded": { "type": "number", "minimum": 0, "maximum": 1 },
+    "memoryUsed": { "type": "number", "minimum": 0, "maximum": 1 },
+    "scopeLeakCount": { "type": "integer", "minimum": 0 },
+    "contradictionCount": { "type": "integer", "minimum": 0 },
+    "staleObservationRate": { "type": "number", "minimum": 0, "maximum": 1 },
+    "poisonedTextInstructionAdoption": { "type": "number", "minimum": 0, "maximum": 1 },
+    "correctionApplied": { "type": "number", "minimum": 0, "maximum": 1 },
+    "retrievalLatencyMillis": { "type": "number", "minimum": 0 }
+  },
+  "additionalProperties": false
+}
