@@ -1,3 +1,57 @@
+# 2026-08-17 - Documentation ground truth and lane baselines are reconciled
+
+- Reconciled the ForgeEngine documentation hierarchy and active-lane truth on top
+  of accepted implementation baseline `4e15226`. The V1 build plan remains the
+  architecture/roadmap authority; `docs/execution/current.md` is now the short
+  operational index, and release profiles define permitted containment and
+  distribution claims.
+- Release candidate `a023119` and learning candidate `b5effea` are explicitly
+  replay-required because their worktrees were created from stale baseline
+  `aa73e0e`; neither is accepted state. The sandbox lifecycle lane remains
+  independent and unpromoted. See Checkpoint 88.
+- Recorded a not-yet-accepted ADR-0033 refinement gate separating provider-neutral
+  sandbox requirements, provider support facts, provider binding, and lifecycle
+  receipts. Existing `EffectiveSandboxPlan` authority remains unchanged until the
+  VM/conformance lane proves the refinement.
+
+# 2026-08-13 - ForgeEngine and Project Sybil are separate projects
+
+- Corrected the product identity: ForgeEngine remains an independent sovereign,
+  context-aware developer CLI and software-evidence harness. Project Sybil is an
+  independent sovereign agent-orchestration platform, not Forge's starshot,
+  generalized mode, repository subproject, or eventual rename.
+- Forge pilot results may inform Sybil, but concepts, protocols, evaluations,
+  packages, or source components transfer only through an explicit adopt/adapt/
+  reject decision. Neither project is a mandatory runtime, release, or schedule
+  dependency of the other.
+- Removed Sybil from Forge's V1 gate table and revised the Sybil start condition to
+  require its own repository/product boundary and lesson-transfer record rather
+  than completion of every Forge milestone.
+- See the [Forge platform direction](../architecture/forgeengine-platform-direction-amendment.md),
+  [Project Sybil working specification](../architecture/project-sybil-working-spec.md),
+  and [Grok Bot pattern review](../audit/2026-08-13-grok-bot-sybil-pattern-review.md).
+
+# 2026-08-13 - Grok Bot patterns enter the Project Sybil research roadmap
+
+- Reviewed the official Grok Bot launch and product FAQ as a competitive product
+  signal, not as implementation authority. The described patterns include an
+  always-on worker computer, cross-surface threads, teach-by-demonstration routines,
+  scheduled work, accumulating context, approval-aware application use, and
+  coordinated specialist bots.
+- Accepted adapted Sybil candidates for canonical task threads, portable execution
+  cells, reviewed routine candidates, durable trigger/recovery machinery,
+  evidence-producing UI fallback, and typed multi-worker work graphs.
+- Rejected one shared mutable computer and ambient credential pool as Sybil's
+  default. Workers instead receive scoped cell leases and exchange attributable
+  artifacts and delegated capabilities.
+- Preserved Forge scope: the installable CLI and CLI8 single-worker
+  memory/retrieval/reviewed-skill work remain an independent pilot and source of
+  lessons. Sybil implementation does not begin from this documentation update and
+  belongs to its own project roadmap.
+- See the [Grok Bot pattern review](../audit/2026-08-13-grok-bot-sybil-pattern-review.md),
+  [Project Sybil working specification](../architecture/project-sybil-working-spec.md),
+  and [ForgeEngine V1 build plan](../architecture/forgeengine-v1-validated-build-plan.md).
+
 # 2026-08-12 - Consolidated transaction and sandbox hardening passes the local publication gate
 
 - Revalidated the seven local recovery/continuation commits together with the

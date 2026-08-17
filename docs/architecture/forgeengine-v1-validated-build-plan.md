@@ -2,9 +2,23 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
-**Last groomed:** 2026-08-12 after consolidated transaction/sandbox local publication acceptance
+**Last groomed:** 2026-08-17 after the documentation ground-truth reconciliation
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
+
+## How to use this plan
+
+This document is the V1 architecture and roadmap authority; it is intentionally not
+the live branch dashboard. The [current execution index](../execution/current.md)
+records the accepted implementation baseline, active lanes, dependencies, merge
+order, and unresolved decisions. The
+[release profiles](forgeengine-release-profiles.md) define which product and
+containment claims are permitted at each delivery stage.
+
+Runtime schemas and tests describe implemented behavior, accepted ADRs describe
+durable decisions, this plan describes scope and gates, slice tasks bound an
+increment, and checkpoints preserve evidence. A candidate branch does not become
+accepted state until its exact implementation is merged and its required gates pass.
 
 ## The V1 promise
 
@@ -86,10 +100,18 @@ records the hosted and VS Code gate.
 
 Windows and macOS remain Tier-1 product and acceptance platforms. Ubuntu remains
 a Tier-2 compatibility gate because local/server deployments and CI must not
-require a platform fork. Context compilation, durable sessions, learned skills,
-and provider routing remain behind this functional core.
+require a platform fork. Advanced context compilation, automatic retrieval,
+learned skills, provider expansion, and broader durable projections remain behind
+this functional core; the accepted local/cloud paths and bounded run recovery are
+not reopened by that sequencing.
 
-Slice 2F is the current core hardening boundary. Slice 2F-1 is accepted: provider
+The current critical path is `CLI7-ALPHA`, the clean-install trusted developer
+alpha described in the [execution index](../execution/current.md). Native
+restricted execution continues as the independent `SBX-PROVIDER-LIFECYCLE` lane;
+an additive `CLI8A-MEMORY-FOUNDATION` candidate may be prepared in parallel but
+cannot become runtime-active before its evaluation and integration gates.
+
+Slice 2F remains the native-isolation hardening boundary. Slice 2F-1 is accepted: provider
 authority is explicit and raw host/restricted claims fail closed. Slice 2F-2a is
 also accepted: Forge can issue, strictly verify, durably consume, and later re-audit
 a short-lived host-signed challenge bound to capability, policy, provider, and
@@ -103,9 +125,10 @@ trusted developer alpha.
 
 ## Near-term CLI ship lane
 
-This is the immediate execution priority. It turns the accepted protocol and change
-machinery into something another developer can install, understand, and use. The
-broader V1 slices remain authoritative capability goals.
+This lane remains the immediate execution priority. In current execution terms its
+open increment is `CLI7-ALPHA`; earlier numbers below are retained as capability
+history, not active branch names. The broader V1 slices remain authoritative
+capability goals.
 
 1. **Kernel convergence — accepted and merged as PR #15 (`1fcab25`).** One canonical Rust runtime/capability/event/artifact/
    policy authority; TypeScript remains integration and an explicitly named
@@ -277,8 +300,27 @@ projections/search, MCP/VS Code mutation symmetry, first-party connectors and
 messaging, automation, a broader UI, native restricted execution beyond its bounded
 provider lane, and future generalized platform surfaces remain planned. They must
 reuse the same run, evidence, policy, capability, and artifact contracts; none may
-create a parallel runtime. Project Sybil is tracked separately as a future
-exploration and is not Forge V1 authority.
+create a parallel runtime inside Forge. Project Sybil is a separate sovereign
+agent-orchestration project with its own runtime, repository, roadmap, and release
+gates. It is neither a Forge slice nor Forge's eventual product form.
+
+The [Grok Bot competitive review](../audit/2026-08-13-grok-bot-sybil-pattern-review.md)
+records transferable product lessons for Sybil: canonical task threads that continue
+across surfaces, portable persistent execution cells, reviewed
+demonstration-to-routine compilation, durable schedules and proactive triggers,
+API/MCP-first application control with an evidence-producing browser/computer
+fallback, and typed multi-worker delegation. The corresponding
+[Project Sybil working specification](project-sybil-working-spec.md) defines their
+independent order and gates.
+
+These are lessons and optional interoperability candidates, not downstream Forge
+features or reasons to expand the current CLI slice. Forge continues proving
+attributable memory and reviewed skills for developer workflows. Sybil separately
+decides which resulting concepts, protocols, evaluations, or components fit its own
+platform. Within Sybil, a single persistent worker and restart/cross-surface
+continuity precede schedules, UI operation, or multiple workers. Multi-worker
+execution must beat a single-worker baseline after counting coordination calls,
+context, latency, recovery failures, and total cost.
 
 ## Historical first build target: Slice 0 and the narrow Slice 1 spine
 
@@ -520,8 +562,8 @@ is not repeated unless new evidence invalidates its checkpoint.
 | Slice 4 | Local durable store | Pending | Which SQLite binding/migration approach satisfies Windows packaging, replay, and corruption recovery needs? |
 | Slice 6 | VS Code MCP interoperability | Read-only tether accepted; mutation workflow pending P2 | Which MCP cancellation/progress/task features are supported by the target VS Code version and transport without expanding into generic write tools? |
 | Slice 6 | Existing harness interoperability | Pending P2 | Can MCP represent the target central "agents" harness accurately; if not, what minimal optional adapter maps its tool, cancellation, approval-fact, progress, and trace contracts without creating a second run model? |
-| Slice 7 | Provider normalization | Pending | Can the selected local and cloud providers satisfy Forge's stream, tool, cancellation, and error contract? |
-| Slices 3/7 | Evaluation harness | Pending; do before enabling transforms/providers by default | What representative fixture set measures accepted outcome, evidence recall, token/cost, latency, and corrective turns? |
+| Slice 7 | Provider normalization | Accepted for Ollama plus direct OpenAI through CLI ship-lane increments 2-3; expansion remains gated | The selected local and cloud paths satisfy the stream, tool, cancellation, usage, and error contract without silent cross-boundary fallback. New providers require the same conformance gate. |
+| Slices 3/7 | Evaluation harness | Partial; provider and low-compute fixtures accepted, CLI8 retrieval baseline pending | What representative fixture set measures accepted outcome, evidence recall, token/cost, latency, and corrective turns before automatic retrieval or routing is enabled? |
 
 ## Prototype and open-source delivery gate
 
@@ -543,18 +585,18 @@ license rather than being inferred from package metadata.
 
 ## Core completion and delivery forecast
 
-**Forecast date:** 2026-08-10. Completion is measured by accepted behavioral gates,
+**Forecast date:** 2026-08-17. Completion is measured by accepted behavioral gates,
 not source volume or the number of abstractions present.
 
 | Gate group | State | Evidence or open condition |
 | --- | --- | --- |
-| Canonical runtime, real inference/live loop, governed change, cancellation-safe approvals | Accepted on `develop` through 5A | Cross-platform hosted, live-provider, and controlled VS Code evidence is recorded by the linked checkpoints. |
+| Canonical runtime, real inference/live loop, governed change, cancellation-safe approvals | Accepted on `develop`; consolidated implementation baseline is `4e15226` (PR #24) | Cross-platform hosted, live-provider, controlled VS Code, transaction, and local sandbox-conformance evidence is recorded by the linked checkpoints. This does not promote restricted execution. |
 | 5B execution controls | Accepted and merged on `develop` at `74308ca` | Local, hosted Windows/macOS/Ubuntu, live Qwen, conservative credentialed OpenAI, and one-call controlled VS Code gates pass. See Checkpoints 68-70. |
 | 5C policy posture and host callback conformance | Accepted at implementation `2941948` | One fact-producing profile layer serves CLI/service/MCP while Rust alone decides. Local, exact-kernel, live Qwen 1.5B, controlled VS Code, and hosted Windows/macOS/Ubuntu gates pass. See ADR-0028 and Checkpoints 71-72. |
 | Minimum outer-run recovery | 6A/6B, atomic initialization, and ChangeSet cross-link local/VS Code gates passed; hosted pending | Rust durably records request/events/artifact plus the bounded interaction transcript. Terminal return and proven-safe same-runtime continuation work locally; ambiguous and non-idempotent frontiers block. Complete initial state is privately staged and atomically published. A pending governed change now carries one durably acknowledged reference to its registered authoritative ChangeSet transaction while the outer capability remains non-replayable. Hosted Windows/macOS/Ubuntu remains open. |
 | Transaction retention and isolation truth | 7A local gate and Windows five-control same-plan gate accepted; production/hosted/VS Code pending | Lock-safe transaction retention remains accepted. Managed Windows and AppContainer each pass the fresh 17-case schema-v4 corpus under Rust-owned lifecycle/resource/evidence authority; probe v4 reports both as `setup_required` and restricted-ready false. The separately attributed schema-2 payload/bundle/guest/host lifecycle gate is prepared and locally verifies exact package/hash/license/NOTICE separation. The consolidated branch also passes the complete product, native-package, audit, benchmark, script, and fresh dual-provider local publication gates, but no VM phase or real second-pin upgrade has run. Broader credential channels, hosted Windows, macOS, and VS Code gates remain open. See [ADR-0031](../decisions/ADRs/ADR-0031-transaction-retention-and-native-sandbox-sequencing.md), [ADR-0033](../decisions/ADRs/ADR-0033-sandbox-policy-compilation-and-provider-conformance.md), [Checkpoint 83](../decisions/checkpoints/2026-08-12-83-managed-windows-provider-adapter-local-gate.md), [Checkpoint 84](../decisions/checkpoints/2026-08-12-84-packaged-provider-lifecycle-gate-preparation.md), and [Checkpoint 85](../decisions/checkpoints/2026-08-12-85-consolidated-transaction-sandbox-local-gate.md). |
 | Installable developer alpha | Windows x64 package contract passes locally; release gate open | ADR-0032 packages exact-version target-native release binaries without postinstall download/build. Hosted Windows/macOS target smokes, signing/notarization/provenance, root license, effective config/doctor guidance, update tests, and the developer test kit remain open. |
-| Differentiated learning loop | Next after installable trusted alpha | Attributable scoped memory, measured retrieval, pattern recognition, and reviewed skill promotion become the product critical path under ADR-0034. | One repeated-workflow fixture proves quality/effort improvement over a no-memory baseline without hidden instructions or policy bypass. |
+| Differentiated learning loop | Additive CLI8A candidate may be prepared in parallel; activation remains after trusted alpha | Attributable scoped memory, measured retrieval, pattern recognition, and reviewed skill promotion become the product critical path under ADR-0034. Stale-base candidate `b5effea` must be replayed and tested before review. Exit: one repeated-workflow fixture proves quality/effort improvement over a no-memory baseline without hidden instructions or policy bypass. |
 | Broader V1 platform | Deferred beyond the bounded learning loop | Advanced compression/retrieval, MCP client/mutation symmetry, connectors, automation, and generalized UI retain their later roadmap gates. Windows/macOS restricted providers continue as a bounded, actively scheduled commodity-platform lane under ADR-0031/0033/0034 and cannot borrow acceptance from trusted mode. |
 
 Percent-complete figures are intentionally not used. They hid the difference
@@ -574,7 +616,7 @@ expansion, the current planning ranges are:
 - 5B Rust-owned execution budgets: **accepted at implementation `3f2774b` after local 86-test/build/audit, hosted Windows/macOS/Ubuntu, live Qwen normal and tiny-budget gates, conservative credentialed OpenAI, and a controlled one-call seven-tool VS Code gate; merged through PR #22 at `74308ca`**;
 - 5C product approval profiles: **accepted at implementation `2941948` after local 91-test/build, full 54-test retained-kernel hybrid, live Qwen 1.5B grant/decline, controlled one-call VS Code, and hosted Node/hybrid Windows/macOS/Ubuntu gates**;
 - 6A/6B outer-run recovery: **local and controlled VS Code gates pass through bridge v10 with 93 Node tests/build, zero-warning full Rust workspace validation, 62 hybrid scenarios (56 passed and six explicit separate-kernel skips), packaged CLI smoke, deterministic same-runtime replay, one-total evidence retry, OS-owned locking, atomic whole-directory initialization, terminal temporary-artifact recovery, fail-closed ambiguous/non-idempotent frontiers, and a durably acknowledged pending ChangeSet transaction cross-link; the current controlled VS Code gate completed in one Forge call and five seconds; hosted Windows/macOS/Ubuntu acceptance remains pending**;
-- shippable standalone CLI alpha: **1-3 focused weeks from 2026-08-10**, contingent on a prompt license decision, cross-platform native packaging, and exact-head hosted acceptance; native restricted execution remains a separately gated pilot boundary;
+- shippable standalone CLI alpha: **planning range 5-8 focused working days from the 2026-08-17 reconciliation**, contingent on replaying the release candidate onto current `develop`, a prompt license/target-matrix decision, cross-platform native packaging, and exact-head hosted acceptance; native restricted execution remains a separately gated pilot boundary;
 - first attributable memory/retrieval demonstration: **about one focused week after the installable alpha gate**;
 - reviewed pattern-to-skill vertical slice: **a further 2-3 focused weeks**, contingent on the evaluation fixture proving better accepted outcomes rather than token reduction alone;
 - broader enterprise pilot with real restricted execution and policy integration:
@@ -627,11 +669,12 @@ are merged through PR #17 at `0441d865`. Rust-authoritative outcome contracts ar
 merged through PR #18 at `742b8c8`. The prepared ChangeSet/approval boundary is
 accepted at `3262e3b`; increments 4B-2 and 4B-3 passed hosted cross-platform, live
 promoted Qwen, and controlled VS Code gates before merging through PR #20 at
-`2ff5669`. Rust-owned execution budgets are accepted and current `develop` points
-at PR #22 merge `74308ca`. Increment 5C now has one product fact layer across CLI,
+`2ff5669`. Rust-owned execution budgets are accepted through PR #22 merge
+`74308ca`. Increment 5C now has one product fact layer across CLI,
 service, and MCP, with Rust still resolving every final decision. Implementation
 `2941948` passed the local, exact-kernel, live Qwen 1.5B, controlled VS Code, and
 hosted Node/hybrid Windows/macOS/Ubuntu gates and is accepted as increment 5C.
+Current `develop` is the consolidated PR #24 implementation baseline `4e15226`.
 CLI ship-lane 7A passes the full local Rust/Node/exact-kernel hybrid and source-built
 CLI smoke gate with bounded transaction audit and truthful isolation readiness;
 hosted/VS Code acceptance is still open.

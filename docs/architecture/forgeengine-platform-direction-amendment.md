@@ -2,6 +2,7 @@
 
 **Status:** accepted; takes precedence over conflicting wording in prior V1 plans
 **Date:** 2026-07-10
+**Last amended:** 2026-08-13 to separate ForgeEngine from Project Sybil
 **Applies to:** all ForgeEngine architecture and product planning
 
 ## Correction
@@ -27,10 +28,23 @@ local/cloud choices inspectable and controllable.
 | --- | --- | --- |
 | **V1** | Sovereign-first runtime and complementary developer harness. | A developer can complete a bounded, evidence-backed workflow locally or with a deliberate cloud escalation, inspect the trace, and use Forge through CLI or an interoperable host. |
 | **Moonshot** | Independently competitive Forge CLI platform. | Forge owns the primary developer task loop: workspace exploration, planning, editing, verification, sessions, skills, context planning, provider selection, and safe execution. It is usable without an IDE-hosted agent. |
-| **Starshot** | Sovereign platform beyond the developer workflow. | Forge provides a domain-neutral runtime whose developer capabilities are one pack among many, while preserving local control, portable state, and selective cloud interoperability. |
+| **Starshot** | Deeply adaptive sovereign developer CLI ecosystem. | Forge remains developer-focused while its evidence, memory, learned workflows, provider routing, and interoperable surfaces become a durable alternative to proprietary coding harnesses. |
 
 The moonshot is the product baseline we architect toward. The starshot is a longer
-product horizon. Neither authorises speculative V1 scope.
+Forge product horizon, but it remains a developer CLI/harness horizon. Neither
+authorises speculative V1 scope.
+
+## Separate-project boundary
+
+Project Sybil is not ForgeEngine's starshot, generalized mode, or eventual rename.
+It is a separate sovereign agent-orchestration platform with its own repository,
+runtime, roadmap, governance, threat model, and release gates.
+
+Forge is a pilot from which Sybil may adopt proven lessons about evidence, policy,
+transactions, recovery, local/cloud inference, memory, and learned workflows. Any
+shared protocol, schema, package, or source component requires an explicit adoption
+decision by the receiving project. Interoperability is desirable, but neither
+project is a mandatory runtime or schedule dependency of the other.
 
 ## Operating modes
 
@@ -86,9 +100,9 @@ second run model or proprietary semantics into the kernel.
    workspace snapshots, and verification artifacts must remain intelligible outside
    the originating host. This is what lets a task move from VS Code/MCP to Forge
    CLI or vice versa.
-6. **General-platform readiness comes from abstraction discipline.** Keep the
-   kernel domain-neutral and ship the developer workflow as a capability pack. Do
-   not build a hypothetical consumer platform in V1.
+6. **Developer-platform longevity comes from abstraction discipline.** Keep the
+   kernel host- and provider-neutral while Forge remains a developer CLI/harness.
+   General agent orchestration belongs to the separate Project Sybil roadmap.
 
 ## Revised language for the V1 plan
 
