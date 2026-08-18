@@ -4,8 +4,8 @@
   "private": true,
   "description": "ForgeEngine native Rust kernel for Windows arm64",
   "forgeTarget": { "platform": "win32", "architecture": "arm64" },
-  "files": ["bin"],
-  "license": "MIT",
+  "files": ["bin", "LICENSE", "NOTICE"],
+  "license": "Apache-2.0",
   "publishConfig": { "access": "public" },
   "repository": { "type": "git", "url": "git+https://github.com/celestialcactus/forge-engine.git" }
 }

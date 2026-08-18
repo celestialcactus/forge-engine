@@ -63,6 +63,8 @@ export const stageNativePackage = async (target = currentNativeTarget()) => {
     os: [platform],
     cpu: [architecture],
   }, null, 2)}\n`, 'utf8');
+  await copyFile(join(repositoryRoot, 'LICENSE'), join(packageRoot, 'LICENSE'));
+  await copyFile(join(repositoryRoot, 'NOTICE'), join(packageRoot, 'NOTICE'));
   const kernelDestination = join(binRoot, `forge-kernel${executableSuffix}`);
   await copyFile(kernelSource, kernelDestination);
   if (platform !== 'win32') {

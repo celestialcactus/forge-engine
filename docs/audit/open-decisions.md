@@ -1,6 +1,15 @@
 # Open Architectural Decisions
 
-These decisions should not be silently resolved by an implementation agent.
+**Historical audit warning:** most “current behavior” below describes the archived
+prototype, not the reconstructed engine. It is retained as evidence of the initial
+audit and must not override accepted ADRs or runtime tests.
+
+Current disposition is tracked in the
+[clarified decision register](../architecture/forgeengine-clarified-decision-register.md).
+On 2026-08-17, the project accepted Apache-2.0, the bounded alpha target matrix,
+configuration precedence, and protocol compatibility policy. Memory policy details,
+evaluation thresholds, public extension stability, rights attestation, and the
+sandbox contract refinement remain explicit gates.
 
 ## 1. V1 product boundary
 

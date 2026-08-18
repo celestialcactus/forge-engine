@@ -27,16 +27,26 @@ gate in one provider or operating system does not silently upgrade another profi
 - Public documentation must name signing, notarization, provenance, and support
   status rather than imply them from a package format.
 
-## Target matrix decision template
+## Accepted trusted-alpha target matrix
 
-The release lane must fill this table before public alpha promotion:
+This matrix bounds package publication and hosted acceptance. A native package
+template or successful ad hoc build does not create a support promise.
 
 | Target | Alpha support | Native payload | Hosted clean-install evidence | Signing/notarization | Owner |
 | --- | --- | --- | --- | --- | --- |
-| Windows x64 | Decision required | Decision required | Pending | Pending/not claimed | Release lane |
-| Windows ARM64 | Decision required | Decision required | Pending | Pending/not claimed | Release lane |
-| macOS ARM64 | Decision required | Decision required | Pending | Pending/not claimed | Release lane |
-| macOS x64 | Decision required | Decision required | Pending | Pending/not claimed | Release lane |
-| Ubuntu x64 | Compatibility decision required | Decision required | Pending | Not applicable unless packaged | Release lane |
+| Windows x64 | Supported for alpha after gate | Required | Pending replay/hosted gate | Pending/not claimed | Release lane |
+| Windows ARM64 | Deferred/unsupported | Do not publish | Not required | Not claimed | Future evidence gate |
+| macOS ARM64 | Supported for alpha after gate | Required | Pending hosted gate | Pending/not claimed | Release lane |
+| macOS x64 | Supported for alpha after gate | Required | Pending hosted gate | Pending/not claimed | Release lane |
+| Ubuntu x64 | Compatibility/CI only | CI artifact permitted; no alpha support promise | Pending replay/hosted gate | Not claimed | Release lane |
+| Linux ARM64 | Deferred/unsupported | Do not publish | Not required | Not claimed | Future evidence gate |
 
 An unchecked target is unsupported, not best-effort supported.
+
+## License and rights posture
+
+Forge-authored distributions use Apache-2.0, and root/npm/Cargo/native-package
+metadata must remain consistent. Before public publication, the maintainer still
+must attest that they are authorized to license every existing contribution and
+identify any employer or third-party rights requiring clearance. License selection
+does not prove ownership.
