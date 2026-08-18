@@ -117,3 +117,38 @@ test('does not expose superseded candidate commands or fake task execution', () 
   assert.match(run.stderr, /explicit --provider/u);
   assert.doesNotMatch(run.stdout, /totalFiles/u);
 });
+
+test('forge onboard separates accepted release contracts from remaining evidence gates', () => {
+  const environment = { ...process.env, FORGE_KERNEL_BINARY: join(fixtureRoot, 'missing-forge-kernel') };
+  const result = spawnSync(process.execPath, [
+    ...cli,
+    'onboard',
+    '--approval-profile',
+    'review',
+    '--workspace',
+    fixtureRoot,
+    '--json',
+  ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment });
+  assert.notEqual(result.status, 0);
+  const report = JSON.parse(result.stdout) as {
+    readonly runtimeReady: boolean;
+    readonly releaseReady: boolean;
+    readonly containment: { readonly profile: string; readonly enforced: boolean; readonly disclosure: string };
+    readonly configuration: { readonly precedenceStatus: string; readonly disclosure: string };
+    readonly releaseBlockers: readonly string[];
+  };
+
+  assert.equal(report.runtimeReady, false);
+  assert.equal(report.releaseReady, false);
+  assert.equal(report.containment.profile, 'trusted');
+  assert.equal(report.containment.enforced, false);
+  assert.match(report.containment.disclosure, /does not enforce an accepted OS sandbox/u);
+  assert.equal(report.configuration.precedenceStatus, 'contract_accepted_implementation_pending');
+  assert.match(report.configuration.disclosure, /managed ceilings, explicit CLI/u);
+  assert.match(report.configuration.disclosure, /policy values may only tighten/u);
+  assert.deepEqual(report.releaseBlockers, [
+    'Rights attestation for existing contributions',
+    'Hosted target acceptance and artifact provenance',
+    'Configuration precedence implementation and conformance',
+  ]);
+});

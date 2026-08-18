@@ -1,3 +1,14 @@
+# 2026-08-18 - Trusted-alpha replay passes the hosted gate
+
+- Accepted the authoritative replay as a private trusted-developer alpha
+  foundation after Node run `32128145647` passed Windows/macOS/Ubuntu and
+  hybrid/native/RustSec run `32128145686` passed the Rust/TypeScript product gate
+  on Windows/macOS/Ubuntu plus the advisory audit.
+- Retained honest boundaries: no public publication, no restricted-containment
+  claim, and no activation of the deferred sandbox or CLI8 lanes. Contributor
+  rights, configuration-loader conformance, and artifact provenance remain open.
+  See [Checkpoint 90](checkpoints/2026-08-18-90-trusted-alpha-hosted-gate.md).
+
 # 2026-08-17 - Repository authority and release contracts are explicit
 
 - Made reconstruction lineage—not a stale local path—the repository authority.
@@ -15,6 +26,20 @@
 - Added the system/build map and a memory-semantics primer. Memory normalization,
   preference promotion, privacy purge, expiry defaults, evaluation thresholds,
   and the final public extension promise remain explicit gates.
+
+# 2026-08-17 - Trusted-alpha candidate is replayed onto canonical develop
+
+- Preserved stale candidate `a023119` and replayed only its bounded release intent
+  through `c89e888` and then onto the accepted authority checkpoint `d654a92`; no
+  stale ancestry was merged.
+- Adapted onboarding and install/run/update/uninstall evidence to the accepted
+  Rust-authoritative, exact-version native package contract in ADR-0032. The
+  hosted and public release gates remain distinct.
+- Reconciled the candidate with Apache-2.0, the accepted alpha target matrix, and
+  the configuration/secret precedence contract. Pre-publication rights
+  attestation and hosted acceptance remain open. The candidate does not promote a
+  restricted provider or activate CLI8 learning work. See
+  [Checkpoint 43](checkpoints/2026-08-17-43-trusted-alpha-release-gate.md).
 
 # 2026-08-17 - Documentation ground truth and lane baselines are reconciled
 

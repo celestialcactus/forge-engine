@@ -79,7 +79,9 @@ const approvalProfileSource = values['approval-profile'] !== undefined
     ? 'environment'
     : 'default';
 const kernelResolution = resolveForgeKernelBinary();
-const kernelProbe = command === 'doctor' ? await probeForgeKernelBinary(kernelResolution) : undefined;
+const kernelProbe = command === 'doctor' || command === 'onboard'
+  ? await probeForgeKernelBinary(kernelResolution)
+  : undefined;
 const requireKernel = (): string => requireForgeKernelBinary(kernelResolution);
 let approvalIo: InteractiveSessionIo | undefined;
 const interactiveIo = (): InteractiveSessionIo => {
@@ -360,7 +362,11 @@ const printArtifact = (artifact: RunArtifact): void => {
 
 
 try {
-  if (values.json && approvalProfile === 'review' && command !== 'doctor' && command !== 'help') {
+  if (values.json
+    && approvalProfile === 'review'
+    && command !== 'doctor'
+    && command !== 'onboard'
+    && command !== 'help') {
     throw new Error('--json cannot be combined with --approval-profile review because consent prompts require human-mode output.');
   }
   if (command === 'doctor') {
@@ -429,6 +435,61 @@ try {
     console.log(values.json
       ? JSON.stringify(report)
       : `ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}\nNode: ${report.node}\nRuntime: ${report.runtime}\nKernel: ${report.kernel.path ?? report.kernel.message}\nMCP: ${report.mcp}\nRun store: ${report.runStore.root} (${report.runStore.recovery})\nState separation: ${report.configuration.message}\nExecution defaults: calls=${report.executionDefaults.maxCapabilityCalls}, input=${report.executionDefaults.maxReportedInputTokens}, output=${report.executionDefaults.maxReportedOutputTokens}\nApproval profile: ${report.approval.profile} (${report.approval.source}); authority=${report.approval.decisionAuthority}\nChange flow: ${report.changeFlow}\nIsolation: ${report.isolation.posture}; provider=${report.isolation.providerId ?? 'unavailable'}; class=${report.isolation.providerClass ?? 'unknown'}; availability=${report.isolation.availability}; restricted-ready=${report.isolation.restrictedReady}\nIsolation candidates: ${isolationCandidateSummary}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
+  } else if (command === 'onboard') {
+    const configuredEngineRoot = engineRoot();
+    const stateSeparation = changeStateSeparation(workspaceRoot, configuredEngineRoot);
+    const runtimeReady = kernelProbe?.ready === true && stateSeparation.valid;
+    const report = {
+      ok: runtimeReady,
+      profile: 'trusted-developer-alpha',
+      runtimeReady,
+      releaseReady: false,
+      workspaceRoot,
+      engineRoot: configuredEngineRoot,
+      kernel: {
+        ready: kernelProbe?.ready === true,
+        path: kernelResolution.path ?? null,
+        source: kernelResolution.source ?? null,
+        message: kernelProbe?.message ?? kernelResolution.message,
+      },
+      approval: {
+        profile: approvalProfile,
+        source: approvalProfileSource,
+        authority: 'rust-kernel',
+      },
+      containment: {
+        profile: 'trusted',
+        enforced: false,
+        disclosure: 'Trusted execution inherits the developer account permissions; Forge owns process lifecycle but does not enforce an accepted OS sandbox.',
+      },
+      configuration: {
+        stateSeparation: stateSeparation.message,
+        precedenceStatus: 'contract_accepted_implementation_pending',
+        disclosure: 'Precedence is managed ceilings, explicit CLI, environment/secret references, workspace, user, then built-ins; policy values may only tighten. Full loading and conformance remain pending.',
+      },
+      nextCommands: [
+        'forge doctor --json',
+        'forge inspect --json --max-files 1',
+        'forge --provider ollama --model <installed-model>',
+      ],
+      releaseBlockers: [
+        'Rights attestation for existing contributions',
+        'Hosted target acceptance and artifact provenance',
+        'Configuration precedence implementation and conformance',
+      ],
+    } as const;
+    if (!runtimeReady) process.exitCode = 1;
+    if (values.json) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log('ForgeEngine trusted developer alpha onboarding');
+      console.log(`Runtime: ${report.runtimeReady ? 'ready' : 'not ready'}`);
+      console.log(`Kernel: ${report.kernel.path ?? report.kernel.message}`);
+      console.log(`State: ${report.configuration.stateSeparation}`);
+      console.log(`Trust disclosure: ${report.containment.disclosure}`);
+      console.log(`Release status: private acceptance candidate; ${report.releaseBlockers.join('; ')}`);
+      for (const next of report.nextCommands) console.log(`Next: ${next}`);
+    }
   } else if (command === 'runs') {
     const operation = positionals[1];
     const runId = positionals[2]?.trim() ?? '';
@@ -693,6 +754,7 @@ try {
       '',
       'Evidence commands:',
       '  forge doctor [--json] [--workspace <path>]',
+      '  forge onboard [--json] [--workspace <path>]',
       '  forge runs inspect <run-id> [--json] [--engine-root <path>]',
       '  forge runs resume <run-id> --provider <ollama|openai> --model <model> [--retry-evidence] [--json]',
       '    Resume replays validated completions through the same Rust runtime; ambiguous provider, approval, and mutation work stays blocked.',
