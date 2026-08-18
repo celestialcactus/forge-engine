@@ -148,7 +148,7 @@ test('forge onboard separates accepted release contracts from remaining evidence
   assert.match(report.configuration.disclosure, /policy values may only tighten/u);
   assert.deepEqual(report.releaseBlockers, [
     'Rights attestation for existing contributions',
-    'Hosted target acceptance and artifact provenance',
+    'Public artifact signing and provenance',
     'Configuration precedence implementation and conformance',
   ]);
 });

@@ -474,7 +474,7 @@ try {
       ],
       releaseBlockers: [
         'Rights attestation for existing contributions',
-        'Hosted target acceptance and artifact provenance',
+        'Public artifact signing and provenance',
         'Configuration precedence implementation and conformance',
       ],
     } as const;
