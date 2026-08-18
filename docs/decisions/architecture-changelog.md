@@ -1,3 +1,14 @@
+# 2026-08-18 - Trusted-alpha replay passes the hosted gate
+
+- Accepted the authoritative replay as a private trusted-developer alpha
+  foundation after Node run `32128145647` passed Windows/macOS/Ubuntu and
+  hybrid/native/RustSec run `32128145686` passed the Rust/TypeScript product gate
+  on Windows/macOS/Ubuntu plus the advisory audit.
+- Retained honest boundaries: no public publication, no restricted-containment
+  claim, and no activation of the deferred sandbox or CLI8 lanes. Contributor
+  rights, configuration-loader conformance, and artifact provenance remain open.
+  See [Checkpoint 90](checkpoints/2026-08-18-90-trusted-alpha-hosted-gate.md).
+
 # 2026-08-17 - Repository authority and release contracts are explicit
 
 - Made reconstruction lineage—not a stale local path—the repository authority.

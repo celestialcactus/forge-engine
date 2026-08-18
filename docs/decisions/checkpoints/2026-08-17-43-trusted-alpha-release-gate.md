@@ -57,7 +57,7 @@ configuration, documentation, sandbox, or CLI8 assumptions.
 | Replay contains no stale candidate ancestry | Passed |
 | Local TypeScript/Rust/hybrid/product gate | Passed with Rust 1.97.1 gnullvm fallback: formatting/Clippy, 175 Rust tests with 16 explicit ignores, 97 Node tests, 63 hybrid tests with 7 explicit environment skips, build, MCP, kernel discovery, and product smoke |
 | Local exact-version package lifecycle | Passed for `forge-engine@0.1.0` + `forge-engine-kernel-win32-x64@0.1.0`: pack, clean install, packaged-kernel doctor, Rust-backed inspect, update, and uninstall |
-| Hosted Windows/macOS/Ubuntu workflows | Pending branch push and dispatch |
+| Hosted Windows/macOS/Ubuntu workflows | Passed on candidate `264e477`: Node run `32128145647` passed Windows/macOS/Ubuntu; hybrid/native/RustSec run `32128145686` passed Windows/macOS/Ubuntu plus the advisory audit. Final acceptance is recorded in Checkpoint 90. |
 
 The default MSVC attempt stopped before project compilation because this
 workstation does not provide `link.exe`. The established
@@ -69,8 +69,9 @@ the MSVC-native acceptance authority.
 - Trusted execution is not OS containment; no restricted provider is promoted.
 - CLI8 learning modules are untouched and inactive.
 - Private acceptance archives are not a public npm/open-source release.
-- Contributor rights attestation, configuration precedence implementation,
-  signing/provenance, and exact hosted evidence remain open gates.
+- Contributor rights attestation, configuration precedence implementation, and
+  signing/provenance remain open gates. Exact hosted candidate evidence passed;
+  public artifact publication remains separate and has not occurred.
 
 ## Repository state
 
@@ -81,6 +82,6 @@ replay commit; it does not borrow acceptance from `a023119` or `c89e888`.
 
 ## Next checkpoint
 
-Record the exact local and hosted workflow results for the replay commit. Public
-promotion remains blocked until the rights, configuration-implementation,
-provenance, and hosted-evidence gates above are closed.
+Use Checkpoint 90 as the exact hosted closeout. Public promotion remains blocked
+until the rights, configuration-implementation, and provenance gates above are
+closed.
