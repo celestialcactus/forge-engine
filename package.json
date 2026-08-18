@@ -28,6 +28,7 @@
     "package:native:pack": "node scripts/pack-native-package.mjs",
     "package:smoke:prepared": "node scripts/package-smoke.mjs",
     "package:smoke": "npm run rust:build:release && npm run build && node scripts/package-smoke.mjs",
+    "repo:authority": "node scripts/assert-repository-authority.mjs",
     "test:hybrid": "tsx --test tests/hybrid/**/*.hybrid.ts",
     "benchmark:hybrid": "tsx scripts/benchmark-hybrid.mts",
     "check:hybrid": "npm run rust:fmt && npm run rust:lint && npm run rust:test && npm run rust:build && npm run check && npm run test:hybrid",
@@ -37,14 +38,16 @@
   "engines": {
     "node": ">=22.0.0"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "devDependencies": {
     "@types/node": "22.18.1",
     "tsx": "4.20.5"
   },
   "files": [
     "dist/src",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "exports": {
     ".": {

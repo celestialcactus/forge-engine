@@ -2,7 +2,7 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
-**Last groomed:** 2026-08-17 after the documentation ground-truth reconciliation
+**Last groomed:** 2026-08-17 after repository/contract authority clarification
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
 
@@ -13,7 +13,10 @@ the live branch dashboard. The [current execution index](../execution/current.md
 records the accepted implementation baseline, active lanes, dependencies, merge
 order, and unresolved decisions. The
 [release profiles](forgeengine-release-profiles.md) define which product and
-containment claims are permitted at each delivery stage.
+containment claims are permitted at each delivery stage. The
+[clarified decision register](forgeengine-clarified-decision-register.md) and
+[system map](forgeengine-v1-system-map.md) provide the current human-readable
+decision summary and architecture diagram.
 
 Runtime schemas and tests describe implemented behavior, accepted ADRs describe
 durable decisions, this plan describes scope and gates, slice tasks bound an
@@ -105,8 +108,9 @@ learned skills, provider expansion, and broader durable projections remain behin
 this functional core; the accepted local/cloud paths and bounded run recovery are
 not reopened by that sequencing.
 
-The current critical path is `CLI7-ALPHA`, the clean-install trusted developer
-alpha described in the [execution index](../execution/current.md). Native
+The current short gate is `ARCH-AUTHORITY`, after which the critical path returns to
+`CLI7-ALPHA`, the clean-install trusted developer alpha described in the
+[execution index](../execution/current.md). Native
 restricted execution continues as the independent `SBX-PROVIDER-LIFECYCLE` lane;
 an additive `CLI8A-MEMORY-FOUNDATION` candidate may be prepared in parallel but
 cannot become runtime-active before its evaluation and integration gates.
@@ -575,13 +579,19 @@ and explicit promote or discard. Local/cloud provider routing remains desirable
 but must not displace completion of that loop. Integration-specific tools remain
 in TypeScript unless measurement proves a machinery reason to move them.
 
-Before public promotion, the repository must contain a complete root license and
-consistent package/Cargo metadata. Apache-2.0 is the current technical candidate
-for an enterprise-forkable project because of its explicit patent terms; MIT is
-the existing manifest declaration. License selection requires an explicit owner
-decision and appropriate company legal/open-source review. Contribution guidance,
-provenance, dependency-license review, and third-party notices follow the selected
-license rather than being inferred from package metadata.
+Apache-2.0 is selected for Forge-authored distributions and the root/npm/Cargo/
+native-package metadata is aligned under ADR-0036. This resolves the technical
+license choice, not contribution ownership. Public promotion still requires the
+maintainer to attest that they can license the existing work and to resolve any
+employer or third-party rights. Contribution guidance, provenance, dependency-
+license review, and third-party notices remain release evidence rather than being
+inferred from an SPDX field.
+
+The trusted-alpha matrix is Windows x64 plus macOS ARM64/x64. Ubuntu x64 remains a
+compatibility/CI target; Windows ARM64 and Linux ARM64 are deferred. Configuration
+uses the ADR-0036 precedence and monotonic-authority rules. Protocol evolution uses
+ADR-0037 negotiation and copy-on-write migration. These are accepted contracts;
+their runtime/hosted fixtures remain part of the release gate.
 
 ## Core completion and delivery forecast
 
@@ -590,12 +600,12 @@ not source volume or the number of abstractions present.
 
 | Gate group | State | Evidence or open condition |
 | --- | --- | --- |
-| Canonical runtime, real inference/live loop, governed change, cancellation-safe approvals | Accepted on `develop`; consolidated implementation baseline is `4e15226` (PR #24) | Cross-platform hosted, live-provider, controlled VS Code, transaction, and local sandbox-conformance evidence is recorded by the linked checkpoints. This does not promote restricted execution. |
+| Canonical runtime, real inference/live loop, governed change, cancellation-safe approvals | Accepted on `develop`; implementation baseline `4e15226` plus documentation baseline `5fff597` (PR #25) | Cross-platform hosted, live-provider, controlled VS Code, transaction, and local sandbox-conformance evidence is recorded by the linked checkpoints. This does not promote restricted execution. |
 | 5B execution controls | Accepted and merged on `develop` at `74308ca` | Local, hosted Windows/macOS/Ubuntu, live Qwen, conservative credentialed OpenAI, and one-call controlled VS Code gates pass. See Checkpoints 68-70. |
 | 5C policy posture and host callback conformance | Accepted at implementation `2941948` | One fact-producing profile layer serves CLI/service/MCP while Rust alone decides. Local, exact-kernel, live Qwen 1.5B, controlled VS Code, and hosted Windows/macOS/Ubuntu gates pass. See ADR-0028 and Checkpoints 71-72. |
 | Minimum outer-run recovery | 6A/6B, atomic initialization, and ChangeSet cross-link local/VS Code gates passed; hosted pending | Rust durably records request/events/artifact plus the bounded interaction transcript. Terminal return and proven-safe same-runtime continuation work locally; ambiguous and non-idempotent frontiers block. Complete initial state is privately staged and atomically published. A pending governed change now carries one durably acknowledged reference to its registered authoritative ChangeSet transaction while the outer capability remains non-replayable. Hosted Windows/macOS/Ubuntu remains open. |
 | Transaction retention and isolation truth | 7A local gate and Windows five-control same-plan gate accepted; production/hosted/VS Code pending | Lock-safe transaction retention remains accepted. Managed Windows and AppContainer each pass the fresh 17-case schema-v4 corpus under Rust-owned lifecycle/resource/evidence authority; probe v4 reports both as `setup_required` and restricted-ready false. The separately attributed schema-2 payload/bundle/guest/host lifecycle gate is prepared and locally verifies exact package/hash/license/NOTICE separation. The consolidated branch also passes the complete product, native-package, audit, benchmark, script, and fresh dual-provider local publication gates, but no VM phase or real second-pin upgrade has run. Broader credential channels, hosted Windows, macOS, and VS Code gates remain open. See [ADR-0031](../decisions/ADRs/ADR-0031-transaction-retention-and-native-sandbox-sequencing.md), [ADR-0033](../decisions/ADRs/ADR-0033-sandbox-policy-compilation-and-provider-conformance.md), [Checkpoint 83](../decisions/checkpoints/2026-08-12-83-managed-windows-provider-adapter-local-gate.md), [Checkpoint 84](../decisions/checkpoints/2026-08-12-84-packaged-provider-lifecycle-gate-preparation.md), and [Checkpoint 85](../decisions/checkpoints/2026-08-12-85-consolidated-transaction-sandbox-local-gate.md). |
-| Installable developer alpha | Windows x64 package contract passes locally; release gate open | ADR-0032 packages exact-version target-native release binaries without postinstall download/build. Hosted Windows/macOS target smokes, signing/notarization/provenance, root license, effective config/doctor guidance, update tests, and the developer test kit remain open. |
+| Installable developer alpha | License and matrix contracts selected; release candidate replay and hosted gate open | ADR-0032 packages exact-version target-native release binaries without postinstall download/build. Apache-2.0 and Windows x64/macOS ARM64/x64 support are selected under ADR-0036. Effective-config implementation, candidate replay, hosted target smokes, rights attestation, signing/notarization/provenance, update tests, and the developer test kit remain open. |
 | Differentiated learning loop | Additive CLI8A candidate may be prepared in parallel; activation remains after trusted alpha | Attributable scoped memory, measured retrieval, pattern recognition, and reviewed skill promotion become the product critical path under ADR-0034. Stale-base candidate `b5effea` must be replayed and tested before review. Exit: one repeated-workflow fixture proves quality/effort improvement over a no-memory baseline without hidden instructions or policy bypass. |
 | Broader V1 platform | Deferred beyond the bounded learning loop | Advanced compression/retrieval, MCP client/mutation symmetry, connectors, automation, and generalized UI retain their later roadmap gates. Windows/macOS restricted providers continue as a bounded, actively scheduled commodity-platform lane under ADR-0031/0033/0034 and cannot borrow acceptance from trusted mode. |
 
@@ -616,7 +626,7 @@ expansion, the current planning ranges are:
 - 5B Rust-owned execution budgets: **accepted at implementation `3f2774b` after local 86-test/build/audit, hosted Windows/macOS/Ubuntu, live Qwen normal and tiny-budget gates, conservative credentialed OpenAI, and a controlled one-call seven-tool VS Code gate; merged through PR #22 at `74308ca`**;
 - 5C product approval profiles: **accepted at implementation `2941948` after local 91-test/build, full 54-test retained-kernel hybrid, live Qwen 1.5B grant/decline, controlled one-call VS Code, and hosted Node/hybrid Windows/macOS/Ubuntu gates**;
 - 6A/6B outer-run recovery: **local and controlled VS Code gates pass through bridge v10 with 93 Node tests/build, zero-warning full Rust workspace validation, 62 hybrid scenarios (56 passed and six explicit separate-kernel skips), packaged CLI smoke, deterministic same-runtime replay, one-total evidence retry, OS-owned locking, atomic whole-directory initialization, terminal temporary-artifact recovery, fail-closed ambiguous/non-idempotent frontiers, and a durably acknowledged pending ChangeSet transaction cross-link; the current controlled VS Code gate completed in one Forge call and five seconds; hosted Windows/macOS/Ubuntu acceptance remains pending**;
-- shippable standalone CLI alpha: **planning range 5-8 focused working days from the 2026-08-17 reconciliation**, contingent on replaying the release candidate onto current `develop`, a prompt license/target-matrix decision, cross-platform native packaging, and exact-head hosted acceptance; native restricted execution remains a separately gated pilot boundary;
+- shippable standalone CLI alpha: **planning range 5-8 focused working days from the 2026-08-17 reconciliation**, contingent on replaying the release candidate onto current `develop`, implementing the accepted effective-config contract, cross-platform native packaging, rights attestation, and exact-head hosted acceptance; native restricted execution remains a separately gated pilot boundary;
 - first attributable memory/retrieval demonstration: **about one focused week after the installable alpha gate**;
 - reviewed pattern-to-skill vertical slice: **a further 2-3 focused weeks**, contingent on the evaluation fixture proving better accepted outcomes rather than token reduction alone;
 - broader enterprise pilot with real restricted execution and policy integration:
@@ -674,7 +684,8 @@ promoted Qwen, and controlled VS Code gates before merging through PR #20 at
 service, and MCP, with Rust still resolving every final decision. Implementation
 `2941948` passed the local, exact-kernel, live Qwen 1.5B, controlled VS Code, and
 hosted Node/hybrid Windows/macOS/Ubuntu gates and is accepted as increment 5C.
-Current `develop` is the consolidated PR #24 implementation baseline `4e15226`.
+Current `develop` is PR #25 merge `5fff597`; it contains the consolidated PR #24
+implementation baseline `4e15226` plus the documentation ground-truth correction.
 CLI ship-lane 7A passes the full local Rust/Node/exact-kernel hybrid and source-built
 CLI smoke gate with bounded transaction audit and truthful isolation readiness;
 hosted/VS Code acceptance is still open.

@@ -2,7 +2,7 @@
 
 **Status:** operational ground truth for active ForgeEngine delivery
 **As of:** 2026-08-17
-**Accepted implementation baseline:** `origin/develop` at `4e15226` (PR #24)
+**Accepted implementation baseline:** `origin/develop` at `5fff597` (PR #25)
 **Documentation baseline:** the commit containing this file
 
 This file answers what is active now. The
@@ -26,6 +26,12 @@ When documents appear to disagree, use this order:
 An older audit remains useful evidence for the revision it names, but it does not
 override a newer accepted checkpoint or this index.
 
+Repository/worktree authority is defined by
+[ADR-0035](../decisions/ADRs/ADR-0035-canonical-repository-and-worktree-authority.md)
+and the [authority workflow](../development/repository-authority.md). A new lane
+must contain reconstruction anchor `5fff597` and the fetched `origin/develop`; a
+Codex worktree created from the old OneDrive prototype is not authoritative.
+
 ## Current release objective
 
 The critical path is **CLI7-ALPHA: an installable trusted developer alpha**. It must
@@ -41,8 +47,9 @@ claims permitted at each delivery stage.
 
 | Lane | Canonical ID | State on 2026-08-17 | Authority and next gate |
 | --- | --- | --- | --- |
-| Documentation reconciliation | `DOC-GROUND-TRUTH` | In review on top of `4e15226` | Merge the Forge/Sybil identity correction, this execution index, release profiles, refreshed plan status, and checkpoint before implementation lanes integrate. |
-| Trusted-alpha release | `CLI7-ALPHA` | Candidate commit `a023119` exists, but it was created from stale baseline `aa73e0e`; not merge-ready | Replay the bounded release diff onto the new `origin/develop`, resolve the license/package decisions below, run local plus hosted Windows/macOS/Ubuntu checks, and open a separate PR. |
+| Documentation reconciliation | `DOC-GROUND-TRUTH` | Accepted at `5fff597` through PR #25 | Preserve Checkpoint 88 and the execution/release-profile authority during every lane replay. |
+| Authority and contract clarification | `ARCH-AUTHORITY` | Active on top of `5fff597` | Merge the authority guard, Apache-2.0 alignment, target/config/protocol decisions, memory primer, and system map before replaying release or learning candidates. |
+| Trusted-alpha release | `CLI7-ALPHA` | Candidate commit `a023119` exists, but it was created from stale baseline `aa73e0e`; not merge-ready | After `ARCH-AUTHORITY`, replay only the bounded release diff from fresh `origin/develop`, implement/test effective config, and run local plus hosted matrix checks. |
 | Sandbox provider lifecycle | `SBX-PROVIDER-LIFECYCLE` | Active isolated worktree based on `4e15226`; uncommitted and unaccepted | Complete disposable-Windows-VM install/upgrade/uninstall/reboot/residue evidence. Do not advertise `restrictedReady` or promote a provider until the exact gate passes. |
 | Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Candidate commit `b5effea` exists, but it was created from stale baseline `aa73e0e`; not merge-ready and not runtime-active | Replay the additive memory foundation onto the new `origin/develop`, settle the memory decisions below, run real Rust tests, then review as a separate PR. Automatic retrieval and skill activation remain out of scope. |
 
@@ -51,9 +58,10 @@ state. Their commits must be replayed instead of merging their old branch ancest
 
 ## Merge order and shared-boundary rule
 
-1. Merge `DOC-GROUND-TRUTH`.
+1. Merge `ARCH-AUTHORITY` after its read-only guard and documentation gate passes.
 2. Replay and validate `CLI7-ALPHA`; merge it when the trusted-alpha gate passes.
-3. Replay and validate `CLI8A-MEMORY-FOUNDATION`; integration may be prepared in
+3. Settle the four memory policy choices, then replay and validate
+   `CLI8A-MEMORY-FOUNDATION`; integration may be prepared in
    parallel, but runtime retrieval remains gated by CLI8B evaluation.
 4. Merge `SBX-PROVIDER-LIFECYCLE` only after its independent VM/provider gate; its
    timing does not redefine the trusted-alpha claim.
@@ -68,22 +76,23 @@ rebased and reconciled before merge rather than resolved by taking an entire sid
 
 | Priority | Decision | Why it blocks or bounds work | Decision owner/output |
 | --- | --- | --- | --- |
-| P0 | Root project license and rights owner | Public distribution cannot rely on the stale `MIT` package field while the plan names Apache-2.0 only as a candidate. | Project owner with appropriate legal/open-source review; root license plus consistent npm/Cargo metadata and notices. |
-| P0 | Supported alpha target/package matrix | Package names, CPU targets, native payload lookup, hosted jobs, and support claims depend on it. | Product/release decision recorded in the release task and profile matrix. |
-| P0 | Effective configuration and secret precedence | `doctor`, reproducibility, provider routing, and safe support output need one deterministic rule. | ADR or accepted release contract covering CLI, workspace, user, environment, defaults, redaction, and tightening rules. |
+| P0 | Public rights attestation | Apache-2.0 is selected and metadata aligned, but the license cannot prove whether employer or third-party rights apply. | Maintainer/legal or open-source review before package publication. |
+| P0 | Effective configuration implementation | Precedence and monotonic policy tightening are accepted in ADR-0036; runtime fixtures and `doctor` source/redaction output remain open. | Release-lane implementation and tests. |
 | P1 | Sandbox requirement/binding/lifecycle split | The provider must not become a second policy authority or receive two competing launch truths. | ADR-0033 refinement after the current conformance spike. |
-| P1 | Memory semantic identity and lifecycle | Repeated facts, corrections, expiry, deletion, and scope cannot be inferred safely after public data exists. | CLI8A ADR plus fixtures before its merge. |
-| P1 | Protocol compatibility and migration window | Run artifacts, bridge messages, ledgers, and future memory records need explicit old-version inspection and upgrade behavior. | Versioning ADR before another public schema bump. |
+| P1 | Memory policy choices | Claim/observation identity, append-only corrections, and no implicit scope widening are recommended; normalization, preference promotion, privacy purge, and expiry defaults remain open. | Review the memory primer and settle with CLI8 fixtures before replay. |
+| P1 | Protocol implementation | ADR-0037 accepts negotiation and copy-on-write migration; current code still needs handshake/migration fixtures before another public schema bump. | Protocol increment with golden compatibility tests. |
 | P1 | Evaluation budgets | Small-model quality, latency, filesystem scans, tokens, retries, and accepted outcome need ceilings to prevent locally efficient-looking regressions. | Shared acceptance matrix before automatic retrieval/routing. |
 | P2 | Public extension boundary | MCP, embedded hosts, skills, and future plugins need a declared stable surface without freezing private internals. | Post-alpha API/extension ADR before third-party integration promises. |
 
 ## Next three gates
 
-1. Documentation PR merged and all lanes rebased or replayed from its resulting
-   `origin/develop`.
-2. `CLI7-ALPHA` clean-install and hosted acceptance, with license and target matrix
-   resolved or the distribution explicitly kept private.
-3. `CLI8A` foundation plus CLI8B no-memory/retrieved-memory evaluation, with no
+1. Merge `ARCH-AUTHORITY`, then re-open the canonical reconstruction as the Codex
+   project so new worktrees cannot inherit the archived prototype.
+2. `CLI7-ALPHA` replay, effective-config implementation, clean-install, and hosted
+   acceptance on the ADR-0036 matrix; public publication still requires rights
+   attestation.
+3. Settle memory policy, then replay `CLI8A` and run CLI8B no-memory/retrieved-memory
+   evaluation, with no
    automatic retrieval until measurable quality and isolation gates pass.
 
 The sandbox VM gate remains an independently scheduled fourth gate unless its

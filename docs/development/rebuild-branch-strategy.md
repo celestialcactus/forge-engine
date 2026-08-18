@@ -18,7 +18,10 @@
 
 ## Normal flow
 
-1. Fetch `origin/develop` and create a bounded feature branch from that exact head.
+1. Fetch `origin/develop`, run
+   `npm run repo:authority -- --require-current-develop`, and create a bounded
+   feature branch from that exact head. See the
+   [repository authority workflow](repository-authority.md).
 2. Open a draft PR into `develop` early when collaboration or hosted gates need the
    remote branch.
 3. Keep the PR draft while the increment is incomplete or an acceptance gate is
@@ -42,8 +45,12 @@ git pull --ff-only origin develop
 ```
 
 A new checkout can use `git switch --track origin/develop`. Local worktrees should
-compare `git rev-parse HEAD` with `git rev-parse origin/develop` before claiming they
+run `npm run repo:authority -- --require-current-develop` before claiming they
 contain the consolidated version.
+
+The reconstruction anchor in ADR-0035 is permanent. A stale candidate is replayed
+as a bounded diff from current `origin/develop`; its old ancestry is never merged to
+recover implementation work.
 
 ## Hotfix flow
 

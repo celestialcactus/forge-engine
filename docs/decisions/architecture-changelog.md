@@ -1,3 +1,21 @@
+# 2026-08-17 - Repository authority and release contracts are explicit
+
+- Made reconstruction lineage—not a stale local path—the repository authority.
+  New lanes must contain PR #25 anchor `5fff597` and the fetched
+  `origin/develop`; stale candidates are replay-only. See ADR-0035 and Checkpoint
+  89.
+- Selected Apache-2.0 for Forge-authored distributions, aligned npm/Cargo/native
+  package metadata, and retained a separate pre-publication rights attestation.
+- Accepted Windows x64 and macOS ARM64/x64 for the trusted alpha, Ubuntu x64 as a
+  compatibility target, and deferred Windows ARM64/Linux ARM64. Accepted
+  selection precedence plus monotonic policy tightening in ADR-0036.
+- Accepted per-contract live negotiation and copy-on-write durable migration in
+  ADR-0037, calibrated against public MCP, Codex, Claude Code, and Gemini CLI
+  protocol/release patterns.
+- Added the system/build map and a memory-semantics primer. Memory normalization,
+  preference promotion, privacy purge, expiry defaults, evaluation thresholds,
+  and the final public extension promise remain explicit gates.
+
 # 2026-08-17 - Documentation ground truth and lane baselines are reconciled
 
 - Reconciled the ForgeEngine documentation hierarchy and active-lane truth on top
