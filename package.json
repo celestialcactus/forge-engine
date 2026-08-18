@@ -14,6 +14,8 @@
     "build:product": "npm run rust:build && npm run build",
     "dev": "tsx src/cli.ts",
     "forge": "node dist/src/cli.js",
+    "onboard": "npm run build:product && node dist/src/cli.js onboard",
+    "release:smoke": "npm run package:smoke",
     "test": "tsx --test tests/**/*.test.ts",
     "typecheck": "tsc -p tsconfig.v1.json --noEmit && tsc -p tsconfig.scripts.json",
     "check": "npm run typecheck && npm test && npm run build",

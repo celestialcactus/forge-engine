@@ -5,3 +5,8 @@ This product is made available under the Apache License, Version 2.0.
 This file records distribution attribution only. It does not determine ownership
 of individual contributions. Release provenance must preserve any attribution
 notices required by bundled third-party material.
+
+The trusted developer alpha main package and target-native packages are built
+from this repository. Public publication remains gated on rights attestation and
+preservation of any additional notices identified by dependency or provenance
+review.

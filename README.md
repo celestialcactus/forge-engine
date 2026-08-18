@@ -60,8 +60,36 @@ remains the explicit non-interactive and JSON automation surface.
 - OpenAI transport conformance is tested, but a live cloud acceptance run requires
   the user's own `OPENAI_API_KEY`; Forge does not accept credentials as CLI flags or
   write them into run evidence.
-- Final npm/native binary packaging and clean-install release smoke are still open.
-  The current developer alpha is run from a source checkout.
+- Exact-version native package scaffolding and a local clean-install smoke exist;
+  Apache-2.0, the trusted-alpha target matrix, and configuration precedence are
+  accepted contracts. Hosted target acceptance, signing/provenance, contributor
+  rights attestation, and complete precedence implementation/conformance remain
+  open. Until those gates close, this is a private acceptance candidate rather
+  than a publicly shippable alpha.
+
+## Trusted-alpha acceptance spike
+
+From a source checkout, one-command onboarding builds the Rust/TypeScript product
+and reports runtime readiness, the trusted/no-containment posture, accepted
+release contracts, and remaining evidence gates:
+
+```powershell
+npm run onboard
+```
+
+The complete current-host package lifecycle spike builds release binaries, packs
+the exact-version main and native packages, installs them in an empty project,
+runs doctor plus a real Rust-backed inspection, updates the exact pair, and
+uninstalls both packages:
+
+```powershell
+npm run release:smoke
+```
+
+See [the trusted developer alpha test kit](docs/release/trusted-developer-alpha-test-kit.md)
+for bounded prompts, expected evidence, and issue-reporting guidance. This command
+is acceptance evidence for the current host; it does not prove hosted targets,
+artifact provenance, or ownership rights for every existing contribution.
 
 ## Development from source
 

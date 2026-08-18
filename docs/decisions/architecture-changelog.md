@@ -16,6 +16,20 @@
   preference promotion, privacy purge, expiry defaults, evaluation thresholds,
   and the final public extension promise remain explicit gates.
 
+# 2026-08-17 - Trusted-alpha candidate is replayed onto canonical develop
+
+- Preserved stale candidate `a023119` and replayed only its bounded release intent
+  through `c89e888` and then onto the accepted authority checkpoint `d654a92`; no
+  stale ancestry was merged.
+- Adapted onboarding and install/run/update/uninstall evidence to the accepted
+  Rust-authoritative, exact-version native package contract in ADR-0032. The
+  hosted and public release gates remain distinct.
+- Reconciled the candidate with Apache-2.0, the accepted alpha target matrix, and
+  the configuration/secret precedence contract. Pre-publication rights
+  attestation and hosted acceptance remain open. The candidate does not promote a
+  restricted provider or activate CLI8 learning work. See
+  [Checkpoint 43](checkpoints/2026-08-17-43-trusted-alpha-release-gate.md).
+
 # 2026-08-17 - Documentation ground truth and lane baselines are reconciled
 
 - Reconciled the ForgeEngine documentation hierarchy and active-lane truth on top

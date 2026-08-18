@@ -29,6 +29,7 @@ jobs:
         os:
           - windows-latest
           - macos-latest
+          - ubuntu-latest
 
     steps:
       - name: Check out repository
