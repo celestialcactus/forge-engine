@@ -1,8 +1,8 @@
 # ForgeEngine current execution index
 
 **Status:** operational ground truth for active ForgeEngine delivery
-**As of:** 2026-08-17
-**Accepted implementation baseline:** `origin/develop` at `5fff597` (PR #25)
+**As of:** 2026-08-19
+**Accepted implementation baseline:** `origin/develop` at `2882550` (PR #28)
 **Documentation baseline:** the commit containing this file
 
 This file answers what is active now. The
@@ -34,36 +34,48 @@ Codex worktree created from the old OneDrive prototype is not authoritative.
 
 ## Current release objective
 
-The critical path is **CLI7-ALPHA: an installable trusted developer alpha**. It must
-be easy to install, diagnose, run, update, and remove on the declared Windows and
-macOS targets. It must state that trusted execution has no Forge-enforced OS
-containment. Native restricted providers continue independently and cannot borrow
-or block trusted-alpha acceptance.
+The private **CLI7-ALPHA distribution and onboarding foundation is accepted**
+through PR #27 and Checkpoint 90. The current implementation gate is the
+[ADR-0036 effective-configuration slice](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md):
+precedence, monotonic policy tightening, secret redaction, and effective-source
+reporting. Its QRSPI design lock is accepted; runtime implementation has not
+started. The 2026-08-19 design lock assigns organizational inference governance to
+the operator while Forge retains faithful/no-fallback routing and intrinsic harness
+security. Public distribution
+also requires contributor-rights attestation and artifact signing/provenance.
+Trusted execution has no Forge-enforced OS containment. Native restricted providers
+continue independently and cannot borrow or block trusted-alpha acceptance.
 
 See the [release profiles](../architecture/forgeengine-release-profiles.md) for the
 claims permitted at each delivery stage.
 
 ## Active lanes
 
-| Lane | Canonical ID | State on 2026-08-17 | Authority and next gate |
+| Lane | Canonical ID | State on 2026-08-18 | Authority and next gate |
 | --- | --- | --- | --- |
 | Documentation reconciliation | `DOC-GROUND-TRUTH` | Accepted at `5fff597` through PR #25 | Preserve Checkpoint 88 and the execution/release-profile authority during every lane replay. |
-| Authority and contract clarification | `ARCH-AUTHORITY` | Active on top of `5fff597` | Merge the authority guard, Apache-2.0 alignment, target/config/protocol decisions, memory primer, and system map before replaying release or learning candidates. |
-| Trusted-alpha release | `CLI7-ALPHA` | Candidate commit `a023119` exists, but it was created from stale baseline `aa73e0e`; not merge-ready | After `ARCH-AUTHORITY`, replay only the bounded release diff from fresh `origin/develop`, implement/test effective config, and run local plus hosted matrix checks. |
-| Sandbox provider lifecycle | `SBX-PROVIDER-LIFECYCLE` | Active isolated worktree based on `4e15226`; uncommitted and unaccepted | Complete disposable-Windows-VM install/upgrade/uninstall/reboot/residue evidence. Do not advertise `restrictedReady` or promote a provider until the exact gate passes. |
-| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Candidate commit `b5effea` exists, but it was created from stale baseline `aa73e0e`; not merge-ready and not runtime-active | Replay the additive memory foundation onto the new `origin/develop`, settle the memory decisions below, run real Rust tests, then review as a separate PR. Automatic retrieval and skill activation remain out of scope. |
+| Authority and contract clarification | `ARCH-AUTHORITY` | Accepted through PR #26 (`70a3288`) | Preserve the repository guard, Apache-2.0 alignment, target/config/protocol decisions, memory primer, and system map. |
+| Trusted-alpha release | `CLI7-ALPHA` | Private distribution/onboarding foundation accepted through PR #27 (`6cc90c1`) and Checkpoint 90; PR #28 (`2882550`) corrects reported blockers | Preserve the accepted private tester boundary. Rights attestation and artifact signing/provenance remain separate public-distribution gates; no public artifact has shipped. |
+| Effective configuration | `CLI7-ALPHA-CONFIG` | QRSPI design lock accepted 2026-08-19; no runtime implementation started | Freeze contracts/golden fixtures, then parallelize source loading, typed resolution, and secret-safe projection before serial product integration. Do not add an organization provider-policy subsystem. |
+| Sandbox provider lifecycle | `SBX-PROVIDER-LIFECYCLE` | Independent and unaccepted for production; local managed-Windows/AppContainer conformance exists | Complete disposable-Windows-VM install/upgrade/uninstall/reboot/residue plus macOS/adversarial evidence. Do not advertise `restrictedReady` or promote a provider until the exact gate passes. |
+| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Candidate commit `b5effea` remains stale-base, replay-required, and runtime-inactive | After the configuration-conformant standalone alpha gate, settle the memory decisions below, replay only the bounded additive diff onto fresh `origin/develop`, run real Rust tests, then review separately. Automatic retrieval and skill activation remain out of scope. |
 
-The stale-base candidates are salvageable implementation work, not accepted Forge
-state. Their commits must be replayed instead of merging their old branch ancestry.
+The stale-base CLI7 candidate was successfully replayed without importing its old
+ancestry. The remaining CLI8A candidate is salvageable implementation work, not
+accepted Forge state; replay only its bounded diff onto fresh ancestry.
 
 ## Merge order and shared-boundary rule
 
-1. Merge `ARCH-AUTHORITY` after its read-only guard and documentation gate passes.
-2. Replay and validate `CLI7-ALPHA`; merge it when the trusted-alpha gate passes.
-3. Settle the four memory policy choices, then replay and validate
+1. `ARCH-AUTHORITY` is merged and accepted through PR #26.
+2. The authoritative `CLI7-ALPHA` replay and hosted gate are merged and accepted
+   through PR #27; PR #28 aligns the product-reported remaining blockers.
+3. Implement and validate the
+   [ADR-0036 effective-configuration loader/conformance suite](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md)
+   as the next bounded lane.
+4. Settle the four memory policy choices, then replay and validate
    `CLI8A-MEMORY-FOUNDATION`; integration may be prepared in
    parallel, but runtime retrieval remains gated by CLI8B evaluation.
-4. Merge `SBX-PROVIDER-LIFECYCLE` only after its independent VM/provider gate; its
+5. Merge `SBX-PROVIDER-LIFECYCLE` only after its independent VM/provider gate; its
    timing does not redefine the trusted-alpha claim.
 
 Rust run/event/artifact, policy, transaction, recovery, and sandbox-plan schemas are
@@ -77,7 +89,8 @@ rebased and reconciled before merge rather than resolved by taking an entire sid
 | Priority | Decision | Why it blocks or bounds work | Decision owner/output |
 | --- | --- | --- | --- |
 | P0 | Public rights attestation | Apache-2.0 is selected and metadata aligned, but the license cannot prove whether employer or third-party rights apply. | Maintainer/legal or open-source review before package publication. |
-| P0 | Effective configuration implementation | Precedence and monotonic policy tightening are accepted in ADR-0036; runtime fixtures and `doctor` source/redaction output remain open. | Release-lane implementation and tests. |
+| P0 | Effective configuration implementation | Precedence, monotonic policy tightening, field eligibility, operator-owned inference governance, secret handling, parallel ownership, runtime fixtures, and `doctor` projection are design-locked. | Freeze the [task contracts and golden cases](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md), then execute its bounded release lane. |
+| P0 | Public artifact signing and provenance | Private hosted/package evidence does not sign or establish provenance for a published artifact. | Release workflow and exact target evidence before publication. |
 | P1 | Sandbox requirement/binding/lifecycle split | The provider must not become a second policy authority or receive two competing launch truths. | ADR-0033 refinement after the current conformance spike. |
 | P1 | Memory policy choices | Claim/observation identity, append-only corrections, and no implicit scope widening are recommended; normalization, preference promotion, privacy purge, and expiry defaults remain open. | Review the memory primer and settle with CLI8 fixtures before replay. |
 | P1 | Protocol implementation | ADR-0037 accepts negotiation and copy-on-write migration; current code still needs handshake/migration fixtures before another public schema bump. | Protocol increment with golden compatibility tests. |
@@ -86,14 +99,17 @@ rebased and reconciled before merge rather than resolved by taking an entire sid
 
 ## Next three gates
 
-1. Merge `ARCH-AUTHORITY`, then re-open the canonical reconstruction as the Codex
-   project so new worktrees cannot inherit the archived prototype.
-2. `CLI7-ALPHA` replay, effective-config implementation, clean-install, and hosted
-   acceptance on the ADR-0036 matrix; public publication still requires rights
-   attestation.
-3. Settle memory policy, then replay `CLI8A` and run CLI8B no-memory/retrieved-memory
-   evaluation, with no
-   automatic retrieval until measurable quality and isolation gates pass.
+1. Execute the [ADR-0036 effective-configuration task](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md),
+   passing precedence, monotonic-tightening, source-reporting, secret-redaction, and
+   hosted conformance fixtures.
+2. Settle memory policy, then replay and validate only the bounded additive `CLI8A`
+   observation foundation on fresh `origin/develop`.
+3. Run CLI8B no-memory/retrieved-memory evaluation, with no automatic retrieval
+   until measurable quality and isolation gates pass.
+
+Contributor-rights attestation and artifact signing/provenance remain independent
+pre-publication gates. The accepted tester kit may be used privately without
+turning its archives into a public release.
 
 The sandbox VM gate remains an independently scheduled fourth gate unless its
 evidence invalidates a shared contract, in which case that contract issue must be
