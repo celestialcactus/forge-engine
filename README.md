@@ -44,6 +44,13 @@ the same Rust runtime; ambiguous provider/approval work and unresolved
 non-idempotent capabilities remain blocked rather than guessed. `forge run <task>`
 remains the explicit non-interactive and JSON automation surface.
 
+Product configuration is data-only JSON at the fixed paths
+`<workspace>/.forge/config.json` and `~/.forge/config.json`. Forge compiles it once
+with explicit CLI/environment facts into one immutable configuration shared by
+CLI, service, and MCP entry points. `forge config path`, `init`, `validate`, and
+`show` provide discovery, no-overwrite creation, validation, and redacted source/
+digest diagnostics without requiring a kernel or probing a provider.
+
 ## Honest limitations
 
 - Trusted verification runs with the Forge process's operating-system permissions.
@@ -60,12 +67,11 @@ remains the explicit non-interactive and JSON automation surface.
 - OpenAI transport conformance is tested, but a live cloud acceptance run requires
   the user's own `OPENAI_API_KEY`; Forge does not accept credentials as CLI flags or
   write them into run evidence.
-- Exact-version native package scaffolding and a local clean-install smoke exist;
-  Apache-2.0, the trusted-alpha target matrix, and configuration precedence are
-  accepted contracts. Hosted target acceptance, signing/provenance, contributor
-  rights attestation, and complete precedence implementation/conformance remain
-  open. Until those gates close, this is a private acceptance candidate rather
-  than a publicly shippable alpha.
+- Exact-version native packaging, the clean-install lifecycle, the trusted-alpha
+  Windows x64 and macOS ARM64/x64 matrix, Ubuntu x64 compatibility, and complete
+  effective-configuration conformance are accepted. Signing/provenance and
+  contributor-rights attestation remain open. Until those public gates close, this
+  is a private accepted alpha foundation rather than a publicly shippable alpha.
 
 ## Trusted-alpha acceptance spike
 
@@ -88,8 +94,9 @@ npm run release:smoke
 
 See [the trusted developer alpha test kit](docs/release/trusted-developer-alpha-test-kit.md)
 for bounded prompts, expected evidence, and issue-reporting guidance. This command
-is acceptance evidence for the current host; it does not prove hosted targets,
-artifact provenance, or ownership rights for every existing contribution.
+is acceptance evidence for the current host; the separate hosted workflows prove
+the accepted target matrix. Neither proves artifact provenance or ownership rights
+for every existing contribution.
 
 ## Development from source
 
@@ -115,6 +122,10 @@ Useful commands after the product build:
 ```powershell
 node dist/src/cli.js --workspace C:\path\to\repo
 node dist/src/cli.js doctor --json
+node dist/src/cli.js config path
+node dist/src/cli.js config init workspace
+node dist/src/cli.js config validate --json
+node dist/src/cli.js config show --json
 node dist/src/cli.js runs inspect run:the-id-from-a-prior-result --json
 node dist/src/cli.js runs resume run:the-id --provider ollama --model qwen2.5-coder:7b --json
 node dist/src/cli.js inspect --workspace C:\path\to\repo --json

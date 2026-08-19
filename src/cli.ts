@@ -7,7 +7,7 @@ import { parseArgs } from 'node:util';
 import type { ApprovalFacts, CapabilityCall, ExecutionBudget, RunArtifact } from './slice0/contracts.js';
 import { developerEvidenceTools, developerGovernedChangeTools } from './inference/developer-tools.js';
 import { ProviderTaskPlanner } from './inference/planner.js';
-import { createInferenceProvider, resolveInferenceRoute } from './inference/routing.js';
+import { createInferenceProvider } from './inference/routing.js';
 import {
   createNodeInteractiveIo,
   resolveInteractiveRoute,
@@ -30,16 +30,28 @@ import {
   RustSovereignChangeRuntime,
   type SovereignChangeProposal,
 } from './hybrid/rust-sovereign-change-runtime.js';
-import { artifactPayload, defaultExecutionBudget, ForgeWorkspaceService, type ForgeWorkspaceServiceOptions } from './v1/service.js';
+import { artifactPayload, ForgeWorkspaceService, type ForgeWorkspaceServiceOptions } from './v1/service.js';
 import { parseTrustedVerificationPolicy, selectVerificationCheckIds } from './verification-policy.js';
 import {
-  parseProductApprovalProfile,
   type ProductApprovalConfiguration,
 } from './approval-profile.js';
+import { compileProductConfiguration, type CompiledProductConfiguration } from './config/compile.js';
+import {
+  configurationPathReport,
+  ConfigurationCommandError,
+  initializeProductConfiguration,
+  productConfigurationPaths,
+  renderEffectiveConfiguration,
+  type ConfigurationFileScope,
+} from './config/commands.js';
+import { ConfigurationIssueError } from './config/schema.js';
+import { ConfigurationResolutionError } from './config/resolve.js';
 
-const { positionals, values } = parseArgs({
-  allowPositionals: true,
-  options: {
+const parseCliArguments = () => {
+  try {
+    return parseArgs({
+      allowPositionals: true,
+      options: {
     json: { type: 'boolean', default: false },
     workspace: { type: 'string' },
     config: { type: 'string' },
@@ -66,22 +78,34 @@ const { positionals, values } = parseArgs({
     approve: { type: 'boolean', default: false },
     'retry-evidence': { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
-  },
-});
+      } as const,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (process.argv.includes('--json')) {
+      console.error(JSON.stringify({
+        ok: false,
+        error: { code: 'cli_arguments_invalid', message },
+      }));
+    } else {
+      console.error(`[forge] ${message}`);
+    }
+    process.exit(1);
+  }
+};
+
+const { positionals, values } = parseCliArguments();
 
 const command = values.help ? 'help' : positionals[0] ?? 'interactive';
 const workspaceRoot = resolve(values.workspace ?? process.cwd());
-const approvalProfileRaw = values['approval-profile'] ?? process.env.FORGE_APPROVAL_PROFILE;
-const approvalProfile = parseProductApprovalProfile(approvalProfileRaw);
-const approvalProfileSource = values['approval-profile'] !== undefined
-  ? 'command-line'
-  : process.env.FORGE_APPROVAL_PROFILE !== undefined
-    ? 'environment'
-    : 'default';
+let compiledConfiguration: CompiledProductConfiguration | undefined;
+const effectiveConfiguration = () => {
+  if (compiledConfiguration === undefined) throw new Error('Product configuration has not been compiled.');
+  return compiledConfiguration.effective;
+};
+const approvalProfile = () => effectiveConfiguration().approvalProfile.value;
 const kernelResolution = resolveForgeKernelBinary();
-const kernelProbe = command === 'doctor' || command === 'onboard'
-  ? await probeForgeKernelBinary(kernelResolution)
-  : undefined;
+let kernelProbe: Awaited<ReturnType<typeof probeForgeKernelBinary>> | undefined;
 const requireKernel = (): string => requireForgeKernelBinary(kernelResolution);
 let approvalIo: InteractiveSessionIo | undefined;
 const interactiveIo = (): InteractiveSessionIo => {
@@ -91,7 +115,8 @@ const interactiveIo = (): InteractiveSessionIo => {
 const approvedChoice = (value: string | undefined): boolean =>
   ['y', 'yes', 'approve'].includes(value?.trim().toLowerCase() ?? '');
 const approvalConfiguration = (interactiveConsent = true): ProductApprovalConfiguration => {
-  if (approvalProfile !== 'review') return { profile: approvalProfile };
+  const profile = approvalProfile();
+  if (profile !== 'review') return { profile };
   if (!interactiveConsent) return { profile: 'review' };
   return {
     profile: 'review',
@@ -116,10 +141,11 @@ const productServiceOptions = (interactiveConsent = true): ForgeWorkspaceService
     kind: 'rust_kernel',
     kernel: {
       binaryPath: requireKernel(),
-      runStoreRoot: join(engineRoot(), 'runs', 'v1'),
+      runStoreRoot: join(effectiveConfiguration().engineRoot.value, 'runs', 'v1'),
     },
   },
   approval: approvalConfiguration(interactiveConsent),
+  configuration: effectiveConfiguration(),
 });
 let service: ForgeWorkspaceService | undefined;
 
@@ -131,22 +157,20 @@ const workspaceService = (): ForgeWorkspaceService => {
 const executeProviderTask = async (
   task: string,
   route: InferenceRoute,
-  maxTurns: number,
-  executionBudget: ExecutionBudget,
-  timeoutMs: number,
   presenter?: LiveCliPresenter,
   governedChange?: GovernedChangeCapabilityOptions,
 ): Promise<{
   readonly artifact: RunArtifact;
   readonly cancellationSource: ReturnType<typeof createRunCancellation>['source'];
 }> => {
+  const timeoutMs = effectiveConfiguration().execution.timeoutMs.value;
   if (timeoutMs < 1 || timeoutMs > 900_000) {
     throw new Error('--timeout-ms must be from 1 to 900000.');
   }
   const cancellation = createRunCancellation(timeoutMs);
   try {
     const planner = new ProviderTaskPlanner({
-      provider: createInferenceProvider(route),
+      provider: createInferenceProvider(route, { configuration: effectiveConfiguration() }),
       route,
       tools: governedChange === undefined ? developerEvidenceTools : developerGovernedChangeTools,
       ...(presenter === undefined || governedChange !== undefined
@@ -154,8 +178,8 @@ const executeProviderTask = async (
         : { onInferenceEvent: (observation) => presenter.onInferenceEvent(observation) }),
     });
     const taskOptions = {
-      maxTurns,
-      executionBudget,
+      maxTurns: effectiveConfiguration().execution.maxTurns.value,
+      executionBudget: executionBudgetOption(),
       ...(presenter === undefined
         ? {}
         : { onEvent: (event: RunArtifact['events'][number]) => presenter.onRunEvent(event) }),
@@ -179,12 +203,6 @@ const executeProviderTask = async (
     cancellation.dispose();
   }
 };
-
-const engineRoot = (): string => resolve(
-  values['engine-root']
-    ?? process.env.FORGE_ENGINE_ROOT
-    ?? join(homedir(), '.forge'),
-);
 
 const pathIsWithin = (parent: string, candidate: string): boolean => {
   const fromParent = relative(parent, candidate);
@@ -211,7 +229,7 @@ const sovereignChangeRuntime = (
 ): RustSovereignChangeRuntime => new RustSovereignChangeRuntime({
   kernelPath: requireKernel(),
   repositoryRoot: workspaceRoot,
-  engineRoot: engineRoot(),
+  engineRoot: effectiveConfiguration().engineRoot.value,
   verificationChecks,
 });
 
@@ -224,21 +242,33 @@ const integerOption = (raw: string | undefined, fallback: number, name: string):
 
 const executionBudgetOption = (): ExecutionBudget => ({
   schemaVersion: 1,
-  maxCapabilityCalls: integerOption(
-    values['max-capability-calls'],
-    defaultExecutionBudget.maxCapabilityCalls,
-    '--max-capability-calls',
-  ),
-  maxReportedInputTokens: integerOption(
-    values['max-input-tokens'],
-    defaultExecutionBudget.maxReportedInputTokens,
-    '--max-input-tokens',
-  ),
-  maxReportedOutputTokens: integerOption(
-    values['max-output-tokens'],
-    defaultExecutionBudget.maxReportedOutputTokens,
-    '--max-output-tokens',
-  ),
+  maxCapabilityCalls: effectiveConfiguration().execution.maxCapabilityCalls.value,
+  maxReportedInputTokens: effectiveConfiguration().execution.maxReportedInputTokens.value,
+  maxReportedOutputTokens: effectiveConfiguration().execution.maxReportedOutputTokens.value,
+});
+
+const compileConfiguration = async (): Promise<CompiledProductConfiguration> => compileProductConfiguration({
+  workspaceRoot,
+  currentWorkingDirectory: process.cwd(),
+  homeDirectory: homedir(),
+  environment: process.env,
+  commandLine: {
+    ...(values.provider === undefined ? {} : { provider: values.provider }),
+    ...(values.model === undefined ? {} : { model: values.model }),
+    ...(values['engine-root'] === undefined ? {} : { engineRoot: values['engine-root'] }),
+    ...(values['approval-profile'] === undefined ? {} : { approvalProfile: values['approval-profile'] }),
+    ...(values['max-turns'] === undefined ? {} : { maxTurns: values['max-turns'] }),
+    ...(values['max-capability-calls'] === undefined
+      ? {}
+      : { maxCapabilityCalls: values['max-capability-calls'] }),
+    ...(values['max-input-tokens'] === undefined
+      ? {}
+      : { maxReportedInputTokens: values['max-input-tokens'] }),
+    ...(values['max-output-tokens'] === undefined
+      ? {}
+      : { maxReportedOutputTokens: values['max-output-tokens'] }),
+    ...(values['timeout-ms'] === undefined ? {} : { timeoutMs: values['timeout-ms'] }),
+  },
 });
 
 const readJson = async (path: string, label: string): Promise<unknown> => {
@@ -362,15 +392,100 @@ const printArtifact = (artifact: RunArtifact): void => {
 
 
 try {
+  const configurationAction = command === 'config' ? positionals[1] : undefined;
+  const configurationScope = positionals[2] as ConfigurationFileScope | undefined;
+  const configurationPaths = productConfigurationPaths({ workspaceRoot, homeDirectory: homedir() });
+  const hasExplicitConfigurationOption = values.provider !== undefined
+    || values.model !== undefined
+    || values['engine-root'] !== undefined
+    || values['approval-profile'] !== undefined
+    || values['max-turns'] !== undefined
+    || values['max-capability-calls'] !== undefined
+    || values['max-input-tokens'] !== undefined
+    || values['max-output-tokens'] !== undefined
+    || values['timeout-ms'] !== undefined;
+  const configurationBypassesCompilation = (command === 'help' && !hasExplicitConfigurationOption)
+    || (command === 'config' && (configurationAction === 'path' || configurationAction === 'init'));
+  if (command === 'config' && values.config !== undefined) {
+    throw new Error('--config belongs only to forge diagnostics; product configuration uses fixed paths.');
+  }
+  if (command === 'config'
+    && (configurationAction === 'path' || configurationAction === 'init')
+    && hasExplicitConfigurationOption) {
+    throw new Error(`forge config ${configurationAction} does not accept effective-configuration overrides.`);
+  }
+  if (!configurationBypassesCompilation) compiledConfiguration = await compileConfiguration();
+  if (command === 'doctor' || command === 'onboard') {
+    kernelProbe = await probeForgeKernelBinary(kernelResolution);
+  }
   if (values.json
-    && approvalProfile === 'review'
+    && compiledConfiguration !== undefined
+    && approvalProfile() === 'review'
     && command !== 'doctor'
     && command !== 'onboard'
+    && command !== 'config'
     && command !== 'help') {
-    throw new Error('--json cannot be combined with --approval-profile review because consent prompts require human-mode output.');
+    throw new Error('--json cannot be used while the effective approval profile is review because consent prompts require human-mode output. Run forge config show to inspect its source.');
   }
-  if (command === 'doctor') {
-    const configuredEngineRoot = engineRoot();
+  if (command === 'config' && configurationAction === 'path') {
+    if (positionals.length > 3) throw new Error('Usage: forge config path [workspace|user] [--json]');
+    const selectedScope = configurationScope;
+    if (selectedScope !== undefined && selectedScope !== 'workspace' && selectedScope !== 'user') {
+      throw new Error('Usage: forge config path [workspace|user] [--json]');
+    }
+    const report = configurationPathReport(configurationPaths);
+    const selected = selectedScope === undefined ? report : { [selectedScope]: report[selectedScope] };
+    if (values.json) console.log(JSON.stringify(selected, null, 2));
+    else {
+      if (selectedScope === undefined || selectedScope === 'workspace') {
+        console.log(`Workspace configuration: ${report.workspace.path}`);
+      }
+      if (selectedScope === undefined || selectedScope === 'user') {
+        console.log(`User configuration: ${report.user.path}`);
+      }
+    }
+  } else if (command === 'config' && configurationAction === 'init') {
+    if (positionals.length !== 3 || (configurationScope !== 'workspace' && configurationScope !== 'user')) {
+      throw new Error('Usage: forge config init <workspace|user> [--json]');
+    }
+    const initialized = await initializeProductConfiguration({
+      scope: configurationScope,
+      workspaceRoot,
+      homeDirectory: homedir(),
+    });
+    const report = {
+      ok: true,
+      action: 'initialized',
+      scope: initialized.scope,
+      path: initialized.path,
+      next: 'forge config validate',
+    } as const;
+    if (values.json) console.log(JSON.stringify(report, null, 2));
+    else {
+      console.log(`Created ${initialized.scope} configuration: ${initialized.path}`);
+      console.log('Next: forge config validate');
+    }
+  } else if (command === 'config' && (configurationAction === 'validate' || configurationAction === 'show')) {
+    if (positionals.length !== 2) throw new Error(`Usage: forge config ${configurationAction} [--json]`);
+    const report = {
+      ok: true,
+      contractVersion: effectiveConfiguration().contractVersion,
+      paths: configurationPathReport(configurationPaths, compiledConfiguration?.files),
+      ...(configurationAction === 'show' ? { configuration: effectiveConfiguration().diagnostics } : {}),
+    } as const;
+    if (values.json) console.log(JSON.stringify(report, null, 2));
+    else if (configurationAction === 'validate') {
+      console.log('Forge configuration is valid.');
+      console.log(`Workspace configuration: ${report.paths.workspace.status}`);
+      console.log(`User configuration: ${report.paths.user.status}`);
+    } else {
+      console.log('Forge effective configuration');
+      for (const line of renderEffectiveConfiguration(effectiveConfiguration())) console.log(line);
+    }
+  } else if (command === 'config') {
+    throw new Error('Usage: forge config <path [workspace|user]|init <workspace|user>|validate|show> [--json]');
+  } else if (command === 'doctor') {
+    const configuredEngineRoot = effectiveConfiguration().engineRoot.value;
     const stateSeparation = changeStateSeparation(workspaceRoot, configuredEngineRoot);
     const isolationCandidateSummary = (kernelProbe?.isolationCandidates ?? [])
       .map((candidate) => `${candidate.providerId}:${candidate.availability}:restricted-ready=${candidate.restrictedReady}`)
@@ -401,16 +516,17 @@ try {
       configuration: {
         engineRootOutsideWorkspace: stateSeparation.valid,
         message: stateSeparation.message,
+        effective: effectiveConfiguration().diagnostics,
       },
       runStore: {
         root: join(configuredEngineRoot, 'runs', 'v1'),
         durability: 'append-before-notify; terminal-before-result',
         recovery: 'terminal-return; validated same-runtime continuation; unsafe frontiers blocked',
       },
-      executionDefaults: defaultExecutionBudget,
+      executionDefaults: executionBudgetOption(),
       approval: {
-        profile: approvalProfile,
-        source: approvalProfileSource,
+        profile: approvalProfile(),
+        sources: effectiveConfiguration().approvalProfile.sources,
         decisionAuthority: 'rust-kernel',
         scope: 'registered capabilities; governed mutations retain exact-change approval',
       },
@@ -432,11 +548,25 @@ try {
       },
     };
     if (!report.ok) process.exitCode = 1;
-    console.log(values.json
-      ? JSON.stringify(report)
-      : `ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}\nNode: ${report.node}\nRuntime: ${report.runtime}\nKernel: ${report.kernel.path ?? report.kernel.message}\nMCP: ${report.mcp}\nRun store: ${report.runStore.root} (${report.runStore.recovery})\nState separation: ${report.configuration.message}\nExecution defaults: calls=${report.executionDefaults.maxCapabilityCalls}, input=${report.executionDefaults.maxReportedInputTokens}, output=${report.executionDefaults.maxReportedOutputTokens}\nApproval profile: ${report.approval.profile} (${report.approval.source}); authority=${report.approval.decisionAuthority}\nChange flow: ${report.changeFlow}\nIsolation: ${report.isolation.posture}; provider=${report.isolation.providerId ?? 'unavailable'}; class=${report.isolation.providerClass ?? 'unknown'}; availability=${report.isolation.availability}; restricted-ready=${report.isolation.restrictedReady}\nIsolation candidates: ${isolationCandidateSummary}\nFeatures: ${report.readOnlyFeatures.join(', ')}`);
+    if (values.json) console.log(JSON.stringify(report));
+    else {
+      console.log(`ForgeEngine doctor: ${report.ok ? 'OK' : 'NOT READY'}`);
+      console.log(`Node: ${report.node}`);
+      console.log(`Runtime: ${report.runtime}`);
+      console.log(`Kernel: ${report.kernel.path ?? report.kernel.message}`);
+      console.log(`MCP: ${report.mcp}`);
+      console.log(`Run store: ${report.runStore.root} (${report.runStore.recovery})`);
+      console.log(`State separation: ${report.configuration.message}`);
+      console.log(`Approval authority: ${report.approval.decisionAuthority}`);
+      console.log('Effective configuration:');
+      for (const line of renderEffectiveConfiguration(effectiveConfiguration(), { includeDigest: true })) console.log(`  ${line}`);
+      console.log(`Change flow: ${report.changeFlow}`);
+      console.log(`Isolation: ${report.isolation.posture}; provider=${report.isolation.providerId ?? 'unavailable'}; class=${report.isolation.providerClass ?? 'unknown'}; availability=${report.isolation.availability}; restricted-ready=${report.isolation.restrictedReady}`);
+      console.log(`Isolation candidates: ${isolationCandidateSummary}`);
+      console.log(`Features: ${report.readOnlyFeatures.join(', ')}`);
+    }
   } else if (command === 'onboard') {
-    const configuredEngineRoot = engineRoot();
+    const configuredEngineRoot = effectiveConfiguration().engineRoot.value;
     const stateSeparation = changeStateSeparation(workspaceRoot, configuredEngineRoot);
     const runtimeReady = kernelProbe?.ready === true && stateSeparation.valid;
     const report = {
@@ -453,8 +583,8 @@ try {
         message: kernelProbe?.message ?? kernelResolution.message,
       },
       approval: {
-        profile: approvalProfile,
-        source: approvalProfileSource,
+        profile: approvalProfile(),
+        sources: effectiveConfiguration().approvalProfile.sources,
         authority: 'rust-kernel',
       },
       containment: {
@@ -464,8 +594,9 @@ try {
       },
       configuration: {
         stateSeparation: stateSeparation.message,
-        precedenceStatus: 'contract_accepted_implementation_pending',
-        disclosure: 'Precedence is managed ceilings, explicit CLI, environment/secret references, workspace, user, then built-ins; policy values may only tighten. Full loading and conformance remain pending.',
+        precedenceStatus: 'conformant',
+        disclosure: 'Effective configuration is compiled once from managed ceilings, explicit CLI, environment/secret references, workspace, user, then built-ins; policy values may only tighten. Diagnostics expose stable provenance and digests while credential values remain redacted.',
+        effective: effectiveConfiguration().diagnostics,
       },
       nextCommands: [
         'forge doctor --json',
@@ -475,7 +606,6 @@ try {
       releaseBlockers: [
         'Rights attestation for existing contributions',
         'Public artifact signing and provenance',
-        'Configuration precedence implementation and conformance',
       ],
     } as const;
     if (!runtimeReady) process.exitCode = 1;
@@ -498,7 +628,7 @@ try {
     }
     const store = new RustRunStoreRuntime({
       kernelPath: requireKernel(),
-      runStoreRoot: join(engineRoot(), 'runs', 'v1'),
+      runStoreRoot: join(effectiveConfiguration().engineRoot.value, 'runs', 'v1'),
     });
     const inspection = await store.inspect(runId);
     if (operation === 'inspect') {
@@ -528,7 +658,10 @@ try {
         presenter.printSummary(inspection.artifact);
       }
     } else {
-      const route = resolveInferenceRoute(values.provider, values.model);
+      const route = effectiveConfiguration().route?.value;
+      if (route === undefined) {
+        throw new Error('No inference route is configured. Set provider and model together, then run this command again.');
+      }
       const verificationPolicyPath = values.policy ?? process.env.FORGE_VERIFICATION_POLICY;
       if (values.check !== undefined && verificationPolicyPath === undefined) {
         throw new Error('--check requires --policy or FORGE_VERIFICATION_POLICY when resuming.');
@@ -540,7 +673,7 @@ try {
       const governedChanges = verificationChecks.length > 0;
       const presenter = values.json ? undefined : new LiveCliPresenter();
       const planner = new ProviderTaskPlanner({
-        provider: createInferenceProvider(route),
+        provider: createInferenceProvider(route, { configuration: effectiveConfiguration() }),
         route,
         tools: governedChanges ? developerGovernedChangeTools : developerEvidenceTools,
         ...(presenter === undefined || governedChanges
@@ -548,7 +681,7 @@ try {
           : { onInferenceEvent: (observation) => presenter.onInferenceEvent(observation) }),
       });
       const cancellation = createRunCancellation(
-        integerOption(values['timeout-ms'], 120_000, '--timeout-ms'),
+        effectiveConfiguration().execution.timeoutMs.value,
       );
       try {
         const artifact = await workspaceService().resumeTask(runId, planner, {
@@ -660,13 +793,19 @@ try {
   } else if (command === 'interactive') {
     if (values.json) throw new Error('Interactive Forge does not support --json; use forge run for machine output.');
     requireKernel();
+    const configuredRoute = effectiveConfiguration().route;
     const selection = await resolveInteractiveRoute({
-      ...(values.provider === undefined ? {} : { provider: values.provider }),
-      ...(values.model === undefined ? {} : { model: values.model }),
+      ...(configuredRoute === undefined
+        ? {}
+        : {
+            configured: {
+              route: configuredRoute.value,
+              source: configuredRoute.sources[0] ?? 'built_in',
+            },
+          }),
+      ollamaBaseUrl: effectiveConfiguration().providers.ollama.baseUrl.value,
     });
-    createInferenceProvider(selection.route);
-    const maxTurns = integerOption(values['max-turns'], 8, '--max-turns');
-    const timeoutMs = integerOption(values['timeout-ms'], 120_000, '--timeout-ms');
+    createInferenceProvider(selection.route, { configuration: effectiveConfiguration() });
     const verificationPolicyPath = values.policy ?? process.env.FORGE_VERIFICATION_POLICY;
     if (values.check !== undefined && verificationPolicyPath === undefined) {
       throw new Error('--check requires --policy or FORGE_VERIFICATION_POLICY in interactive mode.');
@@ -680,20 +819,17 @@ try {
     await runInteractiveSession({
       workspaceRoot,
       initialRoute: selection,
-      approvalProfile,
+      approvalProfile: approvalProfile(),
       io,
       notices: [governedChanges
         ? `changes: governed inside the Rust run; verification=${checkIds.join(', ')}`
         : 'changes: disabled; start with --policy <file> or set FORGE_VERIFICATION_POLICY to enable verified edits'],
-      validateRoute: (route) => { createInferenceProvider(route); },
+      validateRoute: (route) => { createInferenceProvider(route, { configuration: effectiveConfiguration() }); },
       runTask: async (task, route) => {
         const presenter = new LiveCliPresenter();
         const { artifact } = await executeProviderTask(
           task,
           route,
-          maxTurns,
-          executionBudgetOption(),
-          timeoutMs,
           presenter,
           governedChanges
             ? {
@@ -710,15 +846,15 @@ try {
     });
   } else if (command === 'run') {
     const task = positionals.slice(1).join(' ').trim();
-    if (task.length === 0) throw new Error('Usage: forge run <task> --provider <ollama|openai> --model <model> [--workspace <path>] [--json]');
-    const route = resolveInferenceRoute(values.provider, values.model);
+    if (task.length === 0) throw new Error('Usage: forge run <task> [--provider <ollama|openai> --model <model>] [--workspace <path>] [--json]');
+    const route = effectiveConfiguration().route?.value;
+    if (route === undefined) {
+      throw new Error('No inference route is configured. Set provider and model together, then run this command again.');
+    }
     const presenter = values.json ? undefined : new LiveCliPresenter();
     const { artifact, cancellationSource } = await executeProviderTask(
       task,
       route,
-      integerOption(values['max-turns'], 8, '--max-turns'),
-      executionBudgetOption(),
-      integerOption(values['timeout-ms'], 120_000, '--timeout-ms'),
       presenter,
     );
     if (presenter === undefined) printArtifact(artifact);
@@ -740,7 +876,7 @@ try {
       '',
       'Interactive:',
       '  forge [--provider <ollama|openai> --model <model>] [--workspace <path>]',
-      '    With no route flags, Forge auto-discovers an installed local Ollama model.',
+      '    Forge uses the effective configured route; when none exists, interactive mode can discover a local Ollama model.',
       '    Add --policy <verification-policy.json> (or FORGE_VERIFICATION_POLICY) to enable reviewed, verified edits.',
       '    Select --approval-profile <developer|review|locked> (or FORGE_APPROVAL_PROFILE).',
       '    Slash controls: /help, /status, /permissions, /model, /clear, /exit.',
@@ -753,10 +889,14 @@ try {
       '  forge change discard <transaction-id> --approve [--json]',
       '',
       'Evidence commands:',
+      '  forge config path [workspace|user] [--json]',
+      '  forge config init <workspace|user> [--json]',
+      '  forge config validate [--json]',
+      '  forge config show [--json]',
       '  forge doctor [--json] [--workspace <path>]',
       '  forge onboard [--json] [--workspace <path>]',
       '  forge runs inspect <run-id> [--json] [--engine-root <path>]',
-      '  forge runs resume <run-id> --provider <ollama|openai> --model <model> [--retry-evidence] [--json]',
+      '  forge runs resume <run-id> [--provider <ollama|openai> --model <model>] [--retry-evidence] [--json]',
       '    Resume replays validated completions through the same Rust runtime; ambiguous provider, approval, and mutation work stays blocked.',
       '    --retry-evidence deliberately retries one unresolved capability explicitly classified read-only; it is accepted only once.',
       '  forge inspect [--json] [--max-files <count>]',
@@ -766,21 +906,52 @@ try {
       '  forge diagnostics [--config <tsconfig>] [--json] [--max-diagnostics <count>]',
       '  forge git-status [--json]',
       '  forge git-diff [--staged] [--json] [--max-bytes <count>]',
-      '  forge run <task> --provider <ollama|openai> --model <model> [--max-turns <count>] [--timeout-ms <ms>] [--json]',
+      '  forge run <task> [--provider <ollama|openai> --model <model>] [--max-turns <count>] [--timeout-ms <ms>] [--json]',
       '    Optional controls: --approval-profile <developer|review|locked>, --max-capability-calls, --max-input-tokens, --max-output-tokens.',
       '    Token ceilings stop continuation after cumulative provider-reported usage crosses the limit.',
       '    Human mode streams validated assistant text and canonical run status; --json emits one terminal artifact.',
       '  forge mcp [--workspace <path>]',
       '',
-      'Product commands require the Rust kernel. Source builds discover target/release or target/debug; FORGE_KERNEL_BINARY overrides discovery. Interactive route defaults can use FORGE_DEFAULT_PROVIDER and FORGE_DEFAULT_MODEL. State defaults to ~/.forge and can be overridden with --engine-root or FORGE_ENGINE_ROOT.',
+      'Configuration uses <workspace>/.forge/config.json and ~/.forge/config.json with explicit CLI and environment precedence. Config commands are kernel-free. Product execution commands require the Rust kernel; FORGE_KERNEL_BINARY remains a bootstrap override.',
       'Verification is currently trusted local execution; Forge owns process cleanup but does not yet enforce an OS sandbox.',
     ].join('\n'));
   } else {
     throw new Error(`Unknown Forge command: ${command}`);
   }
 } catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error('[forge] ' + message);
+  const configurationIssue = error instanceof ConfigurationIssueError
+    || error instanceof ConfigurationResolutionError
+    ? error.issue
+    : undefined;
+  if (configurationIssue !== undefined) {
+    if (values.json) {
+      console.error(JSON.stringify({ ok: false, error: configurationIssue }));
+    } else {
+      console.error(`[forge] ${configurationIssue.message}`);
+      console.error(`Location: ${configurationIssue.location}`);
+      console.error(`Next: ${configurationIssue.hint}`);
+    }
+  } else if (error instanceof ConfigurationCommandError) {
+    if (values.json) {
+      console.error(JSON.stringify({
+        ok: false,
+        error: { code: 'config_command_failed', message: error.message, path: error.path, hint: error.hint },
+      }));
+    } else {
+      console.error(`[forge] ${error.message}`);
+      console.error(`Path: ${error.path}`);
+      console.error(`Next: ${error.hint}`);
+    }
+  } else if (values.json && command === 'config') {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(JSON.stringify({
+      ok: false,
+      error: { code: 'config_command_invalid', message },
+    }));
+  } else {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[forge] ' + message);
+  }
   if (process.env.FORGE_DEBUG === '1' && error instanceof Error && error.stack !== undefined) {
     console.error(error.stack);
   }

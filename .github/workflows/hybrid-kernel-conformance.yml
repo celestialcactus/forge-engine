@@ -38,7 +38,7 @@ jobs:
         run: cargo audit --deny warnings
 
   hybrid:
-    name: Rust kernel + TypeScript adapter / ${{ matrix.os }}
+    name: Rust kernel + TypeScript adapter / ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -46,10 +46,16 @@ jobs:
       matrix:
         include:
           - os: windows-latest
+            target: windows-x64
             binary-suffix: .exe
-          - os: macos-latest
+          - os: macos-15
+            target: macos-arm64
+            binary-suffix: ''
+          - os: macos-15-intel
+            target: macos-x64
             binary-suffix: ''
           - os: ubuntu-latest
+            target: ubuntu-x64
             binary-suffix: ''
 
     steps:
@@ -61,6 +67,9 @@ jobs:
         with:
           node-version: 22.x
           cache: npm
+
+      - name: Record hosted target
+        run: node -e "console.log('runner.os=' + process.env.RUNNER_OS + ' runner.arch=' + process.env.RUNNER_ARCH)"
 
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.97.1 --profile minimal --component clippy --component rustfmt

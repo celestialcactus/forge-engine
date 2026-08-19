@@ -236,3 +236,16 @@ test('secret golden digests exclude bytes and use the frozen canonical material'
     assert.equal(rendered.includes(input.OPENAI_API_KEY ?? ''), false);
   }
 });
+
+test('zero-config doctor has a frozen absent-route digest', () => {
+  const fixture = configurationGoldenCases.find(({ kind }) => kind === 'doctor_parity');
+  assert.ok(fixture !== undefined && fixture.kind === 'doctor_parity');
+  const absentRoute = {
+    schemaVersion: 1,
+    field: 'inference.route',
+    sources: ['built_in'],
+    present: false,
+  };
+  assert.equal(canonicalJson(absentRoute), fixture.absentRouteCanonicalDigestInput);
+  assert.equal(sha256(fixture.absentRouteCanonicalDigestInput), fixture.expectedAbsentRouteDigest);
+});

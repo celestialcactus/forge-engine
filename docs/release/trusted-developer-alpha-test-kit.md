@@ -33,14 +33,40 @@ npm run release:smoke
 ```
 
 The package smoke builds release binaries, packs the main and target-native npm
-packages, installs both with scripts disabled, runs `forge doctor`, completes a
-real Rust-backed inspection, runs an exact-pair update, and uninstalls both. It
-removes its temporary project unless `FORGE_KEEP_PACKAGE_SMOKE=1` is set.
+packages, and installs both with scripts disabled into an isolated project and
+home. It sanitizes every covered environment variable, exercises fixed user and
+workspace configuration paths, safe no-overwrite initialization, validation,
+redacted show/doctor output, partial-route refusal before kernel/provider work,
+conformant onboarding, and a real Rust-backed inspection. It then runs an exact-
+pair update and uninstalls both packages. It removes its temporary project unless
+`FORGE_KEEP_PACKAGE_SMOKE=1` is set.
 
-Capture `forge doctor --json` and `forge onboard --json` as support evidence. The
-doctor output reports implemented sources and runtime posture; it is not a final
-complete effective-config contract while the accepted precedence contract remains
-unimplemented and lacks conformance evidence.
+Capture `forge config show --json`, `forge doctor --json`, and
+`forge onboard --json` as support evidence. Config show and doctor project the same
+ordered twelve-field, redacted, source-attributed configuration truth; doctor adds
+kernel, state-separation, Rust approval-authority, and isolation facts. Onboard
+reports configuration precedence as conformant while retaining the independent
+rights and signing/provenance blockers.
+
+## Configuration experience
+
+Forge uses exactly two product files: `<workspace>/.forge/config.json` and
+`~/.forge/config.json`. The user path is independent of `engineRoot`. Use:
+
+```powershell
+forge config path [workspace|user]
+forge config init <workspace|user>
+forge config validate --json
+forge config show --json
+```
+
+`config path` does not read file contents. `config init` atomically writes a
+minimal schema-v1 document and refuses to overwrite an existing file. `validate`
+compiles the complete effective configuration, so malformed files, ineligible
+fields, and partial routes fail with a location, message, and next-action hint.
+`show` reports values only for non-secret fields; the OpenAI credential diagnostic
+contains its fixed reference and presence, never credential bytes. These commands
+do not require Rust, construct a provider, or probe a network endpoint.
 
 ## Prompts and expected evidence
 
@@ -52,8 +78,9 @@ unimplemented and lacks conformance evidence.
    evidence.
 3. Command: `forge doctor --json`.
    Expected evidence: exact kernel path/source/version/protocols, run-store root,
-   approval source, trusted isolation posture, and no restricted-ready claim unless
-   a separately accepted provider supplies it.
+   all twelve effective configuration fields with sources and stable redacted
+   digests, approval source, trusted isolation posture, and no restricted-ready
+   claim unless a separately accepted provider supplies it.
 4. Optional local-inference prompt: start `forge --provider ollama --model
    <installed-model>` and ask `Summarize the bounded README evidence.`
    Expected evidence: one Rust-owned run with explicit provider/model routing,

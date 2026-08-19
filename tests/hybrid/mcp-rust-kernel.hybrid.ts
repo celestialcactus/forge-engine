@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { resolve } from 'node:path';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   getDefaultEnvironment,
@@ -16,6 +18,42 @@ const kernelBinary = process.env.FORGE_KERNEL_BINARY
 const hybridEngineRoot = resolve('target', 'hybrid-test-engines', 'mcp-rust-kernel-' + String(process.pid));
 const mcpEngineRoot = resolve(hybridEngineRoot, 'mcp');
 const cliEngineRoot = resolve(hybridEngineRoot, 'cli');
+const parityMcpEngineRoot = resolve(hybridEngineRoot, 'parity-mcp');
+const parityCliEngineRoot = resolve(hybridEngineRoot, 'parity-cli');
+const isolatedRoot = await mkdtemp(join(tmpdir(), 'forge-mcp-hybrid-'));
+const isolatedHome = join(isolatedRoot, 'home');
+await mkdir(isolatedHome);
+
+const coveredEnvironmentVariables = [
+  'FORGE_DEFAULT_PROVIDER',
+  'FORGE_DEFAULT_MODEL',
+  'FORGE_ENGINE_ROOT',
+  'FORGE_OLLAMA_URL',
+  'FORGE_OLLAMA_CONTEXT_TOKENS',
+  'FORGE_OPENAI_BASE_URL',
+  'FORGE_APPROVAL_PROFILE',
+  'FORGE_MAX_TURNS',
+  'FORGE_MAX_CAPABILITY_CALLS',
+  'FORGE_MAX_INPUT_TOKENS',
+  'FORGE_MAX_OUTPUT_TOKENS',
+  'FORGE_TIMEOUT_MS',
+  'OPENAI_API_KEY',
+] as const;
+
+const productEnvironment = (additions: Readonly<Record<string, string>> = {}): Record<string, string> => {
+  const environment = { ...getDefaultEnvironment() };
+  for (const variable of coveredEnvironmentVariables) delete environment[variable];
+  return {
+    ...environment,
+    HOME: isolatedHome,
+    USERPROFILE: isolatedHome,
+    ...additions,
+  };
+};
+
+after(async () => {
+  await rm(isolatedRoot, { recursive: true, force: true });
+});
 
 const structuredPayload = <T>(result: unknown): T =>
   (result as { readonly structuredContent?: unknown }).structuredContent as T;
@@ -24,11 +62,10 @@ test('official MCP client preserves the seven-tool compact contract over the Rus
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [resolve('node_modules/tsx/dist/cli.mjs'), resolve('src/cli.ts'), 'mcp', '--workspace', fixtureRoot],
-    env: {
-      ...getDefaultEnvironment(),
+    env: productEnvironment({
       FORGE_KERNEL_BINARY: kernelBinary,
       FORGE_ENGINE_ROOT: mcpEngineRoot,
-    },
+    }),
     stderr: 'pipe',
   });
   const client = new Client({ name: 'forge-hybrid-conformance', version: '0.1.0' });
@@ -96,8 +133,74 @@ test('official MCP client preserves the seven-tool compact contract over the Rus
     await client.close();
   }
 });
+
+test('CLI and MCP enforce the same compiled zero-capability ceiling', async () => {
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [resolve('node_modules/tsx/dist/cli.mjs'), resolve('src/cli.ts'), 'mcp', '--workspace', fixtureRoot],
+    env: productEnvironment({
+      FORGE_KERNEL_BINARY: kernelBinary,
+      FORGE_ENGINE_ROOT: parityMcpEngineRoot,
+      FORGE_MAX_CAPABILITY_CALLS: '0',
+    }),
+    stderr: 'pipe',
+  });
+  const client = new Client({ name: 'forge-hybrid-configuration-parity', version: '0.1.0' });
+  await client.connect(transport);
+  try {
+    const result = await client.callTool({
+      name: 'forge_workspace_summary',
+      arguments: { maxFiles: 1 },
+    });
+    assert.equal(result.isError, true);
+    const payload = structuredPayload<{
+      readonly runStatus: string;
+      readonly outcome: { readonly status: string; readonly reason: string };
+    }>(result);
+    assert.equal(payload.runStatus, 'execution_budget_exhausted');
+    assert.equal(payload.outcome.status, 'not_evaluated');
+    assert.match(payload.outcome.reason, /did not reach a terminal planner turn/u);
+  } finally {
+    await client.close();
+  }
+
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      resolve('node_modules/tsx/dist/cli.mjs'),
+      resolve('src/cli.ts'),
+      'inspect',
+      '--workspace',
+      fixtureRoot,
+      '--engine-root',
+      parityCliEngineRoot,
+      '--max-capability-calls',
+      '0',
+      '--max-files',
+      '1',
+      '--json',
+    ], {
+      encoding: 'utf8',
+      timeout: 15_000,
+      windowsHide: true,
+      env: productEnvironment({ FORGE_KERNEL_BINARY: kernelBinary }),
+    }),
+    (error: unknown) => {
+      const failure = error as { readonly code: number; readonly stdout: string };
+      assert.equal(failure.code, 1);
+      const payload = JSON.parse(failure.stdout) as {
+        readonly status: string;
+        readonly outcome: { readonly status: string; readonly reason: string };
+      };
+      assert.equal(payload.status, 'execution_budget_exhausted');
+      assert.equal(payload.outcome.status, 'not_evaluated');
+      assert.match(payload.outcome.reason, /did not reach a terminal planner turn/u);
+      return true;
+    },
+  );
+});
+
 test('product CLI auto-discovers the Rust kernel for a real inspection', async () => {
-  const environment: NodeJS.ProcessEnv = { ...process.env, FORGE_ENGINE_ROOT: cliEngineRoot };
+  const environment = productEnvironment({ FORGE_ENGINE_ROOT: cliEngineRoot });
   delete environment.FORGE_KERNEL_BINARY;
   const { stdout } = await execFileAsync(process.execPath, [
     resolve('node_modules/tsx/dist/cli.mjs'),
@@ -132,6 +235,34 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
   assert.equal(payload.evidence.files.length, 1);
   assert.equal(payload.evidence.files[0]?.path, 'README.md');
   assert.ok((payload.evidence.files[0]?.bytes ?? 0) > 0);
+
+  const diagnosticsWorkspace = resolve('tests/fixtures/diagnostics-workspace');
+  const diagnostics = await execFileAsync(process.execPath, [
+    resolve('node_modules/tsx/dist/cli.mjs'),
+    resolve('src/cli.ts'),
+    'diagnostics',
+    '--workspace',
+    diagnosticsWorkspace,
+    '--config',
+    'tsconfig.json',
+    '--max-diagnostics',
+    '1',
+    '--json',
+  ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment });
+  const diagnosticsPayload = JSON.parse(diagnostics.stdout) as {
+    readonly status: string;
+    readonly outcome: { readonly status: string };
+    readonly evidence: {
+      readonly configPath: string;
+      readonly diagnostics: readonly unknown[];
+      readonly truncated: boolean;
+    };
+  };
+  assert.equal(diagnosticsPayload.status, 'completed');
+  assert.equal(diagnosticsPayload.outcome.status, 'verified');
+  assert.equal(diagnosticsPayload.evidence.configPath, 'tsconfig.json');
+  assert.equal(diagnosticsPayload.evidence.diagnostics.length, 1);
+  assert.equal(diagnosticsPayload.evidence.truncated, false);
 
   const stored = await execFileAsync(process.execPath, [
     resolve('node_modules/tsx/dist/cli.mjs'),
@@ -168,7 +299,7 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
   const report = JSON.parse(doctor.stdout) as {
     readonly ok: boolean;
     readonly runtime: string;
-    readonly approval: { readonly profile: string; readonly source: string; readonly decisionAuthority: string };
+    readonly approval: { readonly profile: string; readonly sources: readonly string[]; readonly decisionAuthority: string };
     readonly kernel: {
       readonly ready: boolean;
       readonly source: string;
@@ -257,7 +388,7 @@ test('product CLI auto-discovers the Rust kernel for a real inspection', async (
   assert.match(report.configuration.message, /Rust revalidates canonical paths/u);
   assert.deepEqual(report.approval, {
     profile: 'developer',
-    source: 'default',
+    sources: ['built_in'],
     decisionAuthority: 'rust-kernel',
     scope: 'registered capabilities; governed mutations retain exact-change approval',
   });

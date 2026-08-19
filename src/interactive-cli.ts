@@ -2,6 +2,8 @@ import { createInterface } from 'node:readline';
 import type { OutcomeStatus, RunStatus } from './slice0/contracts.js';
 import type { InferenceFetch, InferenceRoute } from './inference/contracts.js';
 import type { ProductApprovalProfile } from './approval-profile.js';
+import type { ConfigurationSource } from './config/contracts.js';
+import { classifyInferenceEndpointLocality } from './config/projection.js';
 import { resolveInferenceRoute } from './inference/routing.js';
 
 type JsonRecord = Record<string, unknown>;
@@ -11,18 +13,14 @@ const asRecord = (value: unknown): JsonRecord | undefined =>
     ? value as JsonRecord
     : undefined;
 
-const ollamaBaseUrl = (environment: NodeJS.ProcessEnv): string =>
-  environment.FORGE_OLLAMA_URL ?? 'http://127.0.0.1:11434';
-
 export interface InteractiveRouteSelection {
   readonly route: InferenceRoute;
-  readonly source: 'command-line' | 'environment' | 'ollama-discovery' | 'session';
+  readonly source: ConfigurationSource | 'ollama_discovery' | 'session';
 }
 
 export interface ResolveInteractiveRouteOptions {
-  readonly provider?: string;
-  readonly model?: string;
-  readonly environment?: NodeJS.ProcessEnv;
+  readonly configured?: InteractiveRouteSelection;
+  readonly ollamaBaseUrl?: string;
   readonly fetch?: InferenceFetch;
   readonly discoveryTimeoutMs?: number;
 }
@@ -36,15 +34,14 @@ export const chooseOllamaModel = (models: readonly string[]): string | undefined
 };
 
 export async function discoverOllamaModels(
-  environment: NodeJS.ProcessEnv = process.env,
+  baseUrl = 'http://127.0.0.1:11434/',
   fetchImplementation: InferenceFetch = globalThis.fetch,
   timeoutMs = 3_000,
 ): Promise<readonly string[]> {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30_000) {
     throw new Error('Ollama discovery timeout must be an integer from 1 to 30000.');
   }
-  const base = ollamaBaseUrl(environment);
-  const endpoint = new URL('/api/tags', base.endsWith('/') ? base : base + '/');
+  const endpoint = new URL('/api/tags', baseUrl);
   const response = await fetchImplementation(endpoint, { signal: AbortSignal.timeout(timeoutMs) });
   const body = await response.text();
   if (!response.ok) {
@@ -76,29 +73,25 @@ export async function discoverOllamaModels(
 export async function resolveInteractiveRoute(
   options: ResolveInteractiveRouteOptions = {},
 ): Promise<InteractiveRouteSelection> {
-  const environment = options.environment ?? process.env;
-  const provider = options.provider ?? environment.FORGE_DEFAULT_PROVIDER;
-  const model = options.model ?? environment.FORGE_DEFAULT_MODEL;
-  if ((provider === undefined) !== (model === undefined)) {
-    throw new Error('Interactive Forge requires provider and model together. Set both flags or both FORGE_DEFAULT_* values.');
-  }
-  if (provider !== undefined && model !== undefined) {
-    return {
-      route: resolveInferenceRoute(provider, model),
-      source: options.provider !== undefined || options.model !== undefined ? 'command-line' : 'environment',
-    };
+  if (options.configured !== undefined) return options.configured;
+  const ollamaBaseUrl = options.ollamaBaseUrl ?? 'http://127.0.0.1:11434/';
+  if (classifyInferenceEndpointLocality(ollamaBaseUrl).runtimeLocality !== 'local') {
+    throw new Error(
+      'Forge will not auto-discover models from an off-device or network Ollama endpoint. '
+      + 'Configure provider and model explicitly for that endpoint.',
+    );
   }
   let models: readonly string[];
   try {
     models = await discoverOllamaModels(
-      environment,
+      ollamaBaseUrl,
       options.fetch ?? globalThis.fetch,
       options.discoveryTimeoutMs ?? 3_000,
     );
   } catch (error) {
     throw new Error(
       'Forge could not discover a local Ollama model. Start Ollama and install a model, '
-      + 'or provide --provider and --model. Cause: '
+      + 'or configure provider and model together. Cause: '
       + (error instanceof Error ? error.message : String(error)),
     );
   }
@@ -106,7 +99,7 @@ export async function resolveInteractiveRoute(
   if (selected === undefined) {
     throw new Error('Ollama is reachable but has no installed models. Install one before starting interactive Forge.');
   }
-  return { route: { provider: 'ollama', model: selected }, source: 'ollama-discovery' };
+  return { route: { provider: 'ollama', model: selected }, source: 'ollama_discovery' };
 }
 
 export interface InteractiveSessionIo {
@@ -143,7 +136,7 @@ const sessionHelp = [
 ].join('\n');
 
 const routeLabel = (selection: InteractiveRouteSelection): string =>
-  selection.route.provider + '/' + selection.route.model + ' (' + selection.source + ')';
+  selection.route.provider + '/' + selection.route.model + ' (' + selection.source.replaceAll('_', ' ') + ')';
 
 const approvalDescription = (profile: ProductApprovalProfile): string => {
   if (profile === 'developer') {
@@ -265,7 +258,7 @@ export async function runInteractiveSession(options: InteractiveSessionOptions):
         options.io.write('conversation: prompts are independent; tool turns within each run are preserved');
       } else if (command === '/permissions') {
         options.io.write('approval: ' + options.approvalProfile + ' — ' + approvalDescription(options.approvalProfile));
-        options.io.write('Change it by restarting Forge with --approval-profile <developer|review|locked>.');
+        options.io.write('Change it in configuration or restart Forge with --approval-profile <developer|review|locked>.');
       } else if (command === '/model') {
         if (argumentsList.length === 0) {
           options.io.write('route: ' + routeLabel(selection));

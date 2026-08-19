@@ -53,6 +53,38 @@ test('marks an unmet outcome as an MCP error even when the adapter call succeede
   assert.match(result.content[0]?.text ?? '', /Outcome status: unmet/u);
 });
 
+test('marks execution-budget exhaustion as a schema-valid MCP error', () => {
+  const artifact: RunArtifact = {
+    schemaVersion: 4,
+    runId: 'run:budget-mcp',
+    task: 'Inspect.',
+    snapshot: { id: 'workspace:budget-mcp', rootLabel: 'fixture', files: [] },
+    status: 'execution_budget_exhausted',
+    executionBudget: { schemaVersion: 1, maxCapabilityCalls: 0, maxReportedInputTokens: 262_144, maxReportedOutputTokens: 32_768 },
+    executionUsage: { schemaVersion: 1, capabilityCalls: 0, inferenceTurns: 0, reportedInputTokens: 0, reportedOutputTokens: 0 },
+    capabilityResults: [],
+    outcome: {
+      schemaVersion: 1,
+      status: 'not_evaluated',
+      reason: 'Outcome assessment did not run because the runtime did not reach a terminal planner turn.',
+      checks: [],
+    },
+    events: [{
+      runId: 'run:budget-mcp',
+      sequence: 1,
+      type: 'run.execution_budget_exhausted',
+      dimension: 'capability_calls',
+      limit: 0,
+      observed: 1,
+      usage: { schemaVersion: 1, capabilityCalls: 0, inferenceTurns: 0, reportedInputTokens: 0, reportedOutputTokens: 0 },
+    }],
+  };
+  const result = forgeMcpArtifactResult(artifact, 'summary');
+  assert.equal('isError' in result ? result.isError : undefined, true);
+  assert.equal(result.structuredContent.runStatus, 'execution_budget_exhausted');
+  assert.match(result.content[0]?.text ?? '', /Mechanical run status: execution_budget_exhausted/u);
+});
+
 test('official MCP client discovers and invokes the compact Forge repository-intelligence tether', async () => {
   const transport = new StdioClientTransport({
     command: process.execPath,

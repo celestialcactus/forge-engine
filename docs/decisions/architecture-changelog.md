@@ -1,3 +1,22 @@
+# 2026-08-19 - CLI7 effective configuration passes the hosted gate
+
+- Accepted one immutable effective configuration across CLI, interactive,
+  provider, embedded service, MCP, doctor, and onboarding paths. Fixed user and
+  workspace JSON files, strict source eligibility, atomic provider/model routing,
+  monotonic approval/budget ceilings, and secret-safe source/digest diagnostics
+  now pass the local and clean-install product gates.
+- Added a tight kernel-free configuration UX through `forge config path`, `init`,
+  `validate`, and `show`; invalid present configuration fails before kernel or
+  provider work and safe initialization never overwrites an existing file.
+- Exact candidate `e7ba284` passed hosted Node and hybrid/native/package/benchmark
+  workflows on Windows x64, macOS ARM64, macOS x64, and Ubuntu x64. This closes
+  CLI7-ALPHA-CONFIG and makes bounded CLI8 memory policy and attributable
+  observation/replay the next product lane.
+- Retained the public rights/signing/provenance, native restricted-containment,
+  organization inference-governance, OS secret-store, and CLI8 activation
+  non-claims. See [Checkpoint 91](checkpoints/2026-08-19-91-effective-configuration-hosted-gate.md)
+  and [CLI7-ALPHA-CONFIG](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md).
+
 # 2026-08-19 - CLI7 inference governance and configuration scope are locked
 
 - Clarified ADR-0036: Forge owns correct configuration resolution, attributable
@@ -13,8 +32,9 @@
   enterprise-policy subsystem from CLI7 scope. Managed facts remain a trusted-host
   input, and future organization integrations require concrete requirements and a
   separate gate.
-- Accepted the CLI7 effective-configuration design lock. The next serial action is
-  the contracts-and-golden-fixtures freeze; runtime implementation has not started.
+- Accepted the CLI7 effective-configuration design lock. At this design-lock
+  checkpoint, the next serial action was the contracts-and-golden-fixtures freeze;
+  the later implementation acceptance is recorded above.
   See [ADR-0036](ADRs/ADR-0036-alpha-distribution-and-configuration-contract.md) and
   [CLI7-ALPHA-CONFIG](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md).
 
@@ -26,7 +46,8 @@
   on Windows/macOS/Ubuntu plus the advisory audit.
 - Retained honest boundaries: no public publication, no restricted-containment
   claim, and no activation of the deferred sandbox or CLI8 lanes. Contributor
-  rights, configuration-loader conformance, and artifact provenance remain open.
+  rights, configuration-loader conformance, and artifact provenance were open at
+  that checkpoint; Checkpoint 91 later closes configuration conformance.
   See [Checkpoint 90](checkpoints/2026-08-18-90-trusted-alpha-hosted-gate.md).
 
 # 2026-08-17 - Repository authority and release contracts are explicit

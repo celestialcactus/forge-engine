@@ -5,10 +5,22 @@ import { test } from 'node:test';
 
 const fixtureRoot = resolve('tests/fixtures/slice1-workspace');
 const cli = [resolve('node_modules/tsx/dist/cli.mjs'), resolve('src/cli.ts')];
+const cliEnvironment = (additions: Readonly<NodeJS.ProcessEnv> = {}): NodeJS.ProcessEnv => {
+  const environment = { ...process.env };
+  for (const variable of [
+    'FORGE_DEFAULT_PROVIDER', 'FORGE_DEFAULT_MODEL', 'FORGE_ENGINE_ROOT',
+    'FORGE_OLLAMA_URL', 'FORGE_OLLAMA_CONTEXT_TOKENS', 'FORGE_OPENAI_BASE_URL',
+    'FORGE_APPROVAL_PROFILE', 'FORGE_MAX_TURNS', 'FORGE_MAX_CAPABILITY_CALLS',
+    'FORGE_MAX_INPUT_TOKENS', 'FORGE_MAX_OUTPUT_TOKENS', 'FORGE_TIMEOUT_MS',
+    'OPENAI_API_KEY',
+  ]) delete environment[variable];
+  const isolatedHome = join(fixtureRoot, 'missing-home');
+  return { ...environment, HOME: isolatedHome, USERPROFILE: isolatedHome, ...additions };
+};
 
 test('product CLI fails closed instead of selecting the TypeScript conformance runtime', () => {
   const missingKernel = join(fixtureRoot, 'missing-forge-kernel');
-  const environment = { ...process.env, FORGE_KERNEL_BINARY: missingKernel };
+  const environment = cliEnvironment({ FORGE_KERNEL_BINARY: missingKernel });
   const run = spawnSync(process.execPath, [
     ...cli,
     'inspect',
@@ -32,7 +44,7 @@ test('product CLI fails closed instead of selecting the TypeScript conformance r
     readonly ok: boolean;
     readonly runtime: string;
     readonly kernel: { readonly ready: boolean; readonly path: string | null; readonly message: string };
-    readonly approval: { readonly profile: string; readonly source: string; readonly decisionAuthority: string };
+    readonly approval: { readonly profile: string; readonly sources: readonly string[]; readonly decisionAuthority: string };
     readonly executionDefaults: {
       readonly schemaVersion: number;
       readonly maxCapabilityCalls: number;
@@ -47,7 +59,7 @@ test('product CLI fails closed instead of selecting the TypeScript conformance r
   assert.match(report.kernel.message, /not an executable file/u);
   assert.deepEqual(report.approval, {
     profile: 'developer',
-    source: 'default',
+    sources: ['built_in'],
     decisionAuthority: 'rust-kernel',
     scope: 'registered capabilities; governed mutations retain exact-change approval',
   });
@@ -60,7 +72,7 @@ test('product CLI fails closed instead of selecting the TypeScript conformance r
 });
 
 test('does not expose superseded candidate commands or fake task execution', () => {
-  const environment = { ...process.env, FORGE_KERNEL_BINARY: join(fixtureRoot, 'missing-forge-kernel') };
+  const environment = cliEnvironment({ FORGE_KERNEL_BINARY: join(fixtureRoot, 'missing-forge-kernel') });
   const help = spawnSync(process.execPath, [...cli, 'help'], {
     encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment,
   });
@@ -71,14 +83,14 @@ test('does not expose superseded candidate commands or fake task execution', () 
     encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment,
   });
   assert.equal(optionHelp.status, 0);
-  assert.match(optionHelp.stdout, /With no route flags, Forge auto-discovers/u);
+  assert.match(optionHelp.stdout, /when none exists, interactive mode can discover/u);
   assert.match(optionHelp.stdout, /approval-profile <developer\|review\|locked>/u);
 
   const invalidProfile = spawnSync(process.execPath, [...cli, 'help', '--approval-profile', 'yolo'], {
     encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment,
   });
   assert.notEqual(invalidProfile.status, 0);
-  assert.match(invalidProfile.stderr, /developer, review, or locked/u);
+  assert.match(invalidProfile.stderr, /developer.*review.*locked/iu);
 
   const reviewJson = spawnSync(process.execPath, [
     ...cli,
@@ -93,7 +105,7 @@ test('does not expose superseded candidate commands or fake task execution', () 
     '--json',
   ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment });
   assert.notEqual(reviewJson.status, 0);
-  assert.match(reviewJson.stderr, /cannot be combined.*consent prompts/iu);
+  assert.match(reviewJson.stderr, /cannot be used.*consent prompts/iu);
 
   const interactive = spawnSync(process.execPath, cli, {
     encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment,
@@ -114,12 +126,12 @@ test('does not expose superseded candidate commands or fake task execution', () 
     encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment,
   });
   assert.notEqual(run.status, 0);
-  assert.match(run.stderr, /explicit --provider/u);
+  assert.match(run.stderr, /No inference route is configured/u);
   assert.doesNotMatch(run.stdout, /totalFiles/u);
 });
 
 test('forge onboard separates accepted release contracts from remaining evidence gates', () => {
-  const environment = { ...process.env, FORGE_KERNEL_BINARY: join(fixtureRoot, 'missing-forge-kernel') };
+  const environment = cliEnvironment({ FORGE_KERNEL_BINARY: join(fixtureRoot, 'missing-forge-kernel') });
   const result = spawnSync(process.execPath, [
     ...cli,
     'onboard',
@@ -143,12 +155,12 @@ test('forge onboard separates accepted release contracts from remaining evidence
   assert.equal(report.containment.profile, 'trusted');
   assert.equal(report.containment.enforced, false);
   assert.match(report.containment.disclosure, /does not enforce an accepted OS sandbox/u);
-  assert.equal(report.configuration.precedenceStatus, 'contract_accepted_implementation_pending');
-  assert.match(report.configuration.disclosure, /managed ceilings, explicit CLI/u);
+  assert.equal(report.configuration.precedenceStatus, 'conformant');
+  assert.match(report.configuration.disclosure, /compiled once from managed ceilings, explicit CLI/u);
   assert.match(report.configuration.disclosure, /policy values may only tighten/u);
+  assert.match(report.configuration.disclosure, /credential values remain redacted/u);
   assert.deepEqual(report.releaseBlockers, [
     'Rights attestation for existing contributions',
     'Public artifact signing and provenance',
-    'Configuration precedence implementation and conformance',
   ]);
 });

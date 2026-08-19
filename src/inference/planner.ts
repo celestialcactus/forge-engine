@@ -268,25 +268,34 @@ export class ProviderTaskPlanner implements TaskPlanner {
     }
     this.#appendCapabilityResults(request.capabilityResults);
     const requestId = this.#requestIdFactory();
-    const result = await collectProviderInference(
-      this.#provider,
-      this.#route,
-      { requestId, model: this.#route.model, messages: this.#messages, tools: this.#tools },
-      signal,
-      {
-        ...(this.#now === undefined ? {} : { now: this.#now }),
-        ...(this.#onInferenceEvent === undefined
-          ? {}
-          : {
-              onEvent: (event) => this.#onInferenceEvent?.({
-                requestId,
-                provider: this.#provider.id,
-                model: this.#route.model,
-                event,
+    let result: Awaited<ReturnType<typeof collectProviderInference>>;
+    try {
+      result = await collectProviderInference(
+        this.#provider,
+        this.#route,
+        { requestId, model: this.#route.model, messages: this.#messages, tools: this.#tools },
+        signal,
+        {
+          ...(this.#now === undefined ? {} : { now: this.#now }),
+          ...(this.#onInferenceEvent === undefined
+            ? {}
+            : {
+                onEvent: (event) => this.#onInferenceEvent?.({
+                  requestId,
+                  provider: this.#provider.id,
+                  model: this.#route.model,
+                  event,
+                }),
               }),
-            }),
-      },
-    );
+        },
+      );
+    } catch (error: unknown) {
+      if (signal.aborted) throw error;
+      throw new Error(
+        `Inference failed for configured route ${this.#route.provider}/${this.#route.model}. `
+        + 'No fallback provider was attempted.',
+      );
+    }
     if (result.finishReason === 'tool_call') {
       const providerCall = result.toolCalls[0];
       if (providerCall === undefined) throw new Error('Tool-call completion did not contain a tool call.');

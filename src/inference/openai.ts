@@ -5,6 +5,8 @@ import type {
   NormalizedInferenceEvent,
   ProviderInferenceRequest,
 } from './contracts.js';
+import type { InferenceLocality } from '../slice0/contracts.js';
+import { classifyInferenceEndpointLocality } from '../config/projection.js';
 import { decodeSseData, requireSuccessfulResponse } from './http.js';
 
 type JsonRecord = Record<string, unknown>;
@@ -87,7 +89,7 @@ export interface OpenAiProviderOptions {
 
 export class OpenAiResponsesProvider implements InferenceProvider {
   readonly id = 'openai';
-  readonly locality = 'cloud' as const;
+  readonly locality: InferenceLocality;
   readonly #apiKey: string;
   readonly #endpoint: URL;
   readonly #fetch: InferenceFetch;
@@ -99,6 +101,7 @@ export class OpenAiResponsesProvider implements InferenceProvider {
     if (options.apiKey.trim().length === 0) throw new Error('OPENAI_API_KEY is required for the explicit OpenAI route.');
     this.#apiKey = options.apiKey;
     const base = options.baseUrl ?? 'https://api.openai.com';
+    this.locality = classifyInferenceEndpointLocality(base).runtimeLocality;
     this.#endpoint = new URL('/v1/responses', base.endsWith('/') ? base : `${base}/`);
     this.#fetch = options.fetch ?? globalThis.fetch;
   }

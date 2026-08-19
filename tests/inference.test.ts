@@ -16,8 +16,31 @@ import { createInferenceProvider, resolveInferenceRoute } from '../src/inference
 import { collectProviderInference } from '../src/inference/stream.js';
 import { providerToolResultContent } from '../src/inference/tool-evidence.js';
 import { ForgeWorkspaceService, typeScriptConformanceFixture } from '../src/v1/service.js';
+import type { EffectiveProductConfiguration } from '../src/config/contracts.js';
 
 const route = { provider: 'ollama', model: 'fixture-model' } as const;
+const factoryConfiguration = (options: {
+  readonly credentialPresent?: boolean;
+  readonly ollamaContextWindowTokens?: number;
+  readonly ollamaBaseUrl?: string;
+  readonly openAiBaseUrl?: string;
+} = {}): EffectiveProductConfiguration => ({
+  providers: {
+    ollama: {
+      baseUrl: { value: options.ollamaBaseUrl ?? 'http://127.0.0.1:11434/' },
+      contextWindowTokens: { value: options.ollamaContextWindowTokens ?? 8_192 },
+    },
+    openai: {
+      baseUrl: { value: options.openAiBaseUrl ?? 'https://api.openai.com/' },
+      credential: {
+        value: {
+          handle: { kind: 'environment_variable', name: 'OPENAI_API_KEY' },
+          present: options.credentialPresent ?? false,
+        },
+      },
+    },
+  },
+} as EffectiveProductConfiguration);
 const request: ProviderInferenceRequest = {
   requestId: 'inference:fixture',
   model: route.model,
@@ -563,18 +586,21 @@ test('compacts duplicate read evidence before returning it to a provider', () =>
 });
 
 test('fails explicit routing and multiple-tool violations without fallback', async () => {
-  assert.throws(() => resolveInferenceRoute(undefined, 'model'), /explicit --provider/u);
-  assert.throws(() => resolveInferenceRoute('ollama', undefined), /explicit non-empty --model/u);
+  assert.throws(() => resolveInferenceRoute(undefined, 'model'), /provider and model together/u);
+  assert.throws(() => resolveInferenceRoute('ollama', undefined), /non-empty model/u);
   assert.throws(
-    () => createInferenceProvider({ provider: 'openai', model: 'fixture' }, { environment: {} }),
+    () => createInferenceProvider(
+      { provider: 'openai', model: 'fixture' },
+      { configuration: factoryConfiguration(), secretEnvironment: {} },
+    ),
     /OPENAI_API_KEY/u,
   );
   assert.throws(
     () => createInferenceProvider(
       { provider: 'ollama', model: 'fixture' },
-      { environment: { FORGE_OLLAMA_CONTEXT_TOKENS: '1024' } },
+      { configuration: factoryConfiguration({ ollamaContextWindowTokens: 1_024 }) },
     ),
-    /FORGE_OLLAMA_CONTEXT_TOKENS/u,
+    /contextWindowTokens/u,
   );
   const invalidProvider: InferenceProvider = {
     id: 'ollama',
@@ -596,6 +622,57 @@ test('fails explicit routing and multiple-tool violations without fallback', asy
     }, new AbortController().signal),
     /request exceeds 1048576 characters/u,
   );
+});
+
+test('provider locality follows the configured endpoint instead of adapter identity', () => {
+  const remoteOllama = createInferenceProvider(
+    { provider: 'ollama', model: 'fixture' },
+    { configuration: factoryConfiguration({ ollamaBaseUrl: 'https://ollama.example.test/' }) },
+  );
+  assert.equal(remoteOllama.locality, 'cloud');
+
+  const localOpenAi = createInferenceProvider(
+    { provider: 'openai', model: 'fixture' },
+    {
+      configuration: factoryConfiguration({
+        credentialPresent: true,
+        openAiBaseUrl: 'http://127.0.0.1:8080/',
+      }),
+      secretEnvironment: { OPENAI_API_KEY: 'fixture-secret' },
+    },
+  );
+  assert.equal(localOpenAi.locality, 'local');
+});
+
+test('a configured provider transport failure names one attempted route and never reroutes or leaks', async () => {
+  const secret = 'provider-failure-secret';
+  let attempts = 0;
+  const failingProvider: InferenceProvider = {
+    id: 'openai',
+    locality: 'cloud',
+    async *stream(): AsyncGenerator<NormalizedInferenceEvent> {
+      attempts++;
+      throw new Error(`simulated transport failure ${secret}`);
+    },
+  };
+  const failureRoute = { provider: 'openai', model: 'fixture-openai-model' } as const;
+  const service = new ForgeWorkspaceService(resolve('tests/fixtures/slice1-workspace'), {
+    runtime: typeScriptConformanceFixture,
+  });
+  try {
+    const artifact = await service.executeTask(
+      'Fail without rerouting.',
+      new ProviderTaskPlanner({ provider: failingProvider, route: failureRoute, tools: [] }),
+      { maxTurns: 1 },
+    );
+    const serialized = JSON.stringify(artifact);
+    assert.equal(attempts, 1);
+    assert.match(serialized, /openai\/fixture-openai-model/u);
+    assert.match(serialized, /No fallback provider was attempted/u);
+    assert.doesNotMatch(serialized, new RegExp(secret, 'u'));
+  } finally {
+    service.close();
+  }
 });
 test('records provider cancellation and rejects tampered inference evidence', async () => {
   const fixtureRoot = resolve('tests/fixtures/slice1-workspace');

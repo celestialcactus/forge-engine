@@ -1,47 +1,49 @@
 import type { InferenceFetch, InferenceProvider, InferenceRoute } from './contracts.js';
+import type { EffectiveProductConfiguration } from '../config/contracts.js';
+import { resolveOpenAiCredentialValue } from '../config/secrets.js';
 import { OllamaChatProvider } from './ollama.js';
 import { OpenAiResponsesProvider } from './openai.js';
 
 export interface InferenceProviderFactoryOptions {
-  readonly environment?: Readonly<NodeJS.ProcessEnv>;
+  readonly configuration: EffectiveProductConfiguration;
+  readonly secretEnvironment?: Readonly<NodeJS.ProcessEnv>;
   readonly fetch?: InferenceFetch;
 }
 
-const optionalContextWindow = (raw: string | undefined): number | undefined => {
-  if (raw === undefined) return undefined;
-  const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value < 2_048 || value > 262_144) {
-    throw new Error('FORGE_OLLAMA_CONTEXT_TOKENS must be an integer from 2048 to 262144.');
-  }
-  return value;
-};
-
 export function resolveInferenceRoute(provider: string | undefined, model: string | undefined): InferenceRoute {
   if (provider !== 'ollama' && provider !== 'openai') {
-    throw new Error('forge run requires an explicit --provider <ollama|openai>. No fallback route is selected.');
+    throw new Error('Forge requires provider and model together from one configuration source. No fallback route is selected.');
   }
   if (model === undefined || model.trim().length === 0 || model.length > 200) {
-    throw new Error('forge run requires an explicit non-empty --model value of at most 200 characters.');
+    throw new Error('Forge requires a non-empty model value of at most 200 characters in the same configuration source.');
   }
   return { provider, model: model.trim() };
 }
 
 export function createInferenceProvider(
   route: InferenceRoute,
-  options: InferenceProviderFactoryOptions = {},
+  options: InferenceProviderFactoryOptions,
 ): InferenceProvider {
-  const environment = options.environment ?? process.env;
   if (route.provider === 'ollama') {
-    const contextWindowTokens = optionalContextWindow(environment.FORGE_OLLAMA_CONTEXT_TOKENS);
     return new OllamaChatProvider({
-      ...(environment.FORGE_OLLAMA_URL === undefined ? {} : { baseUrl: environment.FORGE_OLLAMA_URL }),
-      ...(contextWindowTokens === undefined ? {} : { contextWindowTokens }),
+      baseUrl: options.configuration.providers.ollama.baseUrl.value,
+      contextWindowTokens: options.configuration.providers.ollama.contextWindowTokens.value,
       ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     });
   }
+  const apiKey = resolveOpenAiCredentialValue(
+    options.configuration.providers.openai.credential.value,
+    options.secretEnvironment ?? process.env,
+  );
+  if (apiKey.trim().length === 0) {
+    throw new Error(
+      `Cannot initialize configured route openai/${route.model}: OPENAI_API_KEY is not available. `
+      + 'No fallback provider was attempted.',
+    );
+  }
   return new OpenAiResponsesProvider({
-    apiKey: environment.OPENAI_API_KEY ?? '',
-    ...(environment.FORGE_OPENAI_BASE_URL === undefined ? {} : { baseUrl: environment.FORGE_OPENAI_BASE_URL }),
+    apiKey,
+    baseUrl: options.configuration.providers.openai.baseUrl.value,
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
 }

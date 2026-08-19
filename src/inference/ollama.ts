@@ -5,6 +5,8 @@ import type {
   NormalizedInferenceEvent,
   ProviderInferenceRequest,
 } from './contracts.js';
+import type { InferenceLocality } from '../slice0/contracts.js';
+import { classifyInferenceEndpointLocality } from '../config/projection.js';
 import { decodeResponseLines, requireSuccessfulResponse } from './http.js';
 
 type JsonRecord = Record<string, unknown>;
@@ -48,13 +50,14 @@ export interface OllamaProviderOptions {
 
 export class OllamaChatProvider implements InferenceProvider {
   readonly id = 'ollama';
-  readonly locality = 'local' as const;
+  readonly locality: InferenceLocality;
   readonly #endpoint: URL;
   readonly #fetch: InferenceFetch;
   readonly #contextWindowTokens: number;
 
   constructor(options: OllamaProviderOptions = {}) {
     const base = options.baseUrl ?? 'http://127.0.0.1:11434';
+    this.locality = classifyInferenceEndpointLocality(base).runtimeLocality;
     this.#endpoint = new URL('/api/chat', base.endsWith('/') ? base : `${base}/`);
     this.#fetch = options.fetch ?? globalThis.fetch;
     this.#contextWindowTokens = options.contextWindowTokens ?? defaultContextWindowTokens;

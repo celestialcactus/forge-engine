@@ -396,6 +396,19 @@ export type ConfigurationDigestMaterial = {
         readonly present: boolean;
         readonly secret: OpenAiCredentialPresence['handle'];
       }
+    : Field extends 'inference.route'
+      ? {
+          readonly schemaVersion: 1;
+          readonly field: Field;
+          readonly sources: readonly ConfigurationSource[];
+          readonly present: true;
+          readonly value: ConfigurationFieldValueMap[Field];
+        } | {
+          readonly schemaVersion: 1;
+          readonly field: Field;
+          readonly sources: readonly ['built_in'];
+          readonly present: false;
+        }
     : {
         readonly schemaVersion: 1;
         readonly field: Field;

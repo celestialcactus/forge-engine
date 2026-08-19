@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "inference": {
+    "provider": " OLLAMA ",
+    "model": " qwen-fixture "
+  },
+  "approvalProfile": " REVIEW ",
+  "execution": {
+    "maxTurns": 4,
+    "maxCapabilityCalls": 2,
+    "maxReportedInputTokens": 100000,
+    "maxReportedOutputTokens": 10000,
+    "timeoutMs": 60000
+  }
+}
