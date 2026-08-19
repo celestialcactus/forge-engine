@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "inference": {
+    "provider": "openai",
+    "model": "fixture-model"
+  },
+  "providers": {
+    "ollama": {
+      "baseUrl": "http://127.0.0.1:11434",
+      "contextWindowTokens": 16384
+    },
+    "openai": {
+      "baseUrl": "https://api.openai.com"
+    }
+  },
+  "approvalProfile": "locked"
+}
