@@ -1,7 +1,7 @@
 # CLI7-ALPHA-CONFIG: effective configuration and conformance
 
-**State:** Design lock accepted 2026-08-19; contract/fixture implementation is next
-**Accepted baseline:** `origin/develop` at `2882550` (PR #28)
+**State:** Package 0 contracts and golden fixtures implemented; review is required before parallel core work
+**Accepted baseline:** `origin/develop` at `dfed8dd` (PR #29 design lock)
 **Architecture authority:**
 [ADR-0036](../decisions/ADRs/ADR-0036-alpha-distribution-and-configuration-contract.md),
 [ADR-0028](../decisions/ADRs/ADR-0028-product-approval-profiles.md), and
@@ -103,6 +103,14 @@ organizational RBAC, compliance policy, or a remote enterprise-policy service.
 Managed facts remain a typed trusted-host input at the highest precedence; they do
 not imply that Forge distributes or administers organization policy.
 
+Endpoint locality is derived conservatively from the normalized endpoint hostname,
+not from the provider adapter name. `localhost`, the IPv4 `127.0.0.0/8` block,
+IPv6 loopback, and IPv4-mapped IPv6 loopback are `local`; every other endpoint is
+treated as off-device (`cloud` in the existing two-value runtime contract). Forge
+does not probe the endpoint to make this classification. This preserves the Rust
+protocol while preventing a remote Ollama-compatible endpoint from becoming a
+false local-inference claim.
+
 ### How are values combined?
 
 - Selection units choose the first defined eligible source in this exact order:
@@ -121,6 +129,9 @@ not imply that Forge distributes or administers organization policy.
 ### How are secrets represented and reported?
 
 - Config files and CLI arguments contain no secret bytes.
+- Provider endpoints are origin-only HTTP(S) URLs. Userinfo, query strings,
+  fragments, and non-root paths are rejected so a URL cannot become a credential
+  container or imply gateway routing the current adapters do not honor.
 - Schema v1 recognizes only the existing `OPENAI_API_KEY` named environment
   reference. A provider receives the value only when its adapter is constructed.
 - The effective configuration retains a secret handle plus presence/source facts,
@@ -131,6 +142,34 @@ not imply that Forge distributes or administers organization policy.
   `doctor` output. Error messages must not echo the value.
 - An OS-secret-store adapter is compatible with ADR-0036 but deferred until a
   separately scoped cross-platform provider is selected and tested.
+
+### What does a tight configuration experience mean?
+
+Configuration quality is an acceptance boundary, not deferred polish. The normal
+path remains zero-config where the product can safely guide the user: an absent
+route is reported plainly and interactive mode may offer local model discovery.
+Users do not need to understand the precedence lattice before Forge is useful.
+
+- There is one fixed workspace file, one fixed user file, and no ambiguous search
+  or global `--config` override.
+- File keys mirror CLI concepts, use human names in help and `doctor`, and retain
+  stable machine field IDs only for automation and advanced diagnosis.
+- Every invalid setting reports what is wrong, the exact file/option/environment
+  location, and a concrete next action. A workspace-owned field rejected for
+  safety specifically tells the user which user or environment surface can own it.
+- Missing optional files stay silent. Present invalid files fail before work and
+  are never ignored, partially applied, or replaced by a fallback source.
+- `doctor` explains the chosen value and source without requiring network access,
+  while secret fields expose only their named reference and presence.
+- Unknown keys fail with bounded, typo-oriented guidance. Errors never dump whole
+  files, raw environment values, secret bytes, or a stack trace unless the existing
+  explicit debug mode is enabled.
+- Human and JSON output describe the same facts. Human output favors short labels
+  and remediation; JSON favors stable IDs, sources, digests, and redaction flags.
+
+Package 0 makes these requirements executable by requiring a human label for every
+field and a message-plus-hint contract for every configuration issue. Later
+packages must add golden error text for each failure class they implement.
 
 ### Where does authority remain?
 
@@ -251,10 +290,11 @@ an accepted ADR, a Rust protocol/schema, or another package's exclusive files.
 
 - [x] accept the design lock above, including the operator-owned inference-
       governance boundary;
-- [ ] freeze schema-v1 field IDs, source eligibility, normalization, and digest
+- [x] freeze schema-v1 field IDs, source eligibility, normalization, and digest
       rules;
-- [ ] add table-driven golden cases before implementation;
-- [ ] confirm no Rust bridge or persisted-run schema change is required.
+- [x] add table-driven golden cases before implementation;
+- [x] confirm no Rust bridge or persisted-run schema change is required. Package 0
+      adds TypeScript contracts and pre-runtime fixtures only.
 
 ### Phase 1: parallel core
 
