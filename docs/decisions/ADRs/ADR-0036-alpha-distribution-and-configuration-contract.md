@@ -1,7 +1,7 @@
 # ADR-0036: Alpha distribution and configuration contract
 
 - **Status:** accepted
-- **Date:** 2026-08-17
+- **Date:** 2026-08-17; inference-governance boundary clarified 2026-08-19
 - **Owners:** ForgeEngine maintainers
 - **Checkpoint:** 89
 - **Supersedes:** unresolved release-matrix and configuration-precedence gates
@@ -36,11 +36,31 @@ store or explicitly named environment variables, are projected as presence/sourc
 facts only, and are redacted from diagnostics. `doctor` must eventually show each
 effective field's source and a stable redacted digest.
 
+Forge owns configuration mechanism, not organizational inference governance. The
+operator or organization selects which inference environment is acceptable and is
+responsible for the surrounding cloud/account boundary, including regions, IAM,
+private connectivity, retention, approved models, data classification, and
+compliance controls. Forge must resolve and execute the configured provider/model
+and endpoint predictably, report that selection, protect credential material, and
+never silently widen or fall back across the configured boundary.
+
+Workspace configuration may select a supported provider/model pair, but it cannot
+establish external trust anchors: provider endpoints, credential references,
+executables, and state roots remain host/user configuration. CLI7 does not add
+provider allowlists, provider ceilings, data-residency policy, RBAC, or a remote
+enterprise-policy subsystem. Those controls remain the responsibility of the
+operator's deployment unless later concrete requirements justify a separate,
+explicitly gated Forge integration.
+
 ## Consequences
 
 - The release lane has a finite hosted/package matrix.
 - The configuration model remains convenient without allowing a workspace to weaken
   authority.
+- Provider/model routing remains an attributable operator choice rather than a new
+  Forge organizational-governance engine. Forge still owns no-fallback behavior,
+  secret safety, capability/tool authority, approvals, mutations, and truthful
+  diagnostics.
 - Current runtime behavior does not yet implement the entire precedence contract;
   release acceptance requires tests before claiming it does.
 - Signing, notarization, registry ownership, and public rights attestation remain
@@ -54,3 +74,5 @@ effective field's source and a stable redacted digest.
   compatibility job.
 - Config fixtures prove selection precedence, monotonic policy tightening, secret
   redaction, and effective-source reporting.
+- Route fixtures prove exact provider/model selection, rejection of workspace
+  endpoints/credential references, and no implicit cross-provider fallback.

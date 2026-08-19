@@ -1,3 +1,23 @@
+# 2026-08-19 - CLI7 inference governance and configuration scope are locked
+
+- Clarified ADR-0036: Forge owns correct configuration resolution, attributable
+  provider/model routing, no silent cross-provider fallback, secret safety, and the
+  capability/mutation/approval boundaries intrinsic to the harness. The operator or
+  organization owns the acceptability and cloud/data-isolation boundary of its
+  selected inference environment.
+- Kept workspace provider/model selection for developer convenience while forbidding
+  repository control of endpoints, credential references, executables, and state
+  roots. A custom remote endpoint is not described as local merely because it uses a
+  local-provider adapter.
+- Removed provider ceilings, organizational RBAC/data-residency policy, and a remote
+  enterprise-policy subsystem from CLI7 scope. Managed facts remain a trusted-host
+  input, and future organization integrations require concrete requirements and a
+  separate gate.
+- Accepted the CLI7 effective-configuration design lock. The next serial action is
+  the contracts-and-golden-fixtures freeze; runtime implementation has not started.
+  See [ADR-0036](ADRs/ADR-0036-alpha-distribution-and-configuration-contract.md) and
+  [CLI7-ALPHA-CONFIG](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md).
+
 # 2026-08-18 - Trusted-alpha replay passes the hosted gate
 
 - Accepted the authoritative replay as a private trusted-developer alpha

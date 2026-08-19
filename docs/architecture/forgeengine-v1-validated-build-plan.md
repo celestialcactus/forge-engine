@@ -2,7 +2,7 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
-**Last groomed:** 2026-08-18 after PR #28 and the trusted-alpha hosted gate
+**Last groomed:** 2026-08-19 after the CLI7 inference-governance design lock
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
 
@@ -32,8 +32,12 @@ what evidence was selected, what capability acted, what changed, and whether the
 result was verified.
 
 It is sovereign-first: local execution and local models are first-class choices.
-It is not isolationist: a user or host policy may deliberately escalate a task to a
-cloud provider. In V1 Forge complements Codex, Copilot, IDEs, and organization
+It is not isolationist: a user, host, or organization may deliberately configure a
+cloud provider and owns the surrounding inference-governance boundary. Forge owns
+faithful routing, no silent cross-provider fallback, secret safety, and the tool/
+mutation/approval boundaries intrinsic to the harness; it does not invent the
+organization's provider allowlists, data-residency rules, IAM, RBAC, or compliance
+policy. In V1 Forge complements Codex, Copilot, IDEs, and organization
 harnesses by making their interaction with a workspace more evidence-driven and
 controllable. Those integrations are an adoption path, not a permanent product
 dependency or ceiling.
@@ -68,6 +72,10 @@ required for baseline sovereign operation.
    kernel. Delegations carry origin, depth, budget, cancellation, and idempotency.
 9. **One policy authority.** TypeScript may collect host policy facts and user
    consent; Rust resolves and records the final Forge allow, deny, or ask outcome.
+10. **Inference governance is operator-owned.** Forge resolves and reports the
+    selected provider boundary and never falls back across it. Workspace config may
+    select provider/model, but endpoints, credentials, executables, and state roots
+    remain host/user inputs. Organization policy distribution is not a CLI7 feature.
 
 ## V1 vertical slices
 
@@ -85,7 +93,7 @@ slice has usable behavior, trace evidence, and a passing fixture.
 | 4. Sessions and projections | A run can resume, be inspected, and be replayed without relying on chat history. | Append-only events/artifacts, SQLite projections, workspace snapshot identity, trace export/replay. | A recorded fixture run replays deterministically and projections reconstruct its current state. |
 | 5. Skills and bounded memory | A developer can load a reviewed workflow skill and inspect why it applied. | Skill manifest/provenance/scope, progressive disclosure, memory observations, candidate/promote workflow. | A skill improves a fixture workflow without hidden prompt injection; every applied instruction is attributable. |
 | 6. VS Code MCP apprentice | VS Code can ask Forge for evidence and invoke a bounded workflow. | MCP server, capability advertisement, cancellation/progress mapping, `.vscode/mcp.json` sandbox fixture. | MCP conformance and the VS Code fixture demonstrate cancellation, errors, trace links, and no host-specific core fork. |
-| 7. Providers and escalation | A user can select local or cloud execution under an explicit policy. | One local provider adapter, one cloud adapter, streaming/tool-call normalization, provider policy, cost/latency telemetry. | Identical capability scenario passes provider conformance tests; escalation is explainable and opt-in. |
+| 7. Providers and escalation | A user or operator can select local or cloud execution through explicit attributable configuration. | One local provider adapter, one cloud adapter, streaming/tool-call normalization, exact route/no-fallback behavior, cost/latency telemetry. | Identical capability scenario passes provider conformance tests; route selection is explainable and no implicit cross-provider fallback occurs. |
 | 8. Hardening and release | A developer can rely on documented, tested runtime boundaries. | Windows and macOS process/filesystem isolation backends, migration/upgrade, packaging, observability, recovery, compatibility matrix. | Threat-model claims are backed by platform tests and release gates; unsupported boundaries are documented as such. |
 
 ### Current delivery focus
@@ -114,7 +122,8 @@ not reopened by that sequencing.
 PR #28 (`2882550`) corrects the product-reported remaining blockers. The current
 short implementation gate is the
 [ADR-0036 effective-configuration loader and conformance slice](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md).
-Its QRSPI design checkpoint is proposed and runtime implementation has not started.
+Its QRSPI design lock is accepted; the contracts-and-golden-fixtures freeze is next,
+and runtime implementation has not started.
 Native restricted execution continues as the independent
 `SBX-PROVIDER-LIFECYCLE` lane. `CLI8A-MEMORY-FOUNDATION` remains runtime-inactive
 until the standalone-alpha configuration gate closes and its own policy,
@@ -720,10 +729,10 @@ limitation.
 
 **Go next for the bounded
 [ADR-0036 effective-configuration increment](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md).**
-Review its proposed design lock, then implement selection precedence, monotonic
-authority tightening, secret redaction, effective-source reporting, and
-cross-platform fixtures without mixing in public publication, sandbox-provider
-promotion, or CLI8 activation.
+With its design lock accepted, freeze the contracts and golden cases, then implement
+selection precedence, monotonic authority tightening, secret redaction, effective-
+source reporting, and cross-platform fixtures without mixing in public publication,
+sandbox-provider promotion, organization inference governance, or CLI8 activation.
 
 **Go for the bounded attributable-memory, measured-retrieval, and reviewed-skill
 vertical slice immediately after the configuration-conformant standalone CLI gate;

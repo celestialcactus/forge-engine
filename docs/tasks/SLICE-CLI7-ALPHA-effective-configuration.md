@@ -1,6 +1,6 @@
 # CLI7-ALPHA-CONFIG: effective configuration and conformance
 
-**State:** Planned design checkpoint; implementation has not started
+**State:** Design lock accepted 2026-08-19; contract/fixture implementation is next
 **Accepted baseline:** `origin/develop` at `2882550` (PR #28)
 **Architecture authority:**
 [ADR-0036](../decisions/ADRs/ADR-0036-alpha-distribution-and-configuration-contract.md),
@@ -21,11 +21,11 @@ creating a second policy authority or broadening the alpha claim.
 This is the next smallest implementation lane. It is independent of native sandbox
 provider promotion and must close before CLI8 runtime activation.
 
-## Q — questions and proposed design lock
+## Q — accepted design lock
 
-The answers below are planning recommendations, not additional accepted
-architecture. Maintainer review of this section is the only intentional pause before
-implementation.
+The maintainer accepted this design boundary on 2026-08-19. The answers below refine
+ADR-0036 for this bounded implementation; package 0 freezes their exact types and
+golden cases without reopening product scope.
 
 ### Where do configuration files live, and what format do they use?
 
@@ -81,6 +81,27 @@ endpoint, or a host credential reference. That prevents a repository from turnin
 configuration convenience into executable selection, state relocation, or a
 credential confused deputy. A workspace may select a supported provider/model pair
 and may tighten policy ceilings.
+
+### Who owns inference governance?
+
+Forge owns the local harness mechanism; the operator or organization owns the
+acceptability of the selected inference environment. For a cloud route, the
+operator establishes the account, region, IAM, networking, retention, approved
+models, data classification, and compliance boundary. For a genuinely local route,
+the operator selects and operates that local endpoint. Forge does not relabel a
+custom or remote endpoint as local merely because it uses a local-provider adapter.
+
+Forge must faithfully use and report the resolved provider/model and endpoint,
+protect credential material, fail predictably, and never silently fall back to a
+different provider or widen the configured boundary. It continues to own the
+security intrinsic to the harness: capability and tool authority, filesystem
+mutation, approvals, secrets, provenance, destructive actions, and truthful
+containment claims.
+
+CLI7 does not add provider allowlists, provider ceilings, data-residency rules,
+organizational RBAC, compliance policy, or a remote enterprise-policy service.
+Managed facts remain a typed trusted-host input at the highest precedence; they do
+not imply that Forge distributes or administers organization policy.
 
 ### How are values combined?
 
@@ -228,7 +249,8 @@ an accepted ADR, a Rust protocol/schema, or another package's exclusive files.
 
 ### Phase 0: golden contract
 
-- [ ] accept or revise the proposed design lock above;
+- [x] accept the design lock above, including the operator-owned inference-
+      governance boundary;
 - [ ] freeze schema-v1 field IDs, source eligibility, normalization, and digest
       rules;
 - [ ] add table-driven golden cases before implementation;
@@ -248,6 +270,8 @@ an accepted ADR, a Rust protocol/schema, or another package's exclusive files.
 
 - [ ] replace covered ad hoc reads in CLI, interactive routing, and provider
       construction;
+- [ ] preserve the exact resolved provider/model and fail rather than silently
+      selecting another provider when initialization or inference fails;
 - [ ] preserve `forge diagnostics --config <tsconfig>` semantics;
 - [ ] pass one effective configuration into standalone service and MCP construction;
 - [ ] make `doctor --json` and human output show every effective field's source and
@@ -288,6 +312,10 @@ an accepted ADR, a Rust protocol/schema, or another package's exclusive files.
    from the same compiled fixture.
 10. Packaged Windows/macOS/Ubuntu paths resolve the same schema and defaults without
     platform-specific fallback.
+11. Provider initialization/transport failure does not select another configured or
+    discovered provider, and the failure names the attempted route without secrets.
+12. A custom non-loopback Ollama endpoint remains attributable configuration and is
+    never described as proof that inference is local.
 
 ## Explicit non-claims
 
@@ -308,10 +336,10 @@ Closing this task does not claim:
 - CLI8 memory retrieval, learned-skill activation, background agents, or automatic
   workflow execution.
 
-## I — implementation authorization checkpoint
+## I — implementation authorization
 
-Stop after this planning checkpoint. Implementation starts only after maintainer
-review accepts or revises the proposed file locations/format, field eligibility,
-policy lattice, secret boundary, and package ownership table. Once accepted, package
-0 is the only serial design task; A/B/C may then run in parallel without reopening
-product architecture unless executable evidence invalidates the contract.
+The design checkpoint is accepted. Implementation may begin with package 0, the
+serial contracts-and-golden-fixtures freeze. Once that commit passes review, A/B/C
+may run in parallel without reopening product architecture unless executable
+evidence invalidates the contract. This documentation checkpoint does not itself
+start runtime implementation.

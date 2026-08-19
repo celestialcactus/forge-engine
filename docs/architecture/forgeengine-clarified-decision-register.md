@@ -1,7 +1,7 @@
 # ForgeEngine clarified decision register
 
 **Status:** active decision summary
-**Date:** 2026-08-17
+**Date:** 2026-08-19
 
 This register translates the eight front-loaded questions into explicit decisions,
 proposals, and evidence gates. Accepted ADRs and runtime tests remain stronger
@@ -11,7 +11,7 @@ authority; this page makes the remaining human decisions legible.
 | ---: | --- | --- | --- |
 | 1 | License and ownership | License selected; rights attestation open | Forge-authored distributions use Apache-2.0. Root/npm/Cargo/native-package metadata is aligned. Before public publication, the maintainer must attest that they can license the existing contributions and identify any employer or third-party rights requiring clearance. |
 | 2 | Alpha target matrix | Accepted | Support Windows x64 and macOS ARM64/x64. Keep Ubuntu x64 as a compatibility/CI target without an alpha support promise. Defer Windows ARM64 and Linux ARM64. Scaffolding is not support. |
-| 3 | Configuration precedence | Accepted as a contract; implementation pending | Managed ceilings → explicit CLI → environment/secret references → workspace → user → built-ins. Selection values use precedence; policy/authority values are intersected and may only tighten. Secrets never come from repository config. |
+| 3 | Configuration precedence | Design lock accepted; implementation pending | Managed ceilings → explicit CLI → environment/secret references → workspace → user → built-ins. Selection values use precedence; policy/authority values are intersected and may only tighten. Workspace may select provider/model but not endpoints, credential references, executables, or state roots. Forge owns faithful/no-fallback routing and intrinsic harness security; the operator owns organizational inference governance. CLI7 adds no provider ceilings or enterprise-policy subsystem. |
 | 4 | Protocol compatibility | Accepted | Negotiate live wire versions/capabilities, version persisted record families independently, write only the current schema, support a bounded inspection/migration window, and fail closed on unknown newer execution semantics. |
 | 5 | Memory semantics | Proposed; explanation complete | Use separate semantic claim and observation identities, append-only correction/tombstone events, no implicit scope widening, and attributable retrieval. Settle the four open choices in the memory primer before replaying CLI8A. |
 | 6 | Sandbox contract split | Existing accepted direction; refinement gate open | Rust owns requirements and binding; a provider reports support facts and returns a lifecycle receipt. The lifecycle lane must prove the refined split before it replaces `EffectiveSandboxPlan`. |
