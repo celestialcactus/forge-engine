@@ -89,6 +89,8 @@ export type ConfigurationGoldenCase = GoldenCaseBase & (
       readonly kind: 'doctor_parity';
       readonly expectedFieldOrder: readonly ConfigurationFieldId[];
       readonly requiredAttributes: readonly string[];
+      readonly absentRouteCanonicalDigestInput: string;
+      readonly expectedAbsentRouteDigest: string;
     }
   | {
       readonly kind: 'consumer_equivalence';
@@ -533,6 +535,8 @@ export const configurationGoldenCases = [
       'credential.openai_api_key',
     ],
     requiredAttributes: ['field', 'label', 'sources', 'digest', 'present', 'redacted'],
+    absentRouteCanonicalDigestInput: '{"field":"inference.route","present":false,"schemaVersion":1,"sources":["built_in"]}',
+    expectedAbsentRouteDigest: '351471e1b72e4a1f662e3208dd5ab7c7af358121ad3c58d136e6a53faae65893',
   },
   {
     id: 'all-product-consumers-receive-one-compiled-configuration',
