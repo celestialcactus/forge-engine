@@ -20,16 +20,21 @@ permissions:
 
 jobs:
   conformance:
-    name: Node 22 / ${{ matrix.os }}
+    name: Node 22 / ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - windows-latest
-          - macos-latest
-          - ubuntu-latest
+        include:
+          - os: windows-latest
+            target: windows-x64
+          - os: macos-15
+            target: macos-arm64
+          - os: macos-15-intel
+            target: macos-x64
+          - os: ubuntu-latest
+            target: ubuntu-x64
 
     steps:
       - name: Check out repository
@@ -40,6 +45,9 @@ jobs:
         with:
           node-version: 22.x
           cache: npm
+
+      - name: Record hosted target
+        run: node -e "console.log('runner.os=' + process.env.RUNNER_OS + ' runner.arch=' + process.env.RUNNER_ARCH)"
 
       - name: Install locked dependencies
         run: npm ci
