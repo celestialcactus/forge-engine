@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import {
   configurationContractVersion,
+  configurationFieldIds,
   type ConfigurationFact,
   type ConfigurationFieldId,
   type ConfigurationFieldValueMap,
@@ -310,7 +311,31 @@ const managedFacts = (managed: ManagedConfigurationFactsV1 | undefined): readonl
       hint: 'Update the trusted host integration to the Forge managed-facts v1 contract.',
     });
   }
-  return managed.facts.map((fact) => normalizeManagedFact(fact));
+  return managed.facts.map((fact) => {
+    const candidate: unknown = fact;
+    if (typeof candidate !== 'object'
+      || candidate === null
+      || !('field' in candidate)
+      || !(configurationFieldIds as readonly unknown[]).includes(candidate.field)
+      || !('source' in candidate)
+      || candidate.source !== 'managed'
+      || !('evidence' in candidate)
+      || typeof candidate.evidence !== 'object'
+      || candidate.evidence === null
+      || !('authority' in candidate.evidence)
+      || typeof candidate.evidence.authority !== 'string'
+      || candidate.evidence.authority.trim().length === 0
+      || !('value' in candidate)) {
+      issue({
+        code: 'config_value_invalid',
+        source: 'managed',
+        location: 'managed configuration',
+        message: 'Managed configuration contains an invalid attributed fact.',
+        hint: 'Pass schema-v1 facts with a known field, source "managed", value, and non-empty authority.',
+      });
+    }
+    return normalizeManagedFact(fact);
+  });
 };
 
 const required = <Field extends ConfigurationFieldId>(

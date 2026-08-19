@@ -44,7 +44,7 @@ const artifactOutputSchema = (evidence: z.ZodType) => z.object({
       explanation: z.string(),
     })),
   }).describe('Caller-authored requirement assessment. Use outcome.status when reporting whether the task outcome was verified.'),
-  runStatus: z.enum(['running', 'completed', 'failed', 'cancelled', 'budget_exhausted'])
+  runStatus: z.enum(['running', 'completed', 'failed', 'cancelled', 'budget_exhausted', 'execution_budget_exhausted'])
     .describe('Mechanical Forge run lifecycle only. This is not the task outcome.'),
   events: z.array(z.object({ sequence: z.number().int(), type: z.string() })),
   cache: z.object({
@@ -287,7 +287,9 @@ export const forgeMcpArtifactPayload = (artifact: RunArtifact, kind: ForgeMcpToo
 
 export const forgeMcpArtifactResult = (artifact: RunArtifact, kind: ForgeMcpToolKind) => {
   const payload = { invocationId: newInvocationId(), ...forgeMcpArtifactPayload(artifact, kind) };
-  const failed = artifact.capabilityResults.at(-1)?.success === false || artifact.outcome.status === 'unmet';
+  const failed = artifact.status !== 'completed'
+    || artifact.capabilityResults.at(-1)?.success === false
+    || artifact.outcome.status === 'unmet';
   const content = [
     `Forge run ID: ${String(payload.runId)}`,
     `Forge invocation ID: ${payload.invocationId}`,

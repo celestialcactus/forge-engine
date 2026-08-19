@@ -11,35 +11,46 @@ import type { InferenceRoute } from '../src/inference/contracts.js';
 test('discovers a deterministic local coding model without selecting cloud inference', async () => {
   assert.equal(chooseOllamaModel(['zeta', 'qwen2.5-coder:7b', 'alpha-coder']), 'qwen2.5-coder:7b');
   const selection = await resolveInteractiveRoute({
-    environment: {},
     fetch: async () => new Response(JSON.stringify({
       models: [{ name: 'llama3:latest' }, { name: 'qwen2.5-coder:7b' }],
     }), { status: 200 }),
   });
   assert.deepEqual(selection, {
     route: { provider: 'ollama', model: 'qwen2.5-coder:7b' },
-    source: 'ollama-discovery',
+    source: 'ollama_discovery',
   });
 });
 
-test('requires complete explicit defaults and does not contact discovery when they exist', async () => {
-  await assert.rejects(
-    resolveInteractiveRoute({ environment: { FORGE_DEFAULT_PROVIDER: 'ollama' } }),
-    /provider and model together/u,
-  );
+test('uses the compiled route and does not contact discovery when it exists', async () => {
   let fetched = false;
   const selection = await resolveInteractiveRoute({
-    provider: 'openai',
-    model: 'fixture-cloud',
-    environment: {},
+    configured: {
+      route: { provider: 'openai', model: 'fixture-cloud' },
+      source: 'command_line',
+    },
     fetch: async () => {
       fetched = true;
       throw new Error('must not fetch');
     },
   });
   assert.equal(fetched, false);
-  assert.equal(selection.source, 'command-line');
+  assert.equal(selection.source, 'command_line');
   assert.deepEqual(selection.route, { provider: 'openai', model: 'fixture-cloud' });
+});
+
+test('never labels or probes an off-device endpoint as local auto-discovery', async () => {
+  let fetched = false;
+  await assert.rejects(
+    resolveInteractiveRoute({
+      ollamaBaseUrl: 'https://ollama.example.test/',
+      fetch: async () => {
+        fetched = true;
+        throw new Error('must not fetch');
+      },
+    }),
+    /off-device or network Ollama endpoint/u,
+  );
+  assert.equal(fetched, false);
 });
 
 test('runs repeated prompts and session controls without creating another runtime contract', async () => {
@@ -58,7 +69,7 @@ test('runs repeated prompts and session controls without creating another runtim
     workspaceRoot: 'C:/workspace',
     initialRoute: {
       route: { provider: 'ollama', model: 'qwen2.5-coder:7b' },
-      source: 'ollama-discovery',
+      source: 'ollama_discovery',
     },
     approvalProfile: 'developer',
     io,

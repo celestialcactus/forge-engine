@@ -24,6 +24,7 @@ import {
   createGovernedChangeCapability,
   type GovernedChangeCapabilityOptions,
 } from '../governed-change.js';
+import type { EffectiveProductConfiguration } from '../config/contracts.js';
 import {
   createChangeProposalCapability,
   type ChangeProposalOptions,
@@ -116,6 +117,12 @@ export interface ExecuteTaskOptions {
   readonly onEvent?: (event: RunEvent) => void;
 }
 
+export interface ForgeWorkspaceExecutionConfiguration {
+  readonly maxTurns: number;
+  readonly executionBudget: ExecutionBudget;
+  readonly timeoutMs: number;
+}
+
 export interface ResumeTaskOptions {
   readonly allowRetryableCapabilityRetry?: boolean;
   readonly approval?: ProductApprovalConfiguration;
@@ -159,14 +166,117 @@ export interface ForgeWorkspaceServiceOptions {
   readonly snapshotMaxReuseMs?: number;
   readonly runIdFactory?: () => string;
   readonly approval?: ProductApprovalConfiguration;
+  readonly execution?: ForgeWorkspaceExecutionConfiguration;
+  readonly configuration?: EffectiveProductConfiguration;
   readonly runtime: ForgeWorkspaceRuntimeConfiguration;
 }
+
+const approvalRank = { developer: 0, review: 1, locked: 2 } as const;
+
+const restrictApprovalConfiguration = (
+  baseline: ProductApprovalConfiguration,
+  requested: ProductApprovalConfiguration | undefined,
+): ProductApprovalConfiguration => {
+  if (requested === undefined) return baseline;
+  if (requested.profile === 'review'
+    && baseline.profile === 'review'
+    && requested.requestConsent !== undefined) {
+    return requested;
+  }
+  return approvalRank[requested.profile] > approvalRank[baseline.profile] ? requested : baseline;
+};
+
+const minimumExecutionBudget = (
+  baseline: ExecutionBudget,
+  requested: ExecutionBudget | undefined,
+): ExecutionBudget => requested === undefined
+  ? baseline
+  : {
+      schemaVersion: 1,
+      maxCapabilityCalls: Math.min(baseline.maxCapabilityCalls, requested.maxCapabilityCalls),
+      maxReportedInputTokens: Math.min(
+        baseline.maxReportedInputTokens,
+        requested.maxReportedInputTokens,
+      ),
+      maxReportedOutputTokens: Math.min(
+        baseline.maxReportedOutputTokens,
+        requested.maxReportedOutputTokens,
+      ),
+    };
+
+const assertMaxTurns = (value: number): void => {
+  if (!Number.isInteger(value) || value < 1 || value > 32) {
+    throw new Error('maxTurns must be an integer from 1 to 32.');
+  }
+};
+
+const assertExecutionBudget = (executionBudget: ExecutionBudget): void => {
+  if (executionBudget.schemaVersion !== 1) {
+    throw new Error('executionBudget schemaVersion must be 1.');
+  }
+  if (!Number.isInteger(executionBudget.maxCapabilityCalls)
+    || executionBudget.maxCapabilityCalls < 0
+    || executionBudget.maxCapabilityCalls > 64
+  ) throw new Error('maxCapabilityCalls must be an integer from 0 to 64.');
+  for (const [label, value] of [
+    ['maxReportedInputTokens', executionBudget.maxReportedInputTokens],
+    ['maxReportedOutputTokens', executionBudget.maxReportedOutputTokens],
+  ] as const) {
+    if (!Number.isSafeInteger(value) || value < 0 || value > 1_000_000_000_000) {
+      throw new Error(`${label} must be an integer from 0 to 1000000000000.`);
+    }
+  }
+};
+
+const assertTimeout = (value: number): void => {
+  if (!Number.isInteger(value) || value < 1 || value > 900_000) {
+    throw new Error('timeoutMs must be an integer from 1 to 900000.');
+  }
+};
+
+const freezeEffectiveConfiguration = (
+  configuration: EffectiveProductConfiguration,
+): EffectiveProductConfiguration => {
+  if (Object.isFrozen(configuration)) return configuration;
+  const clone = structuredClone(configuration);
+  const freeze = (value: unknown): void => {
+    if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return;
+    for (const nested of Object.values(value)) freeze(nested);
+    Object.freeze(value);
+  };
+  freeze(clone);
+  return clone;
+};
+
+const executionFromEffectiveConfiguration = (
+  configuration: EffectiveProductConfiguration,
+): ForgeWorkspaceExecutionConfiguration => ({
+  maxTurns: configuration.execution.maxTurns.value,
+  timeoutMs: configuration.execution.timeoutMs.value,
+  executionBudget: {
+    schemaVersion: 1,
+    maxCapabilityCalls: configuration.execution.maxCapabilityCalls.value,
+    maxReportedInputTokens: configuration.execution.maxReportedInputTokens.value,
+    maxReportedOutputTokens: configuration.execution.maxReportedOutputTokens.value,
+  },
+});
+
+const freezeExecutionConfiguration = (
+  execution: ForgeWorkspaceExecutionConfiguration,
+): ForgeWorkspaceExecutionConfiguration => Object.freeze({
+  maxTurns: execution.maxTurns,
+  timeoutMs: execution.timeoutMs,
+  executionBudget: Object.freeze({ ...execution.executionBudget }),
+});
 
 export class ForgeWorkspaceService {
   readonly #snapshots: WorkspaceSnapshotCache;
   readonly #runIdFactory: () => string;
   readonly #runtime: ForgeWorkspaceRuntimeConfiguration;
+  readonly #approvalConfiguration: ProductApprovalConfiguration;
   readonly #approvalFacts: ApprovalFactsProvider;
+  readonly #execution: ForgeWorkspaceExecutionConfiguration;
+  readonly #configuration: EffectiveProductConfiguration | undefined;
   readonly #evidenceCapabilities: ReadonlyMap<string, Capability>;
 
   constructor(
@@ -181,10 +291,51 @@ export class ForgeWorkspaceService {
     });
     this.#runIdFactory = options.runIdFactory ?? (() => `run:${randomUUID()}`);
     this.#runtime = runtime;
-    this.#approvalFacts = createProductApprovalFactsProvider(options.approval ?? defaultProductApprovalConfiguration);
+    this.#configuration = options.configuration === undefined
+      ? undefined
+      : freezeEffectiveConfiguration(options.configuration);
+    const configuredApproval: ProductApprovalConfiguration = this.#configuration === undefined
+      ? defaultProductApprovalConfiguration
+      : { profile: this.#configuration.approvalProfile.value };
+    this.#approvalConfiguration = Object.freeze(this.#configuration === undefined
+      ? { ...(options.approval ?? defaultProductApprovalConfiguration) }
+      : { ...restrictApprovalConfiguration(configuredApproval, options.approval) });
+    this.#approvalFacts = createProductApprovalFactsProvider(this.#approvalConfiguration);
+    const configuredExecution = this.#configuration === undefined
+      ? undefined
+      : executionFromEffectiveConfiguration(this.#configuration);
+    if (options.execution !== undefined) {
+      assertMaxTurns(options.execution.maxTurns);
+      assertExecutionBudget(options.execution.executionBudget);
+      assertTimeout(options.execution.timeoutMs);
+    }
+    this.#execution = freezeExecutionConfiguration(configuredExecution === undefined
+      ? options.execution ?? {
+          maxTurns: 8,
+          executionBudget: defaultExecutionBudget,
+          timeoutMs: 120_000,
+        }
+      : options.execution === undefined
+        ? configuredExecution
+        : {
+            maxTurns: Math.min(configuredExecution.maxTurns, options.execution.maxTurns),
+            timeoutMs: Math.min(configuredExecution.timeoutMs, options.execution.timeoutMs),
+            executionBudget: minimumExecutionBudget(
+              configuredExecution.executionBudget,
+              options.execution.executionBudget,
+            ),
+          });
+    assertMaxTurns(this.#execution.maxTurns);
+    assertExecutionBudget(this.#execution.executionBudget);
+    assertTimeout(this.#execution.timeoutMs);
     const capabilities = createDeveloperEvidenceCapabilities(workspaceRoot);
     this.#evidenceCapabilities = new Map(capabilities.map((capability) => [capability.id, capability]));
     if (this.#evidenceCapabilities.size !== capabilities.length) throw new Error('Developer evidence capability IDs must be unique.');
+  }
+
+  /** The immutable compiled product contract used by standalone and MCP service construction. */
+  effectiveConfiguration(): EffectiveProductConfiguration | undefined {
+    return this.#configuration;
   }
 
   async inspect(maxFiles = 200, signal?: AbortSignal): Promise<RunArtifact> {
@@ -245,9 +396,9 @@ export class ForgeWorkspaceService {
     ];
     const runtime = new RustKernelRuntime({
       planner,
-      approvalFacts: options.approval === undefined
-        ? this.#approvalFacts
-        : createProductApprovalFactsProvider(options.approval),
+      approvalFacts: createProductApprovalFactsProvider(
+        restrictApprovalConfiguration(this.#approvalConfiguration, options.approval),
+      ),
       capabilities,
       ...(options.onEvent === undefined ? {} : { onEvent: options.onEvent }),
       kernelPath: this.#runtime.kernel.binaryPath,
@@ -259,8 +410,11 @@ export class ForgeWorkspaceService {
         : { environment: this.#runtime.kernel.environment }),
       runStoreRoot: this.#runtime.kernel.runStoreRoot,
     });
+    const configuredSignal = signal === undefined
+      ? AbortSignal.timeout(this.#execution.timeoutMs)
+      : AbortSignal.any([signal, AbortSignal.timeout(this.#execution.timeoutMs)]);
     return runtime.resume(runId, {
-      ...(signal === undefined ? {} : { signal }),
+      signal: configuredSignal,
       allowRetryableCapabilityRetry: options.allowRetryableCapabilityRetry ?? false,
     });
   }
@@ -336,28 +490,12 @@ export class ForgeWorkspaceService {
   ): Promise<RunArtifact> {
     if (task.trim().length === 0) throw new Error('A Forge task must not be empty.');
     const contextBudgetBytes = options.contextBudgetBytes ?? 65_536;
-    const maxTurns = options.maxTurns ?? 8;
-    const executionBudget = options.executionBudget ?? defaultExecutionBudget;
+    if (options.maxTurns !== undefined) assertMaxTurns(options.maxTurns);
+    if (options.executionBudget !== undefined) assertExecutionBudget(options.executionBudget);
+    const maxTurns = Math.min(options.maxTurns ?? this.#execution.maxTurns, this.#execution.maxTurns);
+    const executionBudget = minimumExecutionBudget(this.#execution.executionBudget, options.executionBudget);
     if (!Number.isInteger(contextBudgetBytes) || contextBudgetBytes < 1 || contextBudgetBytes > 1_048_576) {
       throw new Error('contextBudgetBytes must be an integer from 1 to 1048576.');
-    }
-    if (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > 32) {
-      throw new Error('maxTurns must be an integer from 1 to 32.');
-    }
-    if (executionBudget.schemaVersion !== 1) {
-      throw new Error('executionBudget schemaVersion must be 1.');
-    }
-    if (!Number.isInteger(executionBudget.maxCapabilityCalls)
-      || executionBudget.maxCapabilityCalls < 0
-      || executionBudget.maxCapabilityCalls > 64
-    ) throw new Error('maxCapabilityCalls must be an integer from 0 to 64.');
-    for (const [label, value] of [
-      ['maxReportedInputTokens', executionBudget.maxReportedInputTokens],
-      ['maxReportedOutputTokens', executionBudget.maxReportedOutputTokens],
-    ] as const) {
-      if (!Number.isSafeInteger(value) || value < 0 || value > 1_000_000_000_000) {
-        throw new Error(`${label} must be an integer from 0 to 1000000000000.`);
-      }
     }
     return this.#runPlanner(
       task,
@@ -369,9 +507,9 @@ export class ForgeWorkspaceService {
       options.outcomeContract,
       signal,
       options.onEvent,
-      options.approval === undefined
-        ? this.#approvalFacts
-        : createProductApprovalFactsProvider(options.approval),
+      createProductApprovalFactsProvider(
+        restrictApprovalConfiguration(this.#approvalConfiguration, options.approval),
+      ),
     );
   }
 
@@ -395,8 +533,8 @@ export class ForgeWorkspaceService {
       planner,
       [capability],
       65_536,
-      2,
-      defaultExecutionBudget,
+      Math.min(2, this.#execution.maxTurns),
+      minimumExecutionBudget(this.#execution.executionBudget, defaultExecutionBudget),
       outcomeContract,
       signal,
       undefined,
@@ -416,9 +554,12 @@ export class ForgeWorkspaceService {
     onEvent?: (event: RunEvent) => void,
     approvalFacts?: ApprovalFactsProvider,
   ): Promise<RunArtifact> {
-    signal?.throwIfAborted();
+    const configuredSignal = signal === undefined
+      ? AbortSignal.timeout(this.#execution.timeoutMs)
+      : AbortSignal.any([signal, AbortSignal.timeout(this.#execution.timeoutMs)]);
+    configuredSignal.throwIfAborted();
     const snapshot = await this.#workspaceSnapshot();
-    signal?.throwIfAborted();
+    configuredSignal.throwIfAborted();
     const runtime = this.#runtime.kind === 'typescript_conformance_fixture'
       ? new TypeScriptConformanceRuntime({
           planner,
@@ -444,7 +585,7 @@ export class ForgeWorkspaceService {
       maxTurns,
       executionBudget,
       ...(outcomeContract === undefined ? {} : { outcomeContract }),
-      ...(signal === undefined ? {} : { signal }),
+      signal: configuredSignal,
     });
   }
 

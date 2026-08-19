@@ -45,3 +45,16 @@ export function extractOpenAiCredentialFact(
         evidence: { name: 'openai_credential_absent' },
       };
 }
+
+/** Resolve secret bytes only at adapter construction, through the fixed handle. */
+export function resolveOpenAiCredentialValue(
+  presence: OpenAiCredentialPresence,
+  environment: ConfigurationSecretEnvironment,
+): string {
+  if (presence.handle.kind !== openAiCredentialHandle.kind
+    || presence.handle.name !== openAiCredentialHandle.name) {
+    throw new Error('OpenAI credential access requires the fixed OPENAI_API_KEY handle.');
+  }
+  if (!presence.present) return '';
+  return environment.OPENAI_API_KEY ?? '';
+}
