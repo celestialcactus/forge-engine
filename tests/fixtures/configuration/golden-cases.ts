@@ -451,6 +451,68 @@ export const configurationGoldenCases = [
     forbiddenOutputFragments: ['fixture-secret-alpha', 'a-completely-different-fixture-secret'],
   },
   {
+    id: 'provider-endpoints-are-origin-only-and-secret-free',
+    requirements: [5, 7],
+    owner: 'source_loader',
+    summary: 'Provider URLs cannot smuggle credentials or unsupported path/query routing into configuration.',
+    kind: 'source_document_matrix',
+    source: 'user',
+    documents: [
+      {
+        name: 'embedded-credentials',
+        document: {
+          schemaVersion: 1,
+          providers: { openai: { baseUrl: 'https://fixture-user:fixture-password@example.test/' } },
+        },
+        expectedIssue: issue(
+          'config_value_invalid',
+          '~/.forge/config.json#providers.openai.baseUrl',
+          'Provider endpoints must be origin-only HTTP(S) URLs without credentials, queries, or fragments.',
+          'Use an endpoint such as "https://example.test/" and supply credentials through the supported host environment.',
+        ),
+      },
+      {
+        name: 'query-token',
+        document: {
+          schemaVersion: 1,
+          providers: { ollama: { baseUrl: 'https://example.test/?token=fixture-query-secret' } },
+        },
+        expectedIssue: issue(
+          'config_value_invalid',
+          '~/.forge/config.json#providers.ollama.baseUrl',
+          'Provider endpoints must be origin-only HTTP(S) URLs without credentials, queries, or fragments.',
+          'Use an endpoint such as "https://example.test/" without query parameters.',
+        ),
+      },
+      {
+        name: 'fragment',
+        document: {
+          schemaVersion: 1,
+          providers: { ollama: { baseUrl: 'https://example.test/#fixture-fragment' } },
+        },
+        expectedIssue: issue(
+          'config_value_invalid',
+          '~/.forge/config.json#providers.ollama.baseUrl',
+          'Provider endpoints must be origin-only HTTP(S) URLs without credentials, queries, or fragments.',
+          'Use an endpoint such as "https://example.test/" without a fragment.',
+        ),
+      },
+      {
+        name: 'unsupported-base-path',
+        document: {
+          schemaVersion: 1,
+          providers: { openai: { baseUrl: 'https://example.test/gateway/' } },
+        },
+        expectedIssue: issue(
+          'config_value_invalid',
+          '~/.forge/config.json#providers.openai.baseUrl',
+          'Provider endpoints must use the URL origin without an additional path.',
+          'Use "https://example.test/"; path-prefixed provider gateways are not supported in schema v1.',
+        ),
+      },
+    ],
+  },
+  {
     id: 'doctor-human-and-json-project-one-truth',
     requirements: [8],
     owner: 'projection',
@@ -521,6 +583,8 @@ export const configurationGoldenCases = [
     baseUrl: 'https://ollama.example.test/',
     expected: {
       endpointSourceReported: true,
+      runtimeLocality: 'cloud',
+      humanLocality: 'off-device or network endpoint',
       describedAsProofOfLocalInference: false,
       containmentClaimChanged: false,
     },

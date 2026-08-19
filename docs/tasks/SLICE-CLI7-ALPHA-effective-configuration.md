@@ -103,6 +103,14 @@ organizational RBAC, compliance policy, or a remote enterprise-policy service.
 Managed facts remain a typed trusted-host input at the highest precedence; they do
 not imply that Forge distributes or administers organization policy.
 
+Endpoint locality is derived conservatively from the normalized endpoint hostname,
+not from the provider adapter name. `localhost`, the IPv4 `127.0.0.0/8` block,
+IPv6 loopback, and IPv4-mapped IPv6 loopback are `local`; every other endpoint is
+treated as off-device (`cloud` in the existing two-value runtime contract). Forge
+does not probe the endpoint to make this classification. This preserves the Rust
+protocol while preventing a remote Ollama-compatible endpoint from becoming a
+false local-inference claim.
+
 ### How are values combined?
 
 - Selection units choose the first defined eligible source in this exact order:
@@ -121,6 +129,9 @@ not imply that Forge distributes or administers organization policy.
 ### How are secrets represented and reported?
 
 - Config files and CLI arguments contain no secret bytes.
+- Provider endpoints are origin-only HTTP(S) URLs. Userinfo, query strings,
+  fragments, and non-root paths are rejected so a URL cannot become a credential
+  container or imply gateway routing the current adapters do not honor.
 - Schema v1 recognizes only the existing `OPENAI_API_KEY` named environment
   reference. A provider receives the value only when its adapter is constructed.
 - The effective configuration retains a secret handle plus presence/source facts,

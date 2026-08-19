@@ -77,11 +77,16 @@ export const configurationNormalizationRules = {
     workspaceFileAllowed: false,
     canonicalizeExistingAncestors: false,
   },
-  absolute_http_url_v1: {
-    kind: 'url',
+  http_provider_origin_v1: {
+    kind: 'url_origin',
     trimOuterWhitespace: true,
     allowedProtocols: ['http:', 'https:'],
     serialization: 'whatwg_url',
+    requireRootPath: true,
+    allowUsername: false,
+    allowPassword: false,
+    allowQuery: false,
+    allowFragment: false,
   },
   ollama_context_window_tokens_v1: {
     kind: 'integer',
@@ -113,6 +118,22 @@ export const configurationNormalizationRules = {
 } as const;
 
 export type ConfigurationNormalizationId = keyof typeof configurationNormalizationRules;
+
+export const inferenceEndpointLocalityContract = {
+  classificationBasis: 'normalized_endpoint_hostname',
+  localHostnameRules: [
+    'localhost',
+    'localhost_trailing_dot',
+    'ipv4_127_0_0_0_8',
+    'ipv6_loopback',
+    'ipv4_mapped_ipv6_loopback',
+  ],
+  loopbackLocality: 'local',
+  nonLoopbackLocality: 'cloud',
+  nonLoopbackHumanLabel: 'off-device or network endpoint',
+  adapterIdentityIsLocalityEvidence: false,
+  networkProbeAllowedForClassification: false,
+} as const;
 
 export type ConfigurationBuiltIn<Field extends ConfigurationFieldId> =
   | { readonly kind: 'absent' }
@@ -167,7 +188,7 @@ export const configurationFieldDefinitions = [
     label: 'Ollama endpoint',
     description: 'The exact operator-selected Ollama-compatible base URL.',
     resolution: 'selection',
-    normalization: 'absolute_http_url_v1',
+    normalization: 'http_provider_origin_v1',
     eligibleSources: ['managed', 'environment', 'user', 'built_in'],
     commandLineOptions: [],
     environmentVariables: ['FORGE_OLLAMA_URL'],
@@ -193,7 +214,7 @@ export const configurationFieldDefinitions = [
     label: 'OpenAI endpoint',
     description: 'The exact operator-selected OpenAI-compatible base URL.',
     resolution: 'selection',
-    normalization: 'absolute_http_url_v1',
+    normalization: 'http_provider_origin_v1',
     eligibleSources: ['managed', 'environment', 'user', 'built_in'],
     commandLineOptions: [],
     environmentVariables: ['FORGE_OPENAI_BASE_URL'],

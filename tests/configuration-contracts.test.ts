@@ -9,6 +9,7 @@ import {
   configurationIssueCodes,
   configurationNormalizationRules,
   configurationSources,
+  inferenceEndpointLocalityContract,
   maximumConfigurationFileBytes,
   type ConfigurationFieldId,
   type ConfigurationIssue,
@@ -147,6 +148,21 @@ test('locks current runtime bounds and secret-safe digest semantics', () => {
   assert.deepEqual(configurationNormalizationRules.timeout_ms_v1, {
     kind: 'integer', minimum: 1, maximum: 900_000, textSyntax: 'base10',
   });
+  assert.deepEqual(configurationNormalizationRules.http_provider_origin_v1, {
+    kind: 'url_origin',
+    trimOuterWhitespace: true,
+    allowedProtocols: ['http:', 'https:'],
+    serialization: 'whatwg_url',
+    requireRootPath: true,
+    allowUsername: false,
+    allowPassword: false,
+    allowQuery: false,
+    allowFragment: false,
+  });
+  assert.equal(inferenceEndpointLocalityContract.loopbackLocality, 'local');
+  assert.equal(inferenceEndpointLocalityContract.nonLoopbackLocality, 'cloud');
+  assert.equal(inferenceEndpointLocalityContract.adapterIdentityIsLocalityEvidence, false);
+  assert.equal(inferenceEndpointLocalityContract.networkProbeAllowedForClassification, false);
   assert.deepEqual(configurationDigestContract, {
     algorithm: 'sha256',
     encoding: 'lowercase_hex',
