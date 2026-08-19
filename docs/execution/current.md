@@ -35,9 +35,11 @@ Codex worktree created from the old OneDrive prototype is not authoritative.
 ## Current release objective
 
 The private **CLI7-ALPHA distribution and onboarding foundation is accepted**
-through PR #27 and Checkpoint 90. The current implementation gate is ADR-0036
-effective-configuration loading and conformance: precedence, monotonic policy
-tightening, secret redaction, and effective-source reporting. Public distribution
+through PR #27 and Checkpoint 90. The current implementation gate is the
+[ADR-0036 effective-configuration slice](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md):
+precedence, monotonic policy tightening, secret redaction, and effective-source
+reporting. Its QRSPI design checkpoint is planned; runtime implementation has not
+started. Public distribution
 also requires contributor-rights attestation and artifact signing/provenance.
 Trusted execution has no Forge-enforced OS containment. Native restricted providers
 continue independently and cannot borrow or block trusted-alpha acceptance.
@@ -51,7 +53,8 @@ claims permitted at each delivery stage.
 | --- | --- | --- | --- |
 | Documentation reconciliation | `DOC-GROUND-TRUTH` | Accepted at `5fff597` through PR #25 | Preserve Checkpoint 88 and the execution/release-profile authority during every lane replay. |
 | Authority and contract clarification | `ARCH-AUTHORITY` | Accepted through PR #26 (`70a3288`) | Preserve the repository guard, Apache-2.0 alignment, target/config/protocol decisions, memory primer, and system map. |
-| Trusted-alpha release | `CLI7-ALPHA` | Private distribution/onboarding foundation accepted through PR #27 (`6cc90c1`) and Checkpoint 90; PR #28 (`2882550`) corrects reported blockers | Implement/test ADR-0036 effective configuration. Rights attestation and artifact signing/provenance remain separate public-distribution gates; no public artifact has shipped. |
+| Trusted-alpha release | `CLI7-ALPHA` | Private distribution/onboarding foundation accepted through PR #27 (`6cc90c1`) and Checkpoint 90; PR #28 (`2882550`) corrects reported blockers | Preserve the accepted private tester boundary. Rights attestation and artifact signing/provenance remain separate public-distribution gates; no public artifact has shipped. |
+| Effective configuration | `CLI7-ALPHA-CONFIG` | QRSPI task contract proposed; no runtime implementation started | Review the [design lock](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md), freeze contracts/golden fixtures, then parallelize source loading, typed resolution, and secret-safe projection before serial product integration. |
 | Sandbox provider lifecycle | `SBX-PROVIDER-LIFECYCLE` | Independent and unaccepted for production; local managed-Windows/AppContainer conformance exists | Complete disposable-Windows-VM install/upgrade/uninstall/reboot/residue plus macOS/adversarial evidence. Do not advertise `restrictedReady` or promote a provider until the exact gate passes. |
 | Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Candidate commit `b5effea` remains stale-base, replay-required, and runtime-inactive | After the configuration-conformant standalone alpha gate, settle the memory decisions below, replay only the bounded additive diff onto fresh `origin/develop`, run real Rust tests, then review separately. Automatic retrieval and skill activation remain out of scope. |
 
@@ -64,8 +67,9 @@ accepted Forge state; replay only its bounded diff onto fresh ancestry.
 1. `ARCH-AUTHORITY` is merged and accepted through PR #26.
 2. The authoritative `CLI7-ALPHA` replay and hosted gate are merged and accepted
    through PR #27; PR #28 aligns the product-reported remaining blockers.
-3. Implement and validate the ADR-0036 effective-configuration loader/conformance
-   suite as the next bounded lane.
+3. Review, implement, and validate the
+   [ADR-0036 effective-configuration loader/conformance suite](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md)
+   as the next bounded lane.
 4. Settle the four memory policy choices, then replay and validate
    `CLI8A-MEMORY-FOUNDATION`; integration may be prepared in
    parallel, but runtime retrieval remains gated by CLI8B evaluation.
@@ -83,7 +87,7 @@ rebased and reconciled before merge rather than resolved by taking an entire sid
 | Priority | Decision | Why it blocks or bounds work | Decision owner/output |
 | --- | --- | --- | --- |
 | P0 | Public rights attestation | Apache-2.0 is selected and metadata aligned, but the license cannot prove whether employer or third-party rights apply. | Maintainer/legal or open-source review before package publication. |
-| P0 | Effective configuration implementation | Precedence and monotonic policy tightening are accepted in ADR-0036; runtime fixtures and `doctor` source/redaction output remain open. | Release-lane implementation and tests. |
+| P0 | Effective configuration implementation | Precedence and monotonic policy tightening are accepted in ADR-0036; the QRSPI task proposes field eligibility, secret handling, parallel ownership, runtime fixtures, and `doctor` projection for review. | Accept or revise the [task design lock](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md), then execute its bounded release lane. |
 | P0 | Public artifact signing and provenance | Private hosted/package evidence does not sign or establish provenance for a published artifact. | Release workflow and exact target evidence before publication. |
 | P1 | Sandbox requirement/binding/lifecycle split | The provider must not become a second policy authority or receive two competing launch truths. | ADR-0033 refinement after the current conformance spike. |
 | P1 | Memory policy choices | Claim/observation identity, append-only corrections, and no implicit scope widening are recommended; normalization, preference promotion, privacy purge, and expiry defaults remain open. | Review the memory primer and settle with CLI8 fixtures before replay. |
@@ -93,8 +97,9 @@ rebased and reconciled before merge rather than resolved by taking an entire sid
 
 ## Next three gates
 
-1. Implement ADR-0036 effective configuration and pass precedence, monotonic-
-   tightening, source-reporting, secret-redaction, and hosted conformance fixtures.
+1. Review and execute the [ADR-0036 effective-configuration task](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md),
+   passing precedence, monotonic-tightening, source-reporting, secret-redaction, and
+   hosted conformance fixtures.
 2. Settle memory policy, then replay and validate only the bounded additive `CLI8A`
    observation foundation on fresh `origin/develop`.
 3. Run CLI8B no-memory/retrieved-memory evaluation, with no automatic retrieval

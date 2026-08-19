@@ -112,8 +112,10 @@ not reopened by that sequencing.
 `CLI7-ALPHA` replay and hosted clean-install/package gate are accepted through PR
 #27 (`6cc90c1`) and [Checkpoint 90](../decisions/checkpoints/2026-08-18-90-trusted-alpha-hosted-gate.md);
 PR #28 (`2882550`) corrects the product-reported remaining blockers. The current
-short implementation gate is the ADR-0036 effective-configuration loader and
-conformance suite. Native restricted execution continues as the independent
+short implementation gate is the
+[ADR-0036 effective-configuration loader and conformance slice](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md).
+Its QRSPI design checkpoint is proposed and runtime implementation has not started.
+Native restricted execution continues as the independent
 `SBX-PROVIDER-LIFECYCLE` lane. `CLI8A-MEMORY-FOUNDATION` remains runtime-inactive
 until the standalone-alpha configuration gate closes and its own policy,
 evaluation, and integration gates pass.
@@ -716,10 +718,12 @@ no public artifact has shipped.
 separately proven Windows/macOS backend passes adversarial gates; the trusted developer alpha must name that
 limitation.
 
-**Go next for the bounded ADR-0036 effective-configuration increment.** It must
-implement selection precedence, monotonic authority tightening, secret redaction,
-effective-source reporting, and cross-platform fixtures without mixing in public
-publication, sandbox-provider promotion, or CLI8 activation.
+**Go next for the bounded
+[ADR-0036 effective-configuration increment](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md).**
+Review its proposed design lock, then implement selection precedence, monotonic
+authority tightening, secret redaction, effective-source reporting, and
+cross-platform fixtures without mixing in public publication, sandbox-provider
+promotion, or CLI8 activation.
 
 **Go for the bounded attributable-memory, measured-retrieval, and reviewed-skill
 vertical slice immediately after the configuration-conformant standalone CLI gate;
