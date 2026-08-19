@@ -1,7 +1,9 @@
 # CLI7-ALPHA-CONFIG: effective configuration and conformance
 
-**State:** Package 0 contracts and golden fixtures implemented; review is required before parallel core work
-**Accepted baseline:** `origin/develop` at `dfed8dd` (PR #29 design lock)
+**State:** Accepted implementation at candidate `e7ba284` in PR #31; hosted gate passed
+**Accepted baseline:** `origin/develop` at `89eec1f` (PR #30 contract freeze)
+**Acceptance evidence:**
+[Checkpoint 91](../decisions/checkpoints/2026-08-19-91-effective-configuration-hosted-gate.md)
 **Architecture authority:**
 [ADR-0036](../decisions/ADRs/ADR-0036-alpha-distribution-and-configuration-contract.md),
 [ADR-0028](../decisions/ADRs/ADR-0028-product-approval-profiles.md), and
@@ -18,8 +20,9 @@ and MCP construction. Prove ADR-0036 selection precedence, monotonic policy
 tightening, secret-safe projection, and attributable `doctor` output without
 creating a second policy authority or broadening the alpha claim.
 
-This is the next smallest implementation lane. It is independent of native sandbox
-provider promotion and must close before CLI8 runtime activation.
+This bounded implementation lane is complete. It remains independent of native
+sandbox provider promotion. CLI8 is the next implementation lane after this
+candidate merges; no CLI8 runtime behavior is part of this acceptance.
 
 ## Q — accepted design lock
 
@@ -204,9 +207,9 @@ The accepted architecture is ahead of the implementation:
 - `doctor` reports only selected ad hoc sources today, while `onboard` truthfully
   labels full precedence as implementation-pending.
 
-The repository has no active product configuration schema or loader. Historical
-prototype references to YAML or executable TypeScript configuration are not
-authority and must not be revived by this slice.
+Before this slice, the repository had no active product configuration schema or
+loader. Historical prototype references to YAML or executable TypeScript
+configuration remain non-authoritative and were not revived.
 
 ## D — design contract
 
@@ -298,39 +301,39 @@ an accepted ADR, a Rust protocol/schema, or another package's exclusive files.
 
 ### Phase 1: parallel core
 
-- [ ] load missing/present/invalid/oversized workspace and user files deterministically;
-- [ ] prove every eligible selection precedence pair and atomic route failure;
-- [ ] prove managed/user/workspace/CLI/environment policy inputs can tighten but
+- [x] load missing/present/invalid/oversized workspace and user files deterministically;
+- [x] prove every eligible selection precedence pair and atomic route failure;
+- [x] prove managed/user/workspace/CLI/environment policy inputs can tighten but
       cannot relax an applicable ceiling;
-- [ ] prove secret bytes never enter configuration artifacts, logs, errors, or
+- [x] prove secret bytes never enter configuration artifacts, logs, errors, or
       digests;
-- [ ] prove stable projection ordering and digest repeatability.
+- [x] prove stable projection ordering and digest repeatability.
 
 ### Phase 2: serial product integration
 
-- [ ] replace covered ad hoc reads in CLI, interactive routing, and provider
+- [x] replace covered ad hoc reads in CLI, interactive routing, and provider
       construction;
-- [ ] preserve the exact resolved provider/model and fail rather than silently
+- [x] preserve the exact resolved provider/model and fail rather than silently
       selecting another provider when initialization or inference fails;
-- [ ] preserve `forge diagnostics --config <tsconfig>` semantics;
-- [ ] pass one effective configuration into standalone service and MCP construction;
-- [ ] make `doctor --json` and human output show every effective field's source and
+- [x] preserve `forge diagnostics --config <tsconfig>` semantics;
+- [x] pass one effective configuration into standalone service and MCP construction;
+- [x] make `doctor --json` and human output show every effective field's source and
       digest without probing network services or executing configured adapters;
-- [ ] make `onboard` report configuration conformance and retain all unrelated
+- [x] make `onboard` report configuration conformance and retain all unrelated
       public-release blockers;
-- [ ] prove locked/review/developer behavior and Rust-owned decisions are unchanged.
+- [x] prove locked/review/developer behavior and Rust-owned decisions are unchanged.
 
 ### Phase 3: exact-head release gate
 
-- [ ] `npm run typecheck`;
-- [ ] `npm test`;
-- [ ] `npm run build`;
-- [ ] `npm run check:hybrid` with the exact retained/built kernel;
-- [ ] source-built `doctor`, `onboard`, interactive, run, and MCP smoke;
-- [ ] clean-install package smoke with workspace/user/CLI/environment fixtures;
-- [ ] hosted Windows x64 and macOS ARM64/x64 product gates;
-- [ ] Ubuntu x64 compatibility gate;
-- [ ] checkpoint exact commit, commands, counts, environment facts, and non-claims.
+- [x] `npm run typecheck`;
+- [x] `npm test`;
+- [x] `npm run build`;
+- [x] `npm run check:hybrid` with the exact retained/built kernel;
+- [x] source-built `doctor`, `onboard`, interactive, run, and MCP smoke;
+- [x] clean-install package smoke with workspace/user/CLI/environment fixtures;
+- [x] hosted Windows x64 and macOS ARM64/x64 product gates;
+- [x] Ubuntu x64 compatibility gate;
+- [x] checkpoint exact commit, commands, counts, environment facts, and non-claims.
 
 ## Required adversarial fixtures
 
@@ -376,10 +379,10 @@ Closing this task does not claim:
 - CLI8 memory retrieval, learned-skill activation, background agents, or automatic
   workflow execution.
 
-## I — implementation authorization
+## I — accepted implementation
 
-The design checkpoint is accepted. Implementation may begin with package 0, the
-serial contracts-and-golden-fixtures freeze. Once that commit passes review, A/B/C
-may run in parallel without reopening product architecture unless executable
-evidence invalidates the contract. This documentation checkpoint does not itself
-start runtime implementation.
+PR #30 froze the reviewed contracts and golden fixtures. PR #31 candidate
+`e7ba284` completed packages A through E and passed the exact candidate hosted
+Windows x64, macOS ARM64, macOS x64, and Ubuntu x64 gates recorded in Checkpoint
+91. The compiler, product integration, release conformance, and all twelve required
+adversarial fixtures are accepted within the explicit non-claims above.

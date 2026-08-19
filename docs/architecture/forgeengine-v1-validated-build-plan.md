@@ -2,7 +2,7 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
-**Last groomed:** 2026-08-19 after the CLI7 inference-governance design lock
+**Last groomed:** 2026-08-19 after the CLI7 effective-configuration hosted gate
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
 
@@ -119,15 +119,15 @@ not reopened by that sequencing.
 `ARCH-AUTHORITY` is accepted through PR #26 (`70a3288`). The authoritative
 `CLI7-ALPHA` replay and hosted clean-install/package gate are accepted through PR
 #27 (`6cc90c1`) and [Checkpoint 90](../decisions/checkpoints/2026-08-18-90-trusted-alpha-hosted-gate.md);
-PR #28 (`2882550`) corrects the product-reported remaining blockers. The current
-short implementation gate is the
-[ADR-0036 effective-configuration loader and conformance slice](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md).
-Its QRSPI design lock is accepted; the contracts-and-golden-fixtures freeze is next,
-and runtime implementation has not started.
+PR #28 (`2882550`) corrected the product-reported remaining blockers. PR #29 locked
+the ADR-0036 design, PR #30 (`89eec1f`) froze its contracts, and PR #31 candidate
+`e7ba284` completed the
+[effective-configuration loader and conformance slice](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md)
+with the exact-target evidence in
+[Checkpoint 91](../decisions/checkpoints/2026-08-19-91-effective-configuration-hosted-gate.md).
 Native restricted execution continues as the independent
 `SBX-PROVIDER-LIFECYCLE` lane. `CLI8A-MEMORY-FOUNDATION` remains runtime-inactive
-until the standalone-alpha configuration gate closes and its own policy,
-evaluation, and integration gates pass.
+until its own policy, evaluation, and integration gates pass.
 
 Slice 2F remains the native-isolation hardening boundary. Slice 2F-1 is accepted: provider
 authority is explicit and raw host/restricted claims fail closed. Slice 2F-2a is
@@ -143,11 +143,10 @@ trusted developer alpha.
 
 ## Near-term CLI ship lane
 
-This lane remains the immediate execution priority. Its private trusted-alpha
-distribution/onboarding foundation is accepted; the open implementation increment
-is ADR-0036 effective configuration and conformance. Earlier numbers below are
-retained as capability history, not active branch names. The broader V1 slices
-remain authoritative capability goals.
+This lane is accepted through effective configuration and conformance. Earlier
+numbers below are retained as capability history, not active branch names. The
+bounded CLI8 learning lane is now the immediate product priority; the broader V1
+slices remain authoritative capability goals.
 
 1. **Kernel convergence — accepted and merged as PR #15 (`1fcab25`).** One canonical Rust runtime/capability/event/artifact/
    policy authority; TypeScript remains integration and an explicitly named
@@ -263,16 +262,15 @@ remain authoritative capability goals.
    exact-head product gate on hosted Windows/macOS/Ubuntu. Orphaned staging and
    registered-but-never-finalized ChangeSet policy remain release-hardening work,
    not parallel runtime work.
-7. **Release hardening - private trusted-alpha foundation accepted through PR #27.**
+7. **Release hardening - configuration-conformant private trusted alpha accepted through PR #31.**
    Exact-version native packaging, `doctor`/onboarding, the tester kit, local package
-   install/update/uninstall, and hosted Windows/macOS/Ubuntu product gates pass.
-   Effective configuration and its source/redaction conformance remain the next
-   implementation increment. Rights attestation and artifact signing/provenance
-   remain separate public-distribution gates. **Exit:** the private foundation is
-   accepted; a configuration-conformant standalone alpha must close the remaining
-   runtime gate before the learning lane activates. Native restricted providers are
-   separately accepted platform gates and cannot block this exit or borrow
-   acceptance from it.
+   install/update/uninstall, fixed configuration files and commands, immutable
+   effective resolution, redacted diagnostics, and hosted Windows/macOS/Ubuntu
+   product gates pass. Rights attestation and artifact signing/provenance remain
+   separate public-distribution gates. **Exit:** the configuration-conformant
+   private foundation is accepted and the learning lane may begin. Native
+   restricted providers are separately accepted platform gates and cannot block
+   this exit or borrow acceptance from it.
 
 ## Post-alpha differentiated learning lane
 
@@ -556,11 +554,12 @@ promotion/discard. Continue as follows:
     signed App Sandbox helper as the durable macOS release decision and Linux
     bubblewrap as the Tier-2 backend. Keep every provider unavailable and fail-closed
     until its own host gate passes.
-13. **Private foundation accepted through PR #27:** package, install, diagnose,
-    update, uninstall, and run the trusted alpha on the declared hosted matrix.
-    Close ADR-0036 effective-configuration conformance as the next bounded increment.
-14. Begin the bounded context/memory/reviewed-skill learning loop immediately after
-    the configuration-conformant standalone CLI gate. Expand providers, a high-level
+13. **Configuration-conformant private foundation accepted through PR #31:**
+    package, install, diagnose, configure, update, uninstall, and run the trusted
+    alpha on the declared hosted matrix. ADR-0036 selection, tightening,
+    attribution, redaction, and no-fallback conformance pass Checkpoint 91.
+14. **Next bounded lane:** begin the context/memory/reviewed-skill learning loop.
+    Expand providers, a high-level
     MCP/VS Code mutation workflow, and other advanced platform surfaces on separate
     measured lanes; native sandbox completion does not block the learning loop.
 
@@ -616,9 +615,10 @@ The trusted-alpha matrix is Windows x64 plus macOS ARM64/x64. Ubuntu x64 remains
 compatibility/CI target; Windows ARM64 and Linux ARM64 are deferred. Configuration
 uses the ADR-0036 precedence and monotonic-authority rules. Protocol evolution uses
 ADR-0037 negotiation and copy-on-write migration. These are accepted contracts.
-The hosted clean-install/product matrix is accepted at Checkpoint 90; configuration
-selection, monotonic tightening, secret redaction, and effective-source fixtures
-remain open. Protocol fixtures remain required before a later public schema bump.
+The hosted clean-install/product matrix is accepted at Checkpoint 90. Configuration
+selection, monotonic tightening, secret redaction, effective-source reporting, and
+configured packaged-product fixtures are accepted at Checkpoint 91. Protocol
+fixtures remain required before a later public schema bump.
 
 ## Core completion and delivery forecast
 
@@ -627,13 +627,13 @@ not source volume or the number of abstractions present.
 
 | Gate group | State | Evidence or open condition |
 | --- | --- | --- |
-| Canonical runtime, real inference/live loop, governed change, cancellation-safe approvals | Accepted on `develop` through PR #28 (`2882550`) | PR #26 adds repository/contract authority; PR #27 adds the authoritative trusted-alpha replay and hosted gate; PR #28 corrects the product-reported blocker truth. Earlier cross-platform, live-provider, controlled VS Code, and transaction evidence remains accepted. This does not promote restricted execution. |
+| Canonical runtime, real inference/live loop, governed change, cancellation-safe approvals | Accepted through PR #31 | PR #26 adds repository/contract authority; PR #27 adds the authoritative trusted-alpha replay and hosted gate; PR #28 corrects the product-reported blocker truth; PRs #29-31 lock and implement effective configuration. Earlier cross-platform, live-provider, controlled VS Code, and transaction evidence remains accepted. This does not promote restricted execution. |
 | 5B execution controls | Accepted and merged on `develop` at `74308ca` | Local, hosted Windows/macOS/Ubuntu, live Qwen, conservative credentialed OpenAI, and one-call controlled VS Code gates pass. See Checkpoints 68-70. |
 | 5C policy posture and host callback conformance | Accepted at implementation `2941948` | One fact-producing profile layer serves CLI/service/MCP while Rust alone decides. Local, exact-kernel, live Qwen 1.5B, controlled VS Code, and hosted Windows/macOS/Ubuntu gates pass. See ADR-0028 and Checkpoints 71-72. |
 | Minimum outer-run recovery | Accepted through the private trusted-alpha hosted regression | Rust durably records request/events/artifact plus the bounded interaction transcript. Terminal return and proven-safe same-runtime continuation work; ambiguous and non-idempotent frontiers block. Complete initial state is privately staged and atomically published. A pending governed change carries one durably acknowledged reference to its registered authoritative ChangeSet transaction while the outer capability remains non-replayable. Checkpoint 90 reran the complete Rust/Node/hybrid product gate on hosted Windows/macOS/Ubuntu. Orphaned staging and registered-but-never-finalized ChangeSet policy remain release-hardening work. |
 | Transaction retention and isolation truth | Trusted-alpha regression accepted; restricted-provider production gate open | Lock-safe transaction retention and truthful readiness reporting remain accepted. Managed Windows and AppContainer each pass the local 17-case schema-v4 corpus under Rust-owned lifecycle/resource/evidence authority; probe v4 reports both as `setup_required` and restricted-ready false. The trusted-alpha hosted matrix does not close the separate VM lifecycle, real second-pin upgrade, broader credential, macOS, or adversarial provider gates. See [ADR-0031](../decisions/ADRs/ADR-0031-transaction-retention-and-native-sandbox-sequencing.md), [ADR-0033](../decisions/ADRs/ADR-0033-sandbox-policy-compilation-and-provider-conformance.md), [Checkpoint 83](../decisions/checkpoints/2026-08-12-83-managed-windows-provider-adapter-local-gate.md), [Checkpoint 84](../decisions/checkpoints/2026-08-12-84-packaged-provider-lifecycle-gate-preparation.md), and [Checkpoint 85](../decisions/checkpoints/2026-08-12-85-consolidated-transaction-sandbox-local-gate.md). |
-| Installable developer alpha | Private distribution/onboarding foundation accepted; configuration and public-release gates open | PR #27 and Checkpoint 90 accept ADR-0032 exact-version native packaging, local install/update/uninstall, the tester kit, and hosted Windows/macOS/Ubuntu product evidence. PR #28 removes hosted target acceptance from the reported blockers. Effective-config implementation/conformance, contributor-rights attestation, and public artifact signing/provenance remain open; no public artifact has been published. |
-| Differentiated learning loop | Planned and runtime-inactive until the configuration-conformant standalone alpha gate | Attributable scoped memory, measured retrieval, pattern recognition, and reviewed skill promotion become the product critical path under ADR-0034. Stale-base candidate `b5effea` must be replayed and tested before review, after the unresolved memory-policy choices are settled. Exit: one repeated-workflow fixture proves quality/effort improvement over a no-memory baseline without hidden instructions or policy bypass. |
+| Installable developer alpha | Configuration-conformant private foundation accepted; public-release gates open | PR #27 and Checkpoint 90 accept ADR-0032 exact-version native packaging, local install/update/uninstall, the tester kit, and hosted Windows/macOS/Ubuntu product evidence. PR #31 and Checkpoint 91 accept effective configuration, config UX, and clean-install conformance. Contributor-rights attestation and public artifact signing/provenance remain open; no public artifact has been published. |
+| Differentiated learning loop | Next bounded implementation lane; runtime-inactive until its own gate | Attributable scoped memory, measured retrieval, pattern recognition, and reviewed skill promotion are the product critical path under ADR-0034. Stale-base candidate `b5effea` must be replayed and tested before review, after the unresolved memory-policy choices are settled. Exit: one repeated-workflow fixture proves quality/effort improvement over a no-memory baseline without hidden instructions or policy bypass. |
 | Broader V1 platform | Deferred beyond the bounded learning loop | Advanced compression/retrieval, MCP client/mutation symmetry, connectors, automation, and generalized UI retain their later roadmap gates. Windows/macOS restricted providers continue as a bounded, actively scheduled commodity-platform lane under ADR-0031/0033/0034 and cannot borrow acceptance from trusted mode. |
 
 Percent-complete figures are intentionally not used. They hid the difference
@@ -654,9 +654,9 @@ expansion, the current planning ranges are:
 - 5C product approval profiles: **accepted at implementation `2941948` after local 91-test/build, full 54-test retained-kernel hybrid, live Qwen 1.5B grant/decline, controlled one-call VS Code, and hosted Node/hybrid Windows/macOS/Ubuntu gates**;
 - 6A/6B outer-run recovery: **local and controlled VS Code gates pass through bridge v10 with 93 Node tests/build, zero-warning full Rust workspace validation, 62 hybrid scenarios (56 passed and six explicit separate-kernel skips), packaged CLI smoke, deterministic same-runtime replay, one-total evidence retry, OS-owned locking, atomic whole-directory initialization, terminal temporary-artifact recovery, fail-closed ambiguous/non-idempotent frontiers, and a durably acknowledged pending ChangeSet transaction cross-link; Checkpoint 90 adds exact-head hosted Windows/macOS/Ubuntu product regression evidence**;
 - private trusted-alpha foundation: **accepted through PR #27 and Checkpoint 90 with exact-version native packaging, local install/update/uninstall, onboarding/tester documentation, and hosted Windows/macOS/Ubuntu product gates; PR #28 aligns the reported blockers**;
-- configuration-conformant standalone CLI alpha: **the next bounded implementation increment**, requiring ADR-0036 selection precedence, monotonic policy tightening, secret redaction, effective-source reporting, and cross-platform fixtures; native restricted execution remains a separately gated pilot boundary;
+- configuration-conformant standalone CLI alpha: **accepted through PR #31 and Checkpoint 91** with ADR-0036 selection precedence, monotonic policy tightening, secret redaction, effective-source reporting, and cross-platform fixtures; native restricted execution remains a separately gated pilot boundary;
 - public alpha distribution: **still blocked independently** on contributor-rights attestation and artifact signing/provenance; no public package or artifact has shipped;
-- first attributable memory/retrieval demonstration: **about one focused week after the installable alpha gate**;
+- first attributable memory/retrieval demonstration: **the next bounded lane, estimated at about one focused week after its policy lock and clean replay**;
 - reviewed pattern-to-skill vertical slice: **a further 2-3 focused weeks**, contingent on the evaluation fixture proving better accepted outcomes rather than token reduction alone;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
@@ -664,10 +664,11 @@ expansion, the current planning ranges are:
 The source-backed
 [CLI harness comparison](../audit/2026-08-05-cli-harness-core-comparison.md)
 calibrates Forge as a strong narrow evidence/transaction core rather than a mature
-CLI peer. With repository authority, native packaging, the tester kit, and the
-trusted-alpha hosted matrix accepted, the immediate implementation order is the
-ADR-0036 effective-configuration loader and conformance suite. Rights attestation
-and artifact signing/provenance proceed as separate public-distribution gates;
+CLI peer. With repository authority, native packaging, the tester kit, the
+trusted-alpha hosted matrix, and effective configuration accepted, the immediate
+implementation order is the bounded CLI8 memory-policy and attributable
+observation/replay lane. Rights attestation and artifact signing/provenance proceed
+as separate public-distribution gates;
 Windows managed/fallback and macOS preview/signed-helper work remain a separately
 accepted provider lane. The trusted alpha must not wait for those native providers,
 but it also must not advertise restricted execution.
@@ -689,9 +690,9 @@ merely because implementation has started.
 | Slice 0 protocol and fixture suite | 91 / 100 | Fully under Forge control; no vendor, sandbox, or provider dependency. | Accepted. |
 | Slice 1 deterministic read-only spine | 86 / 100 | Small, testable surface with existing provisional scaffolding to replace or keep only where it meets the contract. | Accepted, including the seven-tool MCP tether. |
 | Slice 2 developer change loop | 94 / 100 | Full-operation fidelity, process-restart coordination, abrupt verifier-owner cleanup, terminal candidate cleanup, and the public sovereign CLI are accepted on Windows/macOS/Ubuntu. Remaining risk is trusted execution rather than transaction correctness. | Accept Slice 2E; carry authenticated host and restricted-execution boundaries into Slice 2F. |
-| Slices 3–5 context, durable state, and skills | 74 / 100 | Direction remains sound, but quality evaluation and storage migrations still need their own gates. The transaction/evidence machinery is sufficient to begin after the configuration-conformant standalone alpha gate. | Make the bounded attributable-memory/retrieval/reviewed-skill loop the post-alpha critical path; do not wait for native sandbox promotion. |
+| Slices 3–5 context, durable state, and skills | 74 / 100 | Direction remains sound, but quality evaluation and storage migrations still need their own gates. The transaction/evidence machinery and configuration-conformant alpha are sufficient to begin the bounded lane. | Make the bounded attributable-memory/retrieval/reviewed-skill loop the active product path; do not wait for native sandbox promotion. |
 | Slices 6–7 VS Code/MCP and provider escalation | 68 / 100 | Standards exist, but host/provider support and streaming semantics remain integration risk. | Read-only VS Code/MCP is accepted; keep high-level mutation and provider expansion on later measured lanes. |
-| Slice 8 hardening/release boundary | 62 / 100 | Exact-version packaging and the private hosted alpha foundation are accepted, but effective configuration, public signing/provenance, Windows/macOS containment, and power-loss durability remain open. | Close configuration conformance next; prove minimum Tier-1 restricted backends independently and retain full durability/privilege hardening for later release gates. |
+| Slice 8 hardening/release boundary | 62 / 100 | Exact-version packaging, the private hosted alpha foundation, and effective configuration are accepted; public signing/provenance, Windows/macOS containment, and power-loss durability remain open. | Prove minimum Tier-1 restricted backends independently and retain full durability/privilege hardening for later release gates. |
 | Entire V1 as a single committed scope | 69 / 100 | Strong plan, but enough integration uncertainty remains that a one-shot implementation would be irresponsible. | Stage-gate it; do not build it as one batch. |
 
 ## Go/no-go
@@ -714,28 +715,30 @@ promoted Qwen, and controlled VS Code gates before merging through PR #20 at
 service, and MCP, with Rust still resolving every final decision. Implementation
 `2941948` passed the local, exact-kernel, live Qwen 1.5B, controlled VS Code, and
 hosted Node/hybrid Windows/macOS/Ubuntu gates and is accepted as increment 5C.
-Current `develop` is PR #28 merge `2882550`. PR #26 (`70a3288`) accepts canonical
+The accepted product baseline advances through PR #31. PR #26 (`70a3288`) accepts canonical
 repository authority, Apache-2.0 alignment, the target/configuration contract, and
 protocol migration rules. PR #27 (`6cc90c1`) accepts the authoritative CLI7 replay
 as a private trusted-alpha distribution/onboarding foundation after the full local
 gate and hosted Windows/macOS/Ubuntu Node plus hybrid/native/RustSec gates. PR #28
 corrects the onboarding blocker list so hosted target acceptance is no longer
-reported as open. The ADR-0036 effective-configuration loader/conformance suite,
-contributor-rights attestation, and public artifact signing/provenance remain open;
-no public artifact has shipped.
+reported as open. PR #29 locks ADR-0036, PR #30 freezes its contracts, and PR #31
+plus Checkpoint 91 accept its implementation on Windows x64, macOS ARM64/x64, and
+Ubuntu x64. Contributor-rights attestation and public artifact signing/provenance
+remain open; no public artifact has shipped.
 `restricted` remains fail-closed until a
 separately proven Windows/macOS backend passes adversarial gates; the trusted developer alpha must name that
 limitation.
 
-**Go next for the bounded
-[ADR-0036 effective-configuration increment](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md).**
-With its design lock accepted, freeze the contracts and golden cases, then implement
-selection precedence, monotonic authority tightening, secret redaction, effective-
-source reporting, and cross-platform fixtures without mixing in public publication,
-sandbox-provider promotion, organization inference governance, or CLI8 activation.
+**The bounded
+[ADR-0036 effective-configuration increment](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md)
+is accepted through PR #31 and Checkpoint 91.** Its fixed files, precedence,
+monotonic authority tightening, secret redaction, effective-source reporting, and
+cross-platform fixtures are now part of the private alpha boundary. It adds no
+public publication, sandbox-provider promotion, or organization inference-policy
+claim.
 
 **Go for the bounded attributable-memory, measured-retrieval, and reviewed-skill
-vertical slice immediately after the configuration-conformant standalone CLI gate;
+vertical slice next;
 do not wait for native sandbox promotion.** Broad compression, connector,
 automation, generalized UI, and raw MCP mutation programs remain no-go until that
 learning slice proves value. No raw shell or file-write MCP tool is permitted; any
