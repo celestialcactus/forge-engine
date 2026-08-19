@@ -40,6 +40,16 @@ export class ConfigurationIssueError extends Error {
   }
 }
 
+const boundedIssueText = (value: string, maximumLength = 512): string => {
+  const escaped = value.replace(
+    /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
+  );
+  return escaped.length <= maximumLength
+    ? escaped
+    : `${escaped.slice(0, maximumLength - 1)}…`;
+};
+
 const issue = (
   context: ConfigurationValueContext,
   code: ConfigurationIssueCode,
@@ -49,9 +59,9 @@ const issue = (
   code,
   source: context.source,
   ...(context.field === undefined ? {} : { field: context.field }),
-  location: context.location,
-  message,
-  hint,
+  location: boundedIssueText(context.location),
+  message: boundedIssueText(message),
+  hint: boundedIssueText(hint),
 });
 
 const located = (
@@ -168,6 +178,14 @@ const requireText = (
     throw issue(context, 'config_value_invalid', `${label} must be text.`, `Set ${context.location} to a text value.`);
   }
   const normalized = value.trim();
+  if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(normalized)) {
+    throw issue(
+      context,
+      'config_value_invalid',
+      `${label} cannot contain control or display-direction characters.`,
+      `Remove control characters from ${context.location}.`,
+    );
+  }
   if (normalized.length === 0 || normalized.length > maximumLength) {
     throw issue(
       context,
@@ -449,6 +467,14 @@ export function parseConfigurationDocument<Source extends FileConfigurationSourc
   fileLocation: string,
 ): ParsedConfigurationDocument<Source> {
   const root = requireRecord(value, located(source, fileLocation), 'Forge configuration');
+  if (root.schemaVersion !== 1) {
+    throw issue(
+      located(source, fileLocation, 'schemaVersion'),
+      'config_schema_unsupported',
+      'Forge configuration must declare "schemaVersion": 1.',
+      'Set "schemaVersion" to 1 and use only schema-v1 settings.',
+    );
+  }
   if (Object.hasOwn(root, 'credentials')) {
     throw issue(
       located(source, fileLocation, 'credentials'),
@@ -462,14 +488,6 @@ export function parseConfigurationDocument<Source extends FileConfigurationSourc
     ? new Set(['schemaVersion', 'inference', 'approvalProfile', 'execution'])
     : new Set(['schemaVersion', 'inference', 'engineRoot', 'providers', 'approvalProfile', 'execution']);
   assertKnownKeys(root, allowedRoot, source, fileLocation);
-  if (root.schemaVersion !== 1) {
-    throw issue(
-      located(source, fileLocation, 'schemaVersion'),
-      'config_schema_unsupported',
-      'Forge configuration must declare "schemaVersion": 1.',
-      'Set "schemaVersion" to 1 and use only schema-v1 settings.',
-    );
-  }
 
   const facts: ConfigurationFact<ConfigurationFieldId, Source>[] = [];
   const output: {

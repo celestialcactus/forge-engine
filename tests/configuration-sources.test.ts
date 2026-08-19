@@ -245,3 +245,68 @@ test('reusable normalizers give CLI and environment compilation the same strict 
     resolve('C:/fixture', 'state'));
   assert.equal(normalizeProviderOrigin('https://example.test', context), 'https://example.test/');
 });
+
+test('accepts a UTF-8 BOM but rejects malformed UTF-8 and duplicate JSON keys', async () => {
+  await withTemporaryDirectory(async (directory) => {
+    const home = join(directory, 'home');
+    const configPath = join(home, '.forge', 'config.json');
+    await mkdir(dirname(configPath), { recursive: true });
+
+    await writeFile(configPath, Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from('{"schemaVersion":1}', 'utf8'),
+    ]));
+    const bom = await loadUserConfiguration(home);
+    assert.equal(bom.kind, 'present');
+
+    await writeFile(configPath, Buffer.from([
+      ...Buffer.from('{"schemaVersion":1,"inference":{"provider":"ollama","model":"', 'utf8'),
+      0xc3,
+      0x28,
+      ...Buffer.from('"}}', 'utf8'),
+    ]));
+    await expectIssue(() => loadUserConfiguration(home), {
+      code: 'config_json_invalid',
+      message: 'Forge configuration must be valid UTF-8 JSON.',
+    });
+
+    await writeFile(configPath, '{"schemaVersion":1,"approvalProfile":"developer","approvalProfile":"locked"}', 'utf8');
+    await expectIssue(() => loadUserConfiguration(home), {
+      code: 'config_json_invalid',
+      message: 'Forge configuration cannot contain duplicate object keys.',
+    });
+  });
+});
+
+test('reports unsupported schema versions before schema-v1 field errors', () => {
+  assert.throws(
+    () => parseConfigurationDocument('workspace', {
+      schemaVersion: 2,
+      engineRoot: '/not-workspace-owned',
+      futureSetting: true,
+    }, '<workspace>/.forge/config.json'),
+    (error: unknown) => {
+      assert.ok(error instanceof ConfigurationIssueError);
+      assert.equal(error.issue.code, 'config_schema_unsupported');
+      assert.equal(error.issue.location, '<workspace>/.forge/config.json#schemaVersion');
+      return true;
+    },
+  );
+});
+
+test('bounds and control-escapes untrusted configuration issue fragments', () => {
+  const hostileKey = `bad\u001b]8;;https://example.test\u0007${'x'.repeat(2_000)}`;
+  assert.throws(
+    () => parseConfigurationDocument('user', { schemaVersion: 1, [hostileKey]: true }, 'fixture\npath'),
+    (error: unknown) => {
+      assert.ok(error instanceof ConfigurationIssueError);
+      assert.ok(error.issue.location.length <= 512);
+      assert.ok(error.issue.message.length <= 512);
+      assert.ok(error.issue.hint.length <= 512);
+      assert.equal(/[\u0000-\u001f\u007f-\u009f]/u.test(error.issue.location), false);
+      assert.equal(/[\u0000-\u001f\u007f-\u009f]/u.test(error.issue.message), false);
+      assert.equal(/[\u0000-\u001f\u007f-\u009f]/u.test(error.issue.hint), false);
+      return true;
+    },
+  );
+});

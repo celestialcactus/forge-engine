@@ -65,7 +65,21 @@ const evidenceLocation = (fact: ConfigurationFact): string => {
 };
 
 const throwIssue = (issue: ConfigurationIssue): never => {
-  throw new ConfigurationResolutionError(issue);
+  const bounded = (value: string, maximumLength = 512): string => {
+    const escaped = value.replace(
+      /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu,
+      (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
+    );
+    return escaped.length <= maximumLength
+      ? escaped
+      : `${escaped.slice(0, maximumLength - 1)}…`;
+  };
+  throw new ConfigurationResolutionError({
+    ...issue,
+    location: bounded(issue.location),
+    message: bounded(issue.message),
+    hint: bounded(issue.hint),
+  });
 };
 
 type NumericCeilingField =

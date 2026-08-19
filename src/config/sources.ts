@@ -37,6 +37,16 @@ const filesystemErrorCode = (error: unknown): string | undefined =>
     ? error.code
     : undefined;
 
+const boundedIssueText = (value: string, maximumLength = 512): string => {
+  const escaped = value.replace(
+    /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
+  );
+  return escaped.length <= maximumLength
+    ? escaped
+    : `${escaped.slice(0, maximumLength - 1)}…`;
+};
+
 const makeIssue = (
   source: FileConfigurationSource,
   code: ConfigurationIssue['code'],
@@ -46,9 +56,9 @@ const makeIssue = (
 ): ConfigurationIssueError => new ConfigurationIssueError({
   code,
   source,
-  location,
-  message,
-  hint,
+  location: boundedIssueText(location),
+  message: boundedIssueText(message),
+  hint: boundedIssueText(hint),
 });
 
 const notRegular = (source: FileConfigurationSource, path: string): ConfigurationIssueError =>
@@ -87,6 +97,24 @@ const malformedJson = (source: FileConfigurationSource, path: string): Configura
     `Fix the JSON syntax in ${path} and run the command again.`,
   );
 
+const invalidEncoding = (source: FileConfigurationSource, path: string): ConfigurationIssueError =>
+  makeIssue(
+    source,
+    'config_json_invalid',
+    path,
+    'Forge configuration must be valid UTF-8 JSON.',
+    `Save ${path} as UTF-8, then run the command again.`,
+  );
+
+const duplicateJsonKey = (source: FileConfigurationSource, path: string): ConfigurationIssueError =>
+  makeIssue(
+    source,
+    'config_json_invalid',
+    path,
+    'Forge configuration cannot contain duplicate object keys.',
+    `Keep each setting exactly once in ${path}, then run the command again.`,
+  );
+
 const isContainedBy = (root: string, candidate: string): boolean => {
   const pathFromRoot = relative(root, candidate);
   return pathFromRoot === '' || (
@@ -96,10 +124,28 @@ const isContainedBy = (root: string, candidate: string): boolean => {
   );
 };
 
+const outsideWorkspace = (
+  source: FileConfigurationSource,
+  displayPath: string,
+  workspaceRoot: string,
+): ConfigurationIssueError => makeIssue(
+  source,
+  'config_file_outside_workspace',
+  displayPath,
+  'The workspace configuration resolves outside the opened workspace.',
+  `Replace it with a regular file inside ${join(workspaceRoot, '.forge')}${sep}.`,
+);
+
+const sameFileIdentity = (
+  left: Awaited<ReturnType<Awaited<ReturnType<typeof open>>['stat']>>,
+  right: Awaited<ReturnType<typeof stat>>,
+): boolean => left.dev === right.dev && left.ino === right.ino;
+
 const readBoundedFile = async (
   source: FileConfigurationSource,
   displayPath: string,
   canonicalPath: string,
+  workspaceRoot?: string,
 ): Promise<Buffer> => {
   let handle;
   try {
@@ -107,6 +153,17 @@ const readBoundedFile = async (
     const openedStat = await handle.stat();
     if (!openedStat.isFile()) throw notRegular(source, displayPath);
     if (openedStat.size > maximumConfigurationFileBytes) throw tooLarge(source, displayPath);
+
+    // Revalidate the exact opened object after opening. This closes the useful
+    // path-swap window between the initial canonical containment check and read.
+    const postOpenCanonicalPath = await realpath(canonicalPath);
+    if (workspaceRoot !== undefined && !isContainedBy(workspaceRoot, postOpenCanonicalPath)) {
+      throw outsideWorkspace(source, displayPath, workspaceRoot);
+    }
+    const postOpenStat = await stat(postOpenCanonicalPath);
+    if (!postOpenStat.isFile() || !sameFileIdentity(openedStat, postOpenStat)) {
+      throw unreadable(source, displayPath);
+    }
 
     const buffer = Buffer.allocUnsafe(maximumConfigurationFileBytes + 1);
     let offset = 0;
@@ -153,13 +210,7 @@ const locateFile = async <Source extends FileConfigurationSource>(
   }
 
   if (workspaceRoot !== undefined && !isContainedBy(workspaceRoot, canonicalPath)) {
-    throw makeIssue(
-      source,
-      'config_file_outside_workspace',
-      displayPath,
-      'The workspace configuration resolves outside the opened workspace.',
-      `Replace it with a regular file inside ${join(workspaceRoot, '.forge')}${sep}.`,
-    );
+    throw outsideWorkspace(source, displayPath, workspaceRoot);
   }
 
   try {
@@ -172,6 +223,84 @@ const locateFile = async <Source extends FileConfigurationSource>(
   return { displayPath, canonicalPath };
 };
 
+const assertNoDuplicateJsonKeys = (
+  source: FileConfigurationSource,
+  path: string,
+  text: string,
+): void => {
+  let offset = 0;
+  const skipWhitespace = (): void => {
+    while (/\s/u.test(text[offset] ?? '')) offset += 1;
+  };
+  const readString = (): string => {
+    const start = offset;
+    offset += 1;
+    while (offset < text.length) {
+      if (text[offset] === '\\') {
+        offset += 2;
+      } else if (text[offset] === '"') {
+        offset += 1;
+        return JSON.parse(text.slice(start, offset)) as string;
+      } else {
+        offset += 1;
+      }
+    }
+    return '';
+  };
+  const readValue = (): void => {
+    skipWhitespace();
+    if (text[offset] === '{') {
+      offset += 1;
+      skipWhitespace();
+      const keys = new Set<string>();
+      if (text[offset] === '}') {
+        offset += 1;
+        return;
+      }
+      while (offset < text.length) {
+        skipWhitespace();
+        const key = readString();
+        if (keys.has(key)) throw duplicateJsonKey(source, path);
+        keys.add(key);
+        skipWhitespace();
+        offset += 1; // colon; syntax was already accepted by JSON.parse.
+        readValue();
+        skipWhitespace();
+        if (text[offset] === '}') {
+          offset += 1;
+          return;
+        }
+        offset += 1; // comma.
+      }
+      return;
+    }
+    if (text[offset] === '[') {
+      offset += 1;
+      skipWhitespace();
+      if (text[offset] === ']') {
+        offset += 1;
+        return;
+      }
+      while (offset < text.length) {
+        readValue();
+        skipWhitespace();
+        if (text[offset] === ']') {
+          offset += 1;
+          return;
+        }
+        offset += 1; // comma.
+      }
+      return;
+    }
+    if (text[offset] === '"') {
+      readString();
+      return;
+    }
+    while (offset < text.length && !/[\s,}\]]/u.test(text[offset] ?? '')) offset += 1;
+  };
+  readValue();
+};
+
 const loadLocatedFile = async <Source extends FileConfigurationSource>(
   source: Source,
   displayPath: string,
@@ -179,13 +308,20 @@ const loadLocatedFile = async <Source extends FileConfigurationSource>(
 ): Promise<LoadedConfigurationSource<Source>> => {
   const located = await locateFile(source, displayPath, workspaceRoot);
   if (located === undefined) return { kind: 'absent', source, path: displayPath };
-  const bytes = await readBoundedFile(source, displayPath, located.canonicalPath);
+  const bytes = await readBoundedFile(source, displayPath, located.canonicalPath, workspaceRoot);
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/^\uFEFF/u, '');
+  } catch {
+    throw invalidEncoding(source, displayPath);
+  }
   let value: unknown;
   try {
-    value = JSON.parse(bytes.toString('utf8')) as unknown;
+    value = JSON.parse(text) as unknown;
   } catch {
     throw malformedJson(source, displayPath);
   }
+  assertNoDuplicateJsonKeys(source, displayPath, text);
   return {
     kind: 'present',
     source,
