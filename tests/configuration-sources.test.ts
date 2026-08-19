@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
@@ -25,7 +25,9 @@ const fixtureRoot = fileURLToPath(new URL('./fixtures/configuration/sources/', i
 const withTemporaryDirectory = async (run: (directory: string) => Promise<void>): Promise<void> => {
   const directory = await mkdtemp(join(tmpdir(), 'forge-config-source-'));
   try {
-    await run(directory);
+    // macOS exposes /var as a symlink to /private/var. The loader intentionally
+    // reports its canonical workspace authority, so assertions use that same root.
+    await run(await realpath(directory));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
