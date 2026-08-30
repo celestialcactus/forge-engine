@@ -1,8 +1,9 @@
 # ForgeEngine current execution index
 
 **Status:** operational ground truth for active ForgeEngine delivery
-**As of:** 2026-08-19
-**Accepted implementation baseline:** PR #31, implementation candidate `e7ba284`
+**As of:** 2026-08-29
+**Accepted implementation baseline:** PR #31 merge `f36a767` (implementation
+candidate `e7ba284`)
 **Documentation baseline:** the commit containing this file
 
 This file answers what is active now. The
@@ -11,6 +12,14 @@ defines product direction and durable gates; ADRs define accepted architectural
 decisions; slice task files define bounded implementation scope; checkpoints record
 immutable evidence. A candidate branch or checkpoint does not become accepted
 product state until its exact implementation is merged and its required gates pass.
+
+Consequential new lanes additionally use the
+[four-gate delivery workflow](../development/four-gate-delivery-workflow.md).
+Product, Architecture, Program Design, and the authorized Vertical Slice packet
+must be explicitly approved before implementation. Small local changes use the
+documented proportional fast or compact path. Existing CLI8A Package 1 predates
+this policy; the combined CLI8A packet is the first full-path application and now
+authorizes only prerequisite Slice 0 plus implementation Slices 1–2.
 
 ## Document authority
 
@@ -40,9 +49,12 @@ foundation is accepted** through PR #31 and
 One immutable, redacted, source-attributed configuration now drives every product
 entry path on the declared target matrix. Organizational inference governance
 belongs to the operator; Forge retains faithful/no-fallback routing and intrinsic
-harness security. The next bounded product lane is CLI8 memory policy and
-attributable observation/replay. Public distribution still requires contributor-
-rights attestation and artifact signing/provenance. Trusted execution has no
+harness security. ADR-0038 and ADR-0039 now lock the bounded CLI8A identity,
+authority, capture, and recovery policy. The active branch implements the authorized
+Slice 0–2 candidate: Rust owns the canonical ledger/lifecycle, while TypeScript
+orchestrates CLI UX. It activates no planner/provider retrieval. Public
+distribution still requires contributor-rights attestation and artifact
+signing/provenance. Trusted execution has no
 Forge-enforced OS containment. Native restricted providers continue independently
 and cannot borrow or block trusted-alpha or CLI8 acceptance.
 
@@ -51,18 +63,19 @@ claims permitted at each delivery stage.
 
 ## Active lanes
 
-| Lane | Canonical ID | State on 2026-08-19 | Authority and next gate |
+| Lane | Canonical ID | State on 2026-08-29 | Authority and next gate |
 | --- | --- | --- | --- |
 | Documentation reconciliation | `DOC-GROUND-TRUTH` | Accepted at `5fff597` through PR #25 | Preserve Checkpoint 88 and the execution/release-profile authority during every lane replay. |
 | Authority and contract clarification | `ARCH-AUTHORITY` | Accepted through PR #26 (`70a3288`) | Preserve the repository guard, Apache-2.0 alignment, target/config/protocol decisions, memory primer, and system map. |
 | Trusted-alpha release | `CLI7-ALPHA` | Private distribution/onboarding foundation accepted through PR #27 (`6cc90c1`) and Checkpoint 90; PR #28 (`2882550`) corrects reported blockers | Preserve the accepted private tester boundary. Rights attestation and artifact signing/provenance remain separate public-distribution gates; no public artifact has shipped. |
 | Effective configuration | `CLI7-ALPHA-CONFIG` | Accepted through PR #31 candidate `e7ba284` and Checkpoint 91 | Preserve the fixed files, immutable compiler, source attribution, secret-safe projection, atomic route, monotonic ceilings, and no-fallback behavior. Do not add an organization provider-policy subsystem. |
 | Sandbox provider lifecycle | `SBX-PROVIDER-LIFECYCLE` | Independent and unaccepted for production; local managed-Windows/AppContainer conformance exists | Complete disposable-Windows-VM install/upgrade/uninstall/reboot/residue plus macOS/adversarial evidence. Do not advertise `restrictedReady` or promote a provider until the exact gate passes. |
-| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Next bounded lane; candidate `b5effea` remains stale-base, replay-required, and runtime-inactive | Settle the memory decisions below, replay only the bounded additive diff onto fresh `origin/develop`, run real Rust tests, then review separately. Automatic retrieval and skill activation remain out of scope. |
+| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Slice 0–2 candidate implemented; focused Rust/clippy, 154 Node tests, and retained hybrid suite pass; exact supported-toolchain/VS Code and hosted evidence pending | Validate the exact candidate with MSVC and a separate VS Code product run, then hosted targets. Do not begin Slices 3–5, cherry-pick stale candidate `b5effea`, or activate retrieval. |
 
 The stale-base CLI7 candidate was successfully replayed without importing its old
-ancestry. The remaining CLI8A candidate is salvageable implementation work, not
-accepted Forge state; replay only its bounded diff onto fresh ancestry.
+ancestry. The remaining CLI8A candidate is useful source material, not accepted
+Forge state; selectively reimplement only behavior that conforms to ADR-0038 on
+fresh ancestry.
 
 ## Merge order and shared-boundary rule
 
@@ -71,9 +84,10 @@ accepted Forge state; replay only its bounded diff onto fresh ancestry.
    through PR #27; PR #28 aligns the product-reported remaining blockers.
 3. The [ADR-0036 effective-configuration loader/conformance suite](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md)
    is accepted through PR #31 and Checkpoint 91.
-4. Next, settle the four memory policy choices, then replay and validate
-   `CLI8A-MEMORY-FOUNDATION`; integration may be prepared in
-   parallel, but runtime retrieval remains gated by CLI8B evaluation.
+4. ADR-0038 and ADR-0039 settle the authorized memory boundary, and the
+   [combined four-gate packet](../tasks/CLI8A-MEMORY-FOUR-GATE-REVIEW.md) authorizes
+   Slice 0–2. The implementation candidate now needs exact supported-toolchain,
+   separate VS Code, and hosted evidence; runtime retrieval remains gated by CLI8B.
 5. Merge `SBX-PROVIDER-LIFECYCLE` only after its independent VM/provider gate; its
    timing does not redefine the trusted-alpha claim.
 
@@ -90,16 +104,18 @@ rebased and reconciled before merge rather than resolved by taking an entire sid
 | P0 | Public rights attestation | Apache-2.0 is selected and metadata aligned, but the license cannot prove whether employer or third-party rights apply. | Maintainer/legal or open-source review before package publication. |
 | P0 | Public artifact signing and provenance | Private hosted/package evidence does not sign or establish provenance for a published artifact. | Release workflow and exact target evidence before publication. |
 | P1 | Sandbox requirement/binding/lifecycle split | The provider must not become a second policy authority or receive two competing launch truths. | ADR-0033 refinement after the current conformance spike. |
-| P1 | Memory policy choices | Claim/observation identity, append-only corrections, and no implicit scope widening are recommended; normalization, preference promotion, privacy purge, and expiry defaults remain open. | Review the memory primer and settle with CLI8 fixtures before replay. |
 | P1 | Protocol implementation | ADR-0037 accepts negotiation and copy-on-write migration; current code still needs handshake/migration fixtures before another public schema bump. | Protocol increment with golden compatibility tests. |
 | P1 | Evaluation budgets | Small-model quality, latency, filesystem scans, tokens, retries, and accepted outcome need ceilings to prevent locally efficient-looking regressions. | Shared acceptance matrix before automatic retrieval/routing. |
 | P2 | Public extension boundary | MCP, embedded hosts, skills, and future plugins need a declared stable surface without freezing private internals. | Post-alpha API/extension ADR before third-party integration promises. |
 
 ## Next three gates
 
-1. Settle memory policy, then replay and validate only the bounded additive `CLI8A`
-   observation foundation on fresh `origin/develop`.
-2. Run CLI8B no-memory/retrieved-memory evaluation, with no automatic retrieval
+1. Validate the exact CLI8A Slice 0–2 candidate with the supported MSVC toolchain,
+   a separate VS Code product lifecycle, and the declared hosted targets; record a
+   checkpoint only if those gates pass.
+2. After that candidate is accepted and later retrieval authorization is granted,
+   run CLI8B
+   no-memory/retrieved-memory evaluation, with no automatic retrieval
    until measurable quality and isolation gates pass.
 3. Gate reviewed skill-candidate promotion on attributable evidence and the same
    Rust-owned capability, approval, transaction, and artifact authority.

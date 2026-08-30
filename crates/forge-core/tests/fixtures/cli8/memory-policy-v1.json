@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "cli8a-memory-policy-v1",
+  "normalizationId": "memory_text_v1",
+  "runtimeActive": true,
+  "runtimeCapabilities": {
+    "explicitControl": true,
+    "automaticCapture": false,
+    "plannerInjection": false,
+    "providerRetrieval": false,
+    "skills": false
+  },
+  "normalizationCases": [
+    {
+      "id": "line-endings-and-outer-ascii-whitespace",
+      "inputs": ["  Use cargo test.\r\n", "Use cargo test.\n"],
+      "expectedNormalized": "Use cargo test.",
+      "expectedSameClaimText": true
+    },
+    {
+      "id": "case-remains-significant",
+      "inputs": ["Use cargo test.", "use cargo test."],
+      "expectedSameClaimText": false
+    },
+    {
+      "id": "internal-whitespace-remains-significant",
+      "inputs": ["cargo test", "cargo  test"],
+      "expectedSameClaimText": false
+    },
+    {
+      "id": "unicode-code-points-remain-significant",
+      "inputs": ["caf\u00e9", "cafe\u0301"],
+      "expectedSameClaimText": false
+    },
+    {
+      "id": "control-character-rejected",
+      "inputs": ["unsafe\u0000instruction"],
+      "expectedError": "memory_text_control_character"
+    }
+  ],
+  "identityCases": [
+    {
+      "id": "repeated-evidence-shares-claim-not-observation",
+      "difference": "provenance_and_observed_time",
+      "firstClaimId": "memory_claim:v1:sha256:1d07fd864a993a49d745fe4efcc02f3966ac12584b292d72efb9a416b3fba5ac",
+      "firstObservationId": "memory_observation:v1:sha256:16f94fc181dff3773a58589c4395dd94a546c49ff7cd2f3a0ac21003b13ddf27",
+      "expectedSameClaimId": true,
+      "expectedSameObservationId": false
+    },
+    {
+      "id": "confidence-reassessment-shares-claim-not-observation",
+      "difference": "confidence",
+      "expectedSameClaimId": true,
+      "expectedSameObservationId": false
+    },
+    {
+      "id": "scope-is-part-of-claim-identity",
+      "difference": "scope",
+      "expectedSameClaimId": false,
+      "expectedSameObservationId": false
+    },
+    {
+      "id": "statement-is-part-of-claim-identity",
+      "difference": "normalized_statement",
+      "expectedSameClaimId": false,
+      "expectedSameObservationId": false
+    },
+    {
+      "id": "identical-material-is-deterministic",
+      "difference": "none",
+      "expectedSameClaimId": true,
+      "expectedSameObservationId": true
+    }
+  ],
+  "admissionCases": [
+    {
+      "id": "explicit-remember-admits-developer-preference",
+      "statementKind": "developer_preference",
+      "scopeKind": "developer",
+      "provenanceKind": "developer_statement",
+      "admission": "explicit_remember",
+      "expectedAccepted": true
+    },
+    {
+      "id": "reviewed-acceptance-admits-developer-preference",
+      "statementKind": "developer_preference",
+      "scopeKind": "developer",
+      "provenanceKind": "developer_statement",
+      "admission": "reviewed_acceptance",
+      "expectedAccepted": true
+    },
+    {
+      "id": "incidental-conversation-does-not-admit-preference",
+      "statementKind": "developer_preference",
+      "scopeKind": "developer",
+      "provenanceKind": "developer_statement",
+      "admission": null,
+      "expectedError": "memory_preference_admission_required"
+    },
+    {
+      "id": "repository-text-cannot-create-developer-instruction",
+      "statementKind": "developer_preference",
+      "scopeKind": "developer",
+      "provenanceKind": "repository_text",
+      "admission": null,
+      "expectedError": "memory_scope_escalation"
+    },
+    {
+      "id": "model-output-is-not-verified-workspace-fact",
+      "statementKind": "quoted_fact",
+      "scopeKind": "workspace",
+      "provenanceKind": "model_output",
+      "admission": null,
+      "expectedError": "memory_verified_evidence_required"
+    }
+  ],
+  "freshnessCases": [
+    {
+      "id": "hypothesis-is-run-bounded",
+      "statementKind": "inferred_hypothesis",
+      "freshnessKind": "run_bound",
+      "expectedAccepted": true,
+      "normallyRetrievable": false
+    },
+    {
+      "id": "hypothesis-cannot-default-to-permanent",
+      "statementKind": "inferred_hypothesis",
+      "freshnessKind": "persistent_until_reviewed",
+      "expectedError": "memory_hypothesis_must_be_run_bound"
+    },
+    {
+      "id": "verified-repository-fact-is-evidence-bound",
+      "statementKind": "quoted_fact",
+      "scopeKind": "repository",
+      "freshnessKind": "evidence_bound",
+      "expectedAccepted": true
+    },
+    {
+      "id": "admitted-preference-persists-until-reviewed",
+      "statementKind": "developer_preference",
+      "scopeKind": "developer",
+      "freshnessKind": "persistent_until_reviewed",
+      "expectedAccepted": true
+    },
+    {
+      "id": "explicit-validity-becomes-stale-not-deleted",
+      "statementKind": "quoted_fact",
+      "freshnessKind": "explicit_validity",
+      "validUntilMillis": 200,
+      "asOfMillis": 201,
+      "expectedFresh": false,
+      "expectedInspectable": true
+    }
+  ],
+  "lifecycleCases": [
+    {
+      "id": "correction-is-append-only",
+      "operation": "correct",
+      "expectedOriginalInspectable": true,
+      "expectedReplacementActive": true
+    },
+    {
+      "id": "forget-is-a-tombstone",
+      "operation": "forget",
+      "expectedContentRetained": true,
+      "expectedNormallySelectable": false
+    },
+    {
+      "id": "privacy-purge-removes-memory-content",
+      "operation": "purge",
+      "expectedContentRetained": false,
+      "expectedReceiptFields": [
+        "schemaVersion",
+        "operationId",
+        "actorId",
+        "purgedAtMillis",
+        "scopeKind",
+        "reasonCode",
+        "removedRecordCount"
+      ],
+      "forbiddenReceiptFields": [
+        "claimId",
+        "observationId",
+        "targetId",
+        "contentSha256",
+        "statement",
+        "subject"
+      ],
+      "expectedRunArtifactPurgeClaim": false
+    }
+  ]
+}

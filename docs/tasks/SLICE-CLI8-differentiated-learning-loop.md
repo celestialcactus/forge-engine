@@ -1,10 +1,50 @@
 # Slice CLI8: Attributable memory and reviewed skill learning loop
 
-**State:** Planned; begins after the clean-install trusted alpha gate
-**Authority:** [ADR-0034](../decisions/ADRs/ADR-0034-commodity-sandbox-and-differentiated-learning-lane.md)
+**State:** Slice 0–2 implementation authorized; Product, Architecture, and bounded
+Program Design approved, Slices 3–5 gated
+**Authority:**
+[ADR-0034](../decisions/ADRs/ADR-0034-commodity-sandbox-and-differentiated-learning-lane.md),
+[ADR-0038](../decisions/ADRs/ADR-0038-cli8a-memory-identity-admission-and-retention.md),
+[ADR-0039](../decisions/ADRs/ADR-0039-cli8a-hybrid-memory-capture-and-recovery.md)
 **Product objective:** demonstrate that Forge learns useful developer/workspace
 knowledge and generalizable workflows without hiding instructions, compounding bad
 assumptions, or bypassing the canonical runtime.
+
+## Four-gate delivery status
+
+**Delivery path:** full
+
+This lane began before the
+[four-gate delivery workflow](../development/four-gate-delivery-workflow.md) was
+adopted. Package 1 is preserved as completed candidate work. Package 2 and later
+were superseded by the approved vertical packet. Only prerequisite Slice 0 and
+implementation Slices 1–2 are currently authorized.
+
+| Gate | Status | Revision/material | Approval note |
+| --- | --- | --- | --- |
+| Product | approved | [Combined CLI8A review packet](CLI8A-MEMORY-FOUR-GATE-REVIEW.md), Gate 1 | Outcome and explicit non-claims approved 2026-08-29. |
+| Architecture | approved for Slice 0–2 | ADR-0034, ADR-0038, [ADR-0039](../decisions/ADRs/ADR-0039-cli8a-hybrid-memory-capture-and-recovery.md), review packet Gate 2 | Rust authority with TypeScript orchestration, UX, and replaceable retrieval machinery accepted. |
+| Program Design | approved for Slice 0–2 | Review packet Gate 3 | Alpha ceilings are conservative safety budgets; `reviewed_decision` closes the repository-decision contract gap. |
+| Vertical Slices | partially approved | Review packet Gate 4 | Prerequisite Slice 0 and implementation Slices 1–2 authorized; Slices 3–5 remain gated. |
+
+Slice 0 and the Slice 1–2 candidate are implemented on the active branch. Focused
+Rust tests, clippy, 154 Node tests, and the retained hybrid suite pass; exact MSVC
+workspace validation, separate VS Code product validation, and hosted evidence
+remain before acceptance. Autosave, privacy lifecycle, context preview, retrieval,
+and skills remain gated.
+
+Current local evidence:
+
+- `cargo +1.97.1-x86_64-pc-windows-gnullvm clippy --workspace --all-targets
+  --locked -- -D warnings` passes;
+- the four focused memory test binaries pass 16 tests;
+- `npm run check` passes 154 tests plus typecheck/build;
+- `npm run test:hybrid` passes 59 scenarios with seven existing explicit
+  separate-kernel skips, including the new source-CLI memory lifecycle;
+- the ordinary MSVC command cannot start because this workstation currently lacks
+  Visual Studio Build Tools/Windows SDK (`link.exe`). A full alternate-toolchain
+  Rust run is not substituted as acceptance evidence because pre-existing
+  `ReplaceFileW` and AppContainer tests require the supported Windows environment.
 
 ## Boundary
 
@@ -27,14 +67,78 @@ posture and does not prevent this slice from being evaluated.
 - expose inspect, correct, delete, and explain operations through the CLI;
 - never treat model prose alone as verified workspace fact.
 
+### 8A policy lock
+
+The four previously open choices are settled for the bounded foundation:
+
+- `memory_text_v1` normalizes line endings and outer ASCII whitespace only;
+  semantic paraphrases, case changes, punctuation changes, internal whitespace,
+  paths, identifiers, and Unicode differences remain distinct;
+- durable developer preferences require an explicit remember action or reviewed
+  acceptance; incidental conversation, repository text, and model inference cannot
+  promote a developer preference;
+- ordinary deletion appends a tombstone, while an explicit privacy purge rewrites
+  memory content and retains only a non-content receipt; run/artifact retention is
+  separate and must not be implied;
+- freshness is evidence-driven: hypotheses are run-bounded, verified workspace and
+  repository claims are bound to source fingerprints, admitted preferences persist
+  until reviewed/removed, and naturally expiring facts use explicit validity time.
+
+Claims and observations have separate deterministic IDs. Scope is one exact tagged
+variant (`branch`, `repository`, `workspace`, or `developer`), never a set of
+optional wildcard fields. Organization scope remains deferred.
+
+### 8A superseded package sequence
+
+The list below records the pre-four-gate package shape. It is superseded for future
+implementation by the end-to-end vertical slices in the
+[combined review packet](CLI8A-MEMORY-FOUR-GATE-REVIEW.md) and must not be used as
+implementation authority.
+
+1. **Contract and golden fixtures**
+   - Rust types for claim/observation identity, statement/subject kinds, exact
+     scopes, provenance, relations, admission, and freshness;
+   - frozen positive and negative JSON fixtures with deterministic IDs;
+   - no change to canonical `RunEvent`, `RunArtifact`, bridge protocol, CLI, MCP,
+     planner, or context compiler.
+2. **Append/rebuild lifecycle**
+   - bounded append ledger and deterministic projection;
+   - correction, contradiction, tombstone, restoration, and explicit privacy purge;
+   - restart/rebuild and tamper rejection tests.
+3. **Explicit product operations**
+   - `memory inspect`, `explain`, `correct`, `forget`, and `purge` only after their
+     event/artifact and storage authority is reviewed;
+   - no automatic retrieval and no planner/context injection.
+4. **CLI8A acceptance gate**
+   - full Rust/Node/hybrid regression on the exact candidate;
+   - checkpoint the accepted observation/replay boundary and retained non-claims.
+
+Current package status:
+
+- [x] policy lock in ADR-0038;
+- [x] Package 1 typed contract, validation, separate deterministic identities, and
+      frozen positive/negative policy fixture;
+- [x] authorized Slice 1 append/rebuild plus explicit remember/find/show/explain;
+- [x] authorized Slice 2 correction, bounded recovery, restoration, and
+      erase-previous rewrite;
+- [ ] unapproved Slice 3–5 autosave, forget/purge/history-clear, and preview;
+- [ ] exact-candidate local and hosted acceptance gate.
+
+The stale-base candidate `b5effea` may be used as a reference for bounded limits,
+append/rebuild mechanics, and adversarial tests. It must not be cherry-picked or
+replayed verbatim because it collapses claim/observation identity and leaves the
+locked policy choices unresolved.
+
 ### 8A exit gate
 
-- [ ] equivalent observations have deterministic identities;
-- [ ] contradictory and superseding observations remain inspectable;
-- [ ] workspace/repository/developer scopes cannot leak into one another;
-- [ ] deletion/tombstone and correction survive restart;
-- [ ] malicious repository text cannot silently become developer-level instruction;
-- [ ] each projected record can be rebuilt from authoritative events/artifacts.
+- [x] normalization, preference admission, deletion/purge, freshness, and exact
+      scope policies are locked by ADR-0038;
+- [x] equivalent observations have deterministic claim and observation identities;
+- [x] corrected and superseded observations remain inspectable in explicit recovery;
+- [x] exact scope is bound into identity, storage path, bridge validation, and tests;
+- [x] authorized correction/recovery survives restart; forget/tombstone remains Slice 4;
+- [x] malicious repository text cannot silently become developer-level instruction;
+- [x] each implemented projected record rebuilds from the hash-linked NDJSON ledger.
 
 ## 8B: Contextual retrieval and evaluation
 

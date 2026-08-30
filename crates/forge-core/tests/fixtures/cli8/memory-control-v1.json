@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "protocolVersion": "forge.kernel.memory.v1",
+  "maximumRequestBytes": 262144,
+  "transactionEncoding": "canonical_ndjson",
+  "operations": [
+    "remember",
+    "inspect",
+    "correct",
+    "restore"
+  ],
+  "correctionDispositions": [
+    "keep_bounded",
+    "erase_previous"
+  ],
+  "limits": {
+    "maximumTextBytes": 8192,
+    "maximumFrameBytes": 65536,
+    "compactionTriggerBytes": 50331648,
+    "maximumLedgerBytes": 67108864,
+    "maximumActiveRecords": 4096,
+    "recoveryRetentionMillis": 2592000000,
+    "recoveryVersionsPerLineage": 5,
+    "maximumRecoveryBytes": 16777216
+  },
+  "runtimeClaims": {
+    "plannerInjection": false,
+    "providerCalls": false,
+    "mcpMutation": false,
+    "automaticCapture": false
+  }
+}

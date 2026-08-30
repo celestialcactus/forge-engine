@@ -1,3 +1,60 @@
+# 2026-08-29 - CLI8A Slice 0–2 four-gate packet is approved and implemented as a candidate
+
+- Approved the individual-developer product outcome and explicit non-claims, the
+  Rust-authority/TypeScript-orchestration split, bounded recovery, and the six-slice
+  dependency graph. Only prerequisite Slice 0 and implementation Slices 1–2 are
+  authorized; Slices 3–5 remain gated.
+- Accepted ADR-0039 as the capture/recovery amendment to ADR-0038. The alpha safety
+  budgets are 8-KiB normalized text, 64-KiB frames, 48-MiB compaction trigger,
+  64-MiB ledger, 4,096 active records, and recovery bounded by 30 days, five
+  versions, and 16 MiB per exact scope. A total-engine multi-scope budget remains
+  deferred pending evidence.
+- Implemented the candidate Rust hash-linked NDJSON ledger, projection rebuild,
+  correction/recovery/restore, erase-previous rewrite, one-request kernel bridge,
+  and TypeScript CLI orchestration for remember/find/show/explain/correct/history/
+  restore. Retrieval, provider/planner injection, autosave, forget/purge, and skills
+  remain inactive.
+- Focused Rust tests and clippy pass under the available GNU-LLVM toolchain; 154
+  Node tests and the retained hybrid suite pass. Exact supported MSVC, separate VS
+  Code, hosted, and merge evidence remain before checkpoint acceptance. See
+  [ADR-0039](ADRs/ADR-0039-cli8a-hybrid-memory-capture-and-recovery.md) and the
+  [four-gate packet](../tasks/CLI8A-MEMORY-FOUR-GATE-REVIEW.md).
+
+# 2026-08-28 - Consequential work adopts four proportional approval gates
+
+- Connected Forge's existing build plan, task, ADR, fixture, and checkpoint
+  practices into one explicit Product, Architecture, Program Design, and Vertical
+  Slices workflow. Full approval is required before consequential implementation;
+  fast and compact paths keep low-risk changes proportional.
+- Required Program Design to freeze file layout, types/signatures, call stacks,
+  errors, fixtures, shared boundaries, and ownership before parallel packages
+  begin. Vertical slice packets must name independent evidence, merge order, and
+  re-steer points.
+- Preserved completed CLI8A Package 1 candidate work and required the later
+  combined packet to be the first full-path application. That packet was approved
+  for Slice 0–2 on 2026-08-29; this entry records the workflow decision at adoption.
+  See the [workflow](../development/four-gate-delivery-workflow.md),
+  [template](../tasks/FOUR-GATE-TASK-TEMPLATE.md), and
+  [CLI8 task](../tasks/SLICE-CLI8-differentiated-learning-loop.md).
+
+# 2026-08-20 - CLI8A memory policy is locked before implementation
+
+- Accepted separate semantic claim and attributable observation identities, exact
+  tagged scopes, and conservative `memory_text_v1` normalization. The normalization
+  deliberately preserves case, punctuation, internal whitespace, Unicode, paths,
+  and identifiers rather than attempting an opaque semantic merge.
+- Required explicit remember/review admission for durable developer preferences;
+  incidental conversation, model prose, repository text, and inferred behavior
+  cannot silently become developer-scoped instruction.
+- Separated append-only forgetting from explicit privacy purge and selected
+  evidence-driven freshness instead of a universal TTL. Purge receipts retain no
+  claim/observation digests or content and do not imply canonical run/artifact
+  deletion.
+- Kept the first CLI8A increment runtime-inactive and rejected a verbatim replay of
+  stale candidate `b5effea`. Only conforming bounded types, limits, lifecycle ideas,
+  and adversarial fixtures may be reimplemented. See [ADR-0038](ADRs/ADR-0038-cli8a-memory-identity-admission-and-retention.md)
+  and [CLI8](../tasks/SLICE-CLI8-differentiated-learning-loop.md).
+
 # 2026-08-19 - CLI7 effective configuration passes the hosted gate
 
 - Accepted one immutable effective configuration across CLI, interactive,

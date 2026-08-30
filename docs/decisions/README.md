@@ -2,6 +2,13 @@
 
 This directory is the durable architectural memory for ForgeEngine. The archived prototype is not an architectural authority; decisions are authoritative only when recorded here and accepted through the checkpoint process.
 
+Consequential feature work follows the
+[four-gate delivery workflow](../development/four-gate-delivery-workflow.md):
+Product, Architecture, Program Design, then Vertical Slices. Active task files
+record the approval ledger and code-level delivery plan. ADRs preserve durable
+Gate 2 choices; checkpoints preserve post-implementation evidence. A task draft or
+proposed ADR is not implementation authority.
+
 ## Document types
 
 - `ADRs/`: one architectural decision per file, including alternatives, evidence, consequences, and replacement conditions.
