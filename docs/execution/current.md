@@ -53,7 +53,7 @@ harness security. ADR-0038 and ADR-0039 lock the bounded CLI8A identity,
 authority, capture, and recovery policy. Slices 0–2 are accepted through PR #32 and
 [Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md):
 Rust owns the canonical ledger/lifecycle, while TypeScript orchestrates CLI UX.
-Slice 3 implementation `afa6e67`, with corrected UX candidate `5c84a97`, locally
+Slice 3 implementation `afa6e67`, with corrected candidate `3849cd0`, locally
 proves current-repository standing grants,
 ask/auto/off UX, bounded direct-preference capture, find/explain across restart,
 and content-removing immediate undo; it is not accepted until the corrected live
@@ -75,7 +75,7 @@ claims permitted at each delivery stage.
 | Trusted-alpha release | `CLI7-ALPHA` | Private distribution/onboarding foundation accepted through PR #27 (`6cc90c1`) and Checkpoint 90; PR #28 (`2882550`) corrects reported blockers | Preserve the accepted private tester boundary. Rights attestation and artifact signing/provenance remain separate public-distribution gates; no public artifact has shipped. |
 | Effective configuration | `CLI7-ALPHA-CONFIG` | Accepted through PR #31 candidate `e7ba284` and Checkpoint 91 | Preserve the fixed files, immutable compiler, source attribution, secret-safe projection, atomic route, monotonic ceilings, and no-fallback behavior. Do not add an organization provider-policy subsystem. |
 | Sandbox provider lifecycle | `SBX-PROVIDER-LIFECYCLE` | Independent and unaccepted for production; local managed-Windows/AppContainer conformance exists | Complete disposable-Windows-VM install/upgrade/uninstall/reboot/residue plus macOS/adversarial evidence. Do not advertise `restrictedReady` or promote a provider until the exact gate passes. |
-| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Slices 0–2 accepted through PR #32 candidate `e9e8cd9` and Checkpoint 92; Slice 3 corrected candidate `5c84a97` passes local gates, live VS Code/hosted/merge pending | Preserve current-repository `off|ask|auto`, exact developer-ledger standing grants, bounded eligibility, visible attribution, terminal input echo, and narrow rewrite-style undo. Preserve inactive retrieval; Slices 4–5 and CLI8B/C remain gated. |
+| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Slices 0–2 accepted through PR #32 candidate `e9e8cd9` and Checkpoint 92; Slice 3 corrected candidate `3849cd0` passes local gates, live VS Code/hosted/merge pending | Preserve current-repository `off|ask|auto`, exact developer-ledger standing grants, bounded eligibility, visible attribution, terminal input echo, stream-close protocol parsing, and narrow rewrite-style undo. Preserve inactive retrieval; Slices 4–5 and CLI8B/C remain gated. |
 
 The stale-base CLI7 candidate was successfully replayed without importing its old
 ancestry. The stale CLI8A candidate `b5effea` remains reference material only; the
@@ -93,8 +93,9 @@ accepted implementation is the ADR-0038/0039-conformant PR #32 lineage.
    Slice 0–2. PR #32 and Checkpoint 92 accept their exact MSVC, separate VS Code,
    hosted, package, and benchmark evidence. Slice 3 autosave was explicitly
    authorized on 2026-08-31 and is implemented at `afa6e67`; corrected candidate
-   `33ee986` closes the PTY echo defect found by the first live pilot and `5c84a97`
-   removes its doubled-period undo blemish. The corrected
+   `33ee986` closes the PTY echo defect found by the first live pilot, `5c84a97`
+   removes its doubled-period undo blemish, and `3849cd0` closes the Linux
+   stdout-drain race found by the first corrected hosted attempt. The corrected
    live VS Code, hosted target, and merge acceptance remain. Runtime retrieval
    remains gated by
    CLI8B; Slices 4–5 require new explicit authorization.
@@ -120,7 +121,7 @@ rebased and reconciled before merge rather than resolved by taking an entire sid
 
 ## Next three gates
 
-1. Complete the corrected live VS Code, hosted, and merge acceptance only for CLI8A Slice 3 candidate `5c84a97`:
+1. Complete the corrected live VS Code, hosted, and merge acceptance only for CLI8A Slice 3 candidate `3849cd0`:
    repo-scoped autosave `off|ask|auto`, Rust-validated standing grants, visible save
    attribution, and narrow non-blocking rewrite-style undo. Preserve the accepted
    no-retrieval boundary.

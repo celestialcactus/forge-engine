@@ -130,7 +130,7 @@ Native restricted execution continues as the independent
 through PR #32 and
 [Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md):
 explicit control and bounded recovery are active. Slice 3 autosave candidate
-`5c84a97` passes its local Windows x64 product/package gate but remains unaccepted
+`3849cd0` passes its local Windows x64 product/package gate but remains unaccepted
 until corrected live VS Code, hosted, and merge evidence pass. Planner/provider retrieval, broader privacy
 lifecycle, and skills remain inactive until their gates.
 
@@ -565,7 +565,7 @@ promotion/discard. Continue as follows:
     attribution, redaction, and no-fallback conformance pass Checkpoint 91.
 14. **Attributable memory Slices 0–2 accepted through PR #32; Slice 3 corrected candidate locally gated:**
     preserve the Rust-authoritative explicit control/recovery boundary and take
-    candidate `5c84a97` through corrected live VS Code plus hosted/merge acceptance
+    candidate `3849cd0` through corrected live VS Code plus hosted/merge acceptance
     for only the bounded
     autosave/grant/undo proof. Expand providers, a high-level
     MCP/VS Code mutation workflow, and other advanced platform surfaces on separate
@@ -641,7 +641,7 @@ not source volume or the number of abstractions present.
 | Minimum outer-run recovery | Accepted through the private trusted-alpha hosted regression | Rust durably records request/events/artifact plus the bounded interaction transcript. Terminal return and proven-safe same-runtime continuation work; ambiguous and non-idempotent frontiers block. Complete initial state is privately staged and atomically published. A pending governed change carries one durably acknowledged reference to its registered authoritative ChangeSet transaction while the outer capability remains non-replayable. Checkpoint 90 reran the complete Rust/Node/hybrid product gate on hosted Windows/macOS/Ubuntu. Orphaned staging and registered-but-never-finalized ChangeSet policy remain release-hardening work. |
 | Transaction retention and isolation truth | Trusted-alpha regression accepted; restricted-provider production gate open | Lock-safe transaction retention and truthful readiness reporting remain accepted. Managed Windows and AppContainer each pass the local 17-case schema-v4 corpus under Rust-owned lifecycle/resource/evidence authority; probe v4 reports both as `setup_required` and restricted-ready false. The trusted-alpha hosted matrix does not close the separate VM lifecycle, real second-pin upgrade, broader credential, macOS, or adversarial provider gates. See [ADR-0031](../decisions/ADRs/ADR-0031-transaction-retention-and-native-sandbox-sequencing.md), [ADR-0033](../decisions/ADRs/ADR-0033-sandbox-policy-compilation-and-provider-conformance.md), [Checkpoint 83](../decisions/checkpoints/2026-08-12-83-managed-windows-provider-adapter-local-gate.md), [Checkpoint 84](../decisions/checkpoints/2026-08-12-84-packaged-provider-lifecycle-gate-preparation.md), and [Checkpoint 85](../decisions/checkpoints/2026-08-12-85-consolidated-transaction-sandbox-local-gate.md). |
 | Installable developer alpha | Configuration-conformant private foundation accepted; public-release gates open | PR #27 and Checkpoint 90 accept ADR-0032 exact-version native packaging, local install/update/uninstall, the tester kit, and hosted Windows/macOS/Ubuntu product evidence. PR #31 and Checkpoint 91 accept effective configuration, config UX, and clean-install conformance. Contributor-rights attestation and public artifact signing/provenance remain open; no public artifact has been published. |
-| Differentiated learning loop | Slices 0–2 accepted through PR #32 and Checkpoint 92; Slice 3 corrected candidate `5c84a97` locally gated | ADR-0038/0039 lock identity, normalization, exact scope, Rust authority, TypeScript orchestration, reviewed decisions, bounded recovery, and locally granted capture modes. Complete corrected live VS Code plus hosted/merge acceptance only for the repo-scoped autosave/grant/undo proof; Slices 4–5 and CLI8B/C remain unauthorized. |
+| Differentiated learning loop | Slices 0–2 accepted through PR #32 and Checkpoint 92; Slice 3 corrected candidate `3849cd0` locally gated | ADR-0038/0039 lock identity, normalization, exact scope, Rust authority, TypeScript orchestration, reviewed decisions, bounded recovery, and locally granted capture modes. Complete corrected live VS Code plus hosted/merge acceptance only for the repo-scoped autosave/grant/undo proof; Slices 4–5 and CLI8B/C remain unauthorized. |
 | Broader V1 platform | Deferred beyond the bounded learning loop | Advanced compression/retrieval, MCP client/mutation symmetry, connectors, automation, and generalized UI retain their later roadmap gates. Windows/macOS restricted providers continue as a bounded, actively scheduled commodity-platform lane under ADR-0031/0033/0034 and cannot borrow acceptance from trusted mode. |
 
 Percent-complete figures are intentionally not used. They hid the difference
@@ -666,7 +666,7 @@ expansion, the current planning ranges are:
 - public alpha distribution: **still blocked independently** on contributor-rights attestation and artifact signing/provenance; no public package or artifact has shipped;
 - first attributable memory/retrieval demonstration: **CLI8A Slices 0–2 are accepted
   through PR #32 and Checkpoint 92 for explicit remember/restart/explain plus
-  correction/recovery; Slice 3 autosave candidate `5c84a97` passes local gates but
+  correction/recovery; Slice 3 autosave candidate `3849cd0` passes local gates but
   still requires corrected live VS Code plus hosted/merge acceptance, while
   Slice 4 privacy lifecycle, Slice 5 preview, and CLI8B retrieval remain
   unauthorized**;
@@ -680,7 +680,7 @@ calibrates Forge as a strong narrow evidence/transaction core rather than a matu
 CLI peer. With repository authority, native packaging, the tester kit, the
 trusted-alpha hosted matrix, effective configuration, and CLI8A Slices 0–2 accepted,
 the immediate gate is corrected live VS Code, hosted, and merge acceptance of
-bounded Slice 3 candidate `5c84a97`. Later privacy lifecycle, context preview, retrieval, and skills
+bounded Slice 3 candidate `3849cd0`. Later privacy lifecycle, context preview, retrieval, and skills
 remain separately gated. Rights attestation and artifact
 signing/provenance proceed as separate public-distribution gates;
 Windows managed/fallback and macOS preview/signed-helper work remain a separately
@@ -751,7 +751,7 @@ cross-platform fixtures are now part of the private alpha boundary. It adds no
 public publication, sandbox-provider promotion, or organization inference-policy
 claim.
 
-**Slices 0–2 are accepted and Slice 3 autosave candidate `5c84a97` is locally gated.
+**Slices 0–2 are accepted and Slice 3 autosave candidate `3849cd0` is locally gated.
 Complete only its corrected live VS Code and hosted/merge grant-and-undo proof; do not begin privacy lifecycle, measured retrieval, or
 reviewed skills from directional approval alone;
 do not wait for native sandbox promotion.** Broad compression, connector,

@@ -19,7 +19,10 @@
   proves both prompt rendering and typed-command echo. The pilot must pass again on the
   corrected candidate before acceptance. Follow-up `5c84a97` removes the doubled-period
   undo notification exposed by that PTY pilot.
-- The corrected local Windows x64 gate passes 195 Rust tests with 16 explicit ignores, 160
+- The first corrected hosted attempt then exposed a Linux stdout-drain race: the memory
+  adapter parsed on child `exit` before the protocol stream closed. Candidate `3849cd0`
+  waits for `close` and adds a deterministic delayed-writer regression.
+- The corrected local Windows x64 gate passes 195 Rust tests with 16 explicit ignores, 161
   Node tests, real memory and configured-interactive product fixtures, RustSec,
   clean-install ask/auto/off lifecycle, native packing, and the 20-sample benchmark
   assertion. Hosted target, merge, and checkpoint acceptance remain open; Slices
