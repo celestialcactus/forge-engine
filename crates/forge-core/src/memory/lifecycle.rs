@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    MemoryObservation, MemoryObservationId, MemoryProjection, MemoryScope, ProjectedMemory,
-    RecoveryMemory,
+    MemoryCaptureMode, MemoryGrantId, MemoryGrantScope, MemoryObservation, MemoryObservationId,
+    MemoryProjection, MemoryScope, MemoryStandingGrant, ProjectedMemory, RecoveryMemory,
 };
 
 pub const MEMORY_LEDGER_SCHEMA_VERSION: u8 = 1;
@@ -39,6 +39,25 @@ pub enum MemoryOperation {
         target: MemoryObservationId,
         occurred_at_millis: i64,
     },
+    SetCaptureMode {
+        grant: MemoryStandingGrant,
+    },
+    RevokeGrant {
+        grant_id: MemoryGrantId,
+        actor_id: String,
+        revoked_at_millis: i64,
+    },
+    AutoCapture {
+        observation: MemoryObservation,
+        grant_id: MemoryGrantId,
+        grant_scope: MemoryGrantScope,
+    },
+    UndoAutoCapture {
+        target: MemoryObservationId,
+        grant_id: MemoryGrantId,
+        actor_id: String,
+        occurred_at_millis: i64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +65,7 @@ pub enum MemoryOperation {
 pub enum MemoryReceiptReason {
     CorrectionHistoryErased,
     RecoveryCompacted,
+    AutoCaptureUndone,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -80,6 +100,25 @@ pub enum MemoryEvent {
         target: MemoryObservationId,
         occurred_at_millis: i64,
     },
+    GrantChanged {
+        grant: MemoryStandingGrant,
+    },
+    GrantRevoked {
+        grant_id: MemoryGrantId,
+        actor_id: String,
+        revoked_at_millis: i64,
+    },
+    ObservationAutoCaptured {
+        observation: MemoryObservation,
+        grant_id: MemoryGrantId,
+        grant_scope: MemoryGrantScope,
+    },
+    AutoCaptureUndone {
+        target: MemoryObservationId,
+        grant_id: MemoryGrantId,
+        actor_id: String,
+        occurred_at_millis: i64,
+    },
     CompactionStarted {
         compacted_at_millis: i64,
     },
@@ -91,6 +130,9 @@ pub enum MemoryEvent {
     },
     CompactedReceipt {
         receipt: MemoryNonContentReceipt,
+    },
+    CompactedGrant {
+        grant: MemoryStandingGrant,
     },
 }
 
@@ -112,6 +154,9 @@ pub enum MemoryOperationStatus {
     Corrected,
     Restored,
     Unchanged,
+    CaptureModeChanged,
+    GrantRevoked,
+    AutoCaptureUndone,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -120,7 +165,10 @@ pub struct MemoryOperationResult {
     pub schema_version: u8,
     pub status: MemoryOperationStatus,
     pub scope: MemoryScope,
-    pub active_observation: MemoryObservation,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_observation: Option<MemoryObservation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grant: Option<MemoryStandingGrant>,
     pub active_count: u32,
     pub recovery_count: u32,
     pub ledger_head_sha256: String,
@@ -132,12 +180,15 @@ pub struct MemoryOperationResult {
 pub struct MemoryInspection {
     pub schema_version: u8,
     pub scope: MemoryScope,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub ledger_head_sha256: Option<String>,
     pub active: Vec<super::ProjectedMemory>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recovery: Vec<super::RecoveryMemory>,
     pub active_count: u32,
     pub recovery_count: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grants: Vec<MemoryStandingGrant>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -169,6 +220,16 @@ impl MemoryInspection {
             },
             active_count: projection.active.len().try_into().unwrap_or(u32::MAX),
             recovery_count: projection.recovery.len().try_into().unwrap_or(u32::MAX),
+            grants: projection.grants.clone(),
         }
+    }
+}
+
+impl MemoryInspection {
+    pub fn capture_mode_for(&self, scope: &MemoryGrantScope) -> MemoryCaptureMode {
+        self.grants
+            .iter()
+            .find(|grant| grant.scope == *scope && grant.revoked_at_millis.is_none())
+            .map_or(MemoryCaptureMode::Ask, |grant| grant.mode.clone())
     }
 }

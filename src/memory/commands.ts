@@ -3,6 +3,7 @@ import { realpath } from 'node:fs/promises';
 import type {
   MemoryCorrectionDisposition,
   MemoryInspection,
+  MemoryObservation,
   MemoryOperationResult,
   MemoryRuntime,
   ProjectedMemory,
@@ -33,14 +34,17 @@ export const repositoryMemoryScope = async (workspaceRoot: string): Promise<Repo
 
 export interface MemoryFindResult {
   readonly inspection: MemoryInspection;
+  readonly inspections: readonly MemoryInspection[];
   readonly matches: readonly ProjectedMemory[];
 }
 
 export class MemoryCommands {
   readonly #runtime: MemoryRuntime;
+  readonly #runtimes: readonly MemoryRuntime[];
 
-  constructor(runtime: MemoryRuntime) {
+  constructor(runtime: MemoryRuntime, additionalRuntimes: readonly MemoryRuntime[] = []) {
     this.#runtime = runtime;
+    this.#runtimes = [runtime, ...additionalRuntimes];
   }
 
   remember(statement: string): Promise<MemoryOperationResult> {
@@ -50,13 +54,14 @@ export class MemoryCommands {
   }
 
   async find(query = ''): Promise<MemoryFindResult> {
-    const inspection = await this.#runtime.inspect(false);
-    const matches = filterEntries(inspection.active, query);
-    return { inspection, matches };
+    const inspections = await this.#inspectAll(false);
+    const inspection = inspections[0] as MemoryInspection;
+    const matches = filterEntries(inspections.flatMap((candidate) => candidate.active), query);
+    return { inspection, inspections, matches };
   }
 
   async show(selection: string): Promise<ProjectedMemory> {
-    return selectOne((await this.#runtime.inspect(false)).active, selection, 'active memory');
+    return (await this.#activeTarget(selection)).entry;
   }
 
   explain(selection: string): Promise<ProjectedMemory> {
@@ -68,11 +73,11 @@ export class MemoryCommands {
     replacement: string,
     disposition: MemoryCorrectionDisposition,
   ): Promise<MemoryOperationResult> {
-    const target = await this.show(selection);
+    const target = await this.#activeTarget(selection);
     const normalized = replacement.trim();
     if (normalized.length === 0) throw new Error('Supply the corrected memory text.');
-    return this.#runtime.correct(
-      target.observation.observationId,
+    return target.runtime.correct(
+      target.entry.observation.observationId,
       normalized,
       disposition,
     );
@@ -80,23 +85,58 @@ export class MemoryCommands {
 
   async history(query = ''): Promise<{
     readonly inspection: MemoryInspection;
+    readonly inspections: readonly MemoryInspection[];
     readonly matches: readonly RecoveryMemory[];
   }> {
-    const inspection = await this.#runtime.inspect(true);
+    const inspections = await this.#inspectAll(true);
+    const inspection = inspections[0] as MemoryInspection;
     return {
       inspection,
-      matches: filterEntries(inspection.recovery ?? [], query),
+      inspections,
+      matches: filterEntries(inspections.flatMap((candidate) => candidate.recovery ?? []), query),
     };
   }
 
   async restore(selection: string): Promise<MemoryOperationResult> {
-    const history = await this.#runtime.inspect(true);
-    const target = selectOne(history.recovery ?? [], selection, 'recoverable memory');
-    return this.#runtime.restore(target.observation.observationId);
+    const candidates = await Promise.all(this.#runtimes.map(async (runtime) => ({
+      runtime,
+      inspection: await runtime.inspect(true),
+    })));
+    const target = selectOne(
+      candidates.flatMap((candidate) => candidate.inspection.recovery ?? []),
+      selection,
+      'recoverable memory',
+    );
+    const owner = candidates.find((candidate) => sameScope(candidate.inspection.scope, target.observation.scope));
+    if (owner === undefined) throw new Error('Selected recoverable memory has no exact-scope runtime.');
+    return owner.runtime.restore(target.observation.observationId);
   }
 
   status(): Promise<MemoryInspection> {
     return this.#runtime.inspect(false);
+  }
+
+  statuses(): Promise<MemoryInspection[]> {
+    return this.#inspectAll(false);
+  }
+
+  async #activeTarget(selection: string): Promise<{ readonly entry: ProjectedMemory; readonly runtime: MemoryRuntime }> {
+    const candidates = await Promise.all(this.#runtimes.map(async (runtime) => ({
+      runtime,
+      inspection: await runtime.inspect(false),
+    })));
+    const entry = selectOne(
+      candidates.flatMap((candidate) => candidate.inspection.active),
+      selection,
+      'active memory',
+    );
+    const owner = candidates.find((candidate) => sameScope(candidate.inspection.scope, entry.observation.scope));
+    if (owner === undefined) throw new Error('Selected active memory has no exact-scope runtime.');
+    return { entry, runtime: owner.runtime };
+  }
+
+  #inspectAll(includeRecovery: boolean): Promise<MemoryInspection[]> {
+    return Promise.all(this.#runtimes.map((runtime) => runtime.inspect(includeRecovery)));
   }
 }
 
@@ -153,3 +193,13 @@ const searchable = (entry: SelectableEntry): readonly string[] => [
 ];
 
 const article = (value: string): string => /^[aeiou]/iu.test(value) ? 'an' : 'a';
+
+const sameScope = (
+  left: MemoryObservation['scope'],
+  right: MemoryObservation['scope'],
+): boolean => {
+  if (left.kind !== right.kind) return false;
+  return left.kind === 'repository' && right.kind === 'repository'
+    ? left.workspaceId === right.workspaceId && left.repositoryId === right.repositoryId
+    : left.kind === 'developer' && right.kind === 'developer' && left.actorId === right.actorId;
+};

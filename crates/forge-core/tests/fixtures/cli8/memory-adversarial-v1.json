@@ -8,6 +8,11 @@
     { "id": "ambiguous-human-selector", "expectedError": "memory_selector_ambiguous" },
     { "id": "standing-grant-reviewed-decision", "expectedError": "memory_reviewed_decision_admission_required" },
     { "id": "symbolic-link-state", "expectedError": "memory_store_link_rejected" },
-    { "id": "oversized-frame", "expectedError": "memory_store_frame_capacity" }
+    { "id": "oversized-frame", "expectedError": "memory_store_frame_capacity" },
+    { "id": "auto-capture-missing-grant", "expectedError": "memory_admission_grant_missing" },
+    { "id": "auto-capture-ask-grant", "expectedError": "memory_admission_grant_inactive" },
+    { "id": "auto-capture-scope-mismatch", "expectedError": "memory_admission_scope_mismatch" },
+    { "id": "auto-capture-actor-mismatch", "expectedError": "memory_admission_grant_mismatch" },
+    { "id": "grant-in-repository-ledger", "expectedError": "memory_admission_actor_mismatch" }
   ]
 }

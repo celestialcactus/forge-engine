@@ -92,3 +92,47 @@ test('runs repeated prompts and session controls without creating another runtim
   assert.ok(output.some((line) => line.includes('status=completed, outcome=not_evaluated')));
   assert.ok(output.some((line) => line.includes('route changed: ollama/alternate-coder:7b (session)')));
 });
+
+test('interactive memory capture is non-blocking and exposes session-scoped undo and explanation', async () => {
+  const inputs = ['I prefer concise test output.', '/memory', '/memory explain', '/memory undo', '/exit'];
+  const output: string[] = [];
+  const captured: string[] = [];
+  let undoCalls = 0;
+  const io: InteractiveSessionIo = {
+    async question() { return inputs.shift(); },
+    write(line) { output.push(line); },
+    clear() {},
+    close() {},
+  };
+  await runInteractiveSession({
+    workspaceRoot: 'C:/workspace',
+    initialRoute: { route: { provider: 'ollama', model: 'fixture' }, source: 'session' },
+    approvalProfile: 'developer',
+    io,
+    runTask: async (task) => {
+      captured.push(`run:${task}`);
+      return { runId: 'run:memory', status: 'completed', outcome: 'not_evaluated' };
+    },
+    memory: {
+      async capture(input) {
+        captured.push(`memory:${input}`);
+        return ['Remembered: I prefer concise test output. · /memory undo · /memory explain'];
+      },
+      async status() { return ['memory autosave: auto for this repository']; },
+      async explain() { return ['remembered from exact direct input']; },
+      async undo() {
+        undoCalls++;
+        return ['Undone. No recovery copy was retained.'];
+      },
+    },
+  });
+  assert.deepEqual(captured, [
+    'memory:I prefer concise test output.',
+    'run:I prefer concise test output.',
+  ]);
+  assert.equal(undoCalls, 1);
+  assert.ok(output.some((line) => line.includes('/memory undo')));
+  assert.ok(output.includes('memory autosave: auto for this repository'));
+  assert.ok(output.includes('remembered from exact direct input'));
+  assert.ok(output.some((line) => line.includes('No recovery copy')));
+});

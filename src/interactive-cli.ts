@@ -123,6 +123,14 @@ export interface InteractiveSessionOptions {
   readonly runTask: (task: string, route: InferenceRoute) => Promise<InteractiveRunSummary>;
   readonly validateRoute?: (route: InferenceRoute) => void | Promise<void>;
   readonly notices?: readonly string[];
+  readonly memory?: InteractiveMemoryControls;
+}
+
+export interface InteractiveMemoryControls {
+  capture(input: string): Promise<readonly string[]>;
+  status(): Promise<readonly string[]>;
+  undo(): Promise<readonly string[]>;
+  explain(): Promise<readonly string[]>;
 }
 
 const sessionHelp = [
@@ -131,6 +139,9 @@ const sessionHelp = [
   '/permissions                  Explain the active approval profile',
   '/model                        Show the active provider/model',
   '/model <ollama|openai> <name> Change the route for this session',
+  '/memory                       Show the current memory capture mode',
+  '/memory undo                  Undo the latest automatic save from this session',
+  '/memory explain               Explain the latest automatic save',
   '/clear                        Clear the terminal',
   '/exit                         Exit Forge',
 ].join('\n');
@@ -236,6 +247,13 @@ export async function runInteractiveSession(options: InteractiveSessionOptions):
       if (input.length === 0) continue;
       if (!input.startsWith('/')) {
         try {
+          if (options.memory !== undefined) {
+            try {
+              for (const line of await options.memory.capture(input)) options.io.write(line);
+            } catch (error) {
+              options.io.write('[forge] memory unchanged: ' + (error instanceof Error ? error.message : String(error)));
+            }
+          }
           lastRun = await options.runTask(input, selection.route);
         } catch (error) {
           options.io.write('[forge] task error: ' + (error instanceof Error ? error.message : String(error)));
@@ -274,6 +292,18 @@ export async function runInteractiveSession(options: InteractiveSessionOptions):
           } catch (error) {
             options.io.write('[forge] route unchanged: ' + (error instanceof Error ? error.message : String(error)));
           }
+        }
+      } else if (command === '/memory') {
+        if (options.memory === undefined) {
+          options.io.write('memory: unavailable');
+        } else if (argumentsList.length === 0 || argumentsList[0] === 'status') {
+          for (const line of await options.memory.status()) options.io.write(line);
+        } else if (argumentsList.length === 1 && argumentsList[0] === 'undo') {
+          for (const line of await options.memory.undo()) options.io.write(line);
+        } else if (argumentsList.length === 1 && argumentsList[0] === 'explain') {
+          for (const line of await options.memory.explain()) options.io.write(line);
+        } else {
+          options.io.write('usage: /memory [status|undo|explain]');
         }
       } else if (command === '/clear') {
         options.io.clear();

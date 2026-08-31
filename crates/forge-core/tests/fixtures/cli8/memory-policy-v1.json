@@ -5,7 +5,7 @@
   "runtimeActive": true,
   "runtimeCapabilities": {
     "explicitControl": true,
-    "automaticCapture": false,
+    "automaticCapture": true,
     "plannerInjection": false,
     "providerRetrieval": false,
     "skills": false
@@ -88,6 +88,15 @@
       "provenanceKind": "developer_statement",
       "admission": "reviewed_acceptance",
       "expectedAccepted": true
+    },
+    {
+      "id": "standing-grant-admits-exact-developer-preference",
+      "statementKind": "developer_preference",
+      "scopeKind": "developer",
+      "provenanceKind": "developer_statement",
+      "admission": "standing_grant",
+      "expectedAccepted": true,
+      "requiresActiveMatchingGrant": true
     },
     {
       "id": "incidental-conversation-does-not-admit-preference",

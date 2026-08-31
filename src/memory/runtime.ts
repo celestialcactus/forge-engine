@@ -1,15 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import type {
+  MemoryCaptureMode,
+  MemoryCaptureRuntime,
   MemoryCorrectionDisposition,
+  MemoryGrantScope,
   MemoryInspection,
   MemoryObservation,
   MemoryOperationResult,
-  MemoryRuntime,
   MemoryRuntimeOutcome,
+  MemoryScope,
+  MemoryStandingGrant,
   ProjectedMemory,
   RecoveryMemory,
-  RepositoryMemoryScope,
 } from './contracts.js';
 import { rustMemoryProtocolVersion } from './contracts.js';
 
@@ -19,7 +22,7 @@ export interface RustMemoryRuntimeOptions {
   readonly environment?: Readonly<NodeJS.ProcessEnv>;
   readonly engineRoot: string;
   readonly workspaceRoot: string;
-  readonly scope: RepositoryMemoryScope;
+  readonly scope: MemoryScope;
   readonly actorId: string;
   readonly timeoutMs?: number;
   readonly requestIdFactory?: () => string;
@@ -31,22 +34,53 @@ const maximumOutputBytes = 4 * 1_048_576;
 const digestPattern = /^[a-f0-9]{64}$/u;
 const claimIdPattern = /^memory_claim:v1:sha256:[a-f0-9]{64}$/u;
 const observationIdPattern = /^memory_observation:v1:sha256:[a-f0-9]{64}$/u;
+const grantIdPattern = /^memory_grant:v1:sha256:[a-f0-9]{64}$/u;
 
 const object = (value: unknown): JsonObject | undefined =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
     ? value as JsonObject
     : undefined;
 
-const validScope = (candidate: unknown, expected: RepositoryMemoryScope): candidate is RepositoryMemoryScope => {
+const sameScope = (candidate: unknown, expected: MemoryScope): candidate is MemoryScope => {
+  const value = object(candidate);
+  if (expected.kind === 'repository') {
+    return value?.kind === 'repository'
+      && value.workspaceId === expected.workspaceId
+      && value.repositoryId === expected.repositoryId;
+  }
+  return value?.kind === 'developer' && value.actorId === expected.actorId;
+};
+
+const validGrantScope = (candidate: unknown): candidate is MemoryGrantScope => {
   const value = object(candidate);
   return value?.kind === 'repository'
-    && value.workspaceId === expected.workspaceId
-    && value.repositoryId === expected.repositoryId;
+    ? typeof value.workspaceId === 'string' && value.workspaceId.length > 0
+      && typeof value.repositoryId === 'string' && value.repositoryId.length > 0
+    : value?.kind === 'developer' && typeof value.actorId === 'string' && value.actorId.length > 0;
+};
+
+const validateGrant = (candidate: unknown): MemoryStandingGrant => {
+  const value = object(candidate);
+  if (value?.schemaVersion !== 1
+    || typeof value.grantId !== 'string'
+    || !grantIdPattern.test(value.grantId)
+    || typeof value.actorId !== 'string'
+    || value.actorId.length === 0
+    || !validGrantScope(value.scope)
+    || !['off', 'ask', 'auto'].includes(String(value.mode))
+    || !Number.isSafeInteger(value.createdAtMillis)
+    || Number(value.createdAtMillis) < 0
+    || (value.revokedAtMillis !== undefined
+      && (!Number.isSafeInteger(value.revokedAtMillis)
+        || Number(value.revokedAtMillis) < Number(value.createdAtMillis)))) {
+    throw new Error('Rust kernel returned an invalid memory standing grant.');
+  }
+  return candidate as MemoryStandingGrant;
 };
 
 const validateObservation = (
   candidate: unknown,
-  expectedScope: RepositoryMemoryScope,
+  expectedScope: MemoryScope,
 ): MemoryObservation => {
   const value = object(candidate);
   if (value?.schemaVersion !== 1
@@ -63,7 +97,7 @@ const validateObservation = (
     || typeof value.statement !== 'string'
     || value.statement.length === 0
     || Buffer.byteLength(value.statement, 'utf8') > 8 * 1024
-    || !validScope(value.scope, expectedScope)
+    || !sameScope(value.scope, expectedScope)
     || object(value.provenance) === undefined
     || !Number.isSafeInteger(value.confidence)
     || Number(value.confidence) < 0
@@ -76,7 +110,7 @@ const validateObservation = (
 
 const validateProjected = (
   candidate: unknown,
-  expectedScope: RepositoryMemoryScope,
+  expectedScope: MemoryScope,
 ): ProjectedMemory => {
   const value = object(candidate);
   if (typeof value?.lineageId !== 'string'
@@ -92,7 +126,7 @@ const validateProjected = (
 
 const validateRecovery = (
   candidate: unknown,
-  expectedScope: RepositoryMemoryScope,
+  expectedScope: MemoryScope,
 ): RecoveryMemory => {
   const value = object(candidate);
   if (typeof value?.lineageId !== 'string'
@@ -110,17 +144,19 @@ const validateRecovery = (
 
 const validateInspection = (
   candidate: unknown,
-  expectedScope: RepositoryMemoryScope,
+  expectedScope: MemoryScope,
 ): MemoryInspection => {
   const value = object(candidate);
   const active = value?.active;
   const recovery = value?.recovery;
+  const grants = value?.grants;
   if (value?.schemaVersion !== 1
-    || !validScope(value.scope, expectedScope)
+    || !sameScope(value.scope, expectedScope)
     || (value.ledgerHeadSha256 !== undefined
       && (typeof value.ledgerHeadSha256 !== 'string' || !digestPattern.test(value.ledgerHeadSha256)))
     || !Array.isArray(active)
     || (recovery !== undefined && !Array.isArray(recovery))
+    || (grants !== undefined && !Array.isArray(grants))
     || !Number.isSafeInteger(value.activeCount)
     || Number(value.activeCount) !== active.length
     || !Number.isSafeInteger(value.recoveryCount)
@@ -128,26 +164,36 @@ const validateInspection = (
   ) throw new Error('Rust kernel returned an invalid memory inspection.');
   active.forEach((entry) => validateProjected(entry, expectedScope));
   (recovery ?? []).forEach((entry) => validateRecovery(entry, expectedScope));
+  (grants ?? []).forEach(validateGrant);
   return candidate as MemoryInspection;
 };
 
 const validateOperation = (
   candidate: unknown,
-  expectedScope: RepositoryMemoryScope,
+  expectedScope: MemoryScope,
 ): MemoryOperationResult => {
   const value = object(candidate);
   if (value?.schemaVersion !== 1
-    || !['admitted', 'corrected', 'restored', 'unchanged'].includes(String(value.status))
-    || !validScope(value.scope, expectedScope)
+    || ![
+      'admitted', 'corrected', 'restored', 'unchanged', 'capture_mode_changed',
+      'grant_revoked', 'auto_capture_undone',
+    ].includes(String(value.status))
+    || !sameScope(value.scope, expectedScope)
     || !Number.isSafeInteger(value.activeCount)
-    || Number(value.activeCount) < 1
+    || Number(value.activeCount) < 0
     || !Number.isSafeInteger(value.recoveryCount)
     || Number(value.recoveryCount) < 0
     || typeof value.ledgerHeadSha256 !== 'string'
     || !digestPattern.test(value.ledgerHeadSha256)
     || typeof value.compacted !== 'boolean'
   ) throw new Error('Rust kernel returned an invalid memory operation result.');
-  validateObservation(value.activeObservation, expectedScope);
+  if (value.activeObservation !== undefined) validateObservation(value.activeObservation, expectedScope);
+  if (value.grant !== undefined) validateGrant(value.grant);
+  if (value.activeObservation === undefined
+    && value.grant === undefined
+    && value.status !== 'auto_capture_undone') {
+    throw new Error('Rust kernel returned a memory operation without an authoritative result.');
+  }
   return candidate as MemoryOperationResult;
 };
 
@@ -161,7 +207,7 @@ export class MemoryRuntimeError extends Error {
   }
 }
 
-export class RustMemoryRuntime implements MemoryRuntime {
+export class RustMemoryRuntime implements MemoryCaptureRuntime {
   readonly #options: RustMemoryRuntimeOptions;
 
   constructor(options: RustMemoryRuntimeOptions) {
@@ -208,6 +254,68 @@ export class RustMemoryRuntime implements MemoryRuntime {
     return this.#operation({
       operation: 'restore',
       targetObservationId,
+      occurredAtMillis,
+    });
+  }
+
+  setCaptureMode(
+    mode: MemoryCaptureMode,
+    grantScope: MemoryGrantScope,
+    occurredAtMillis = this.#now(),
+  ): Promise<MemoryOperationResult> {
+    return this.#operation({
+      operation: 'set_capture_mode',
+      mode,
+      actorId: this.#options.actorId,
+      grantScope,
+      occurredAtMillis,
+    });
+  }
+
+  rememberPreference(statement: string, observedAtMillis = this.#now()): Promise<MemoryOperationResult> {
+    return this.#operation({
+      operation: 'remember_preference',
+      statement,
+      actorId: this.#options.actorId,
+      observedAtMillis,
+    });
+  }
+
+  revokeGrant(grantId: string, occurredAtMillis = this.#now()): Promise<MemoryOperationResult> {
+    return this.#operation({
+      operation: 'revoke_grant',
+      grantId,
+      actorId: this.#options.actorId,
+      occurredAtMillis,
+    });
+  }
+
+  autoCapture(
+    statement: string,
+    grantId: string,
+    grantScope: MemoryGrantScope,
+    observedAtMillis = this.#now(),
+  ): Promise<MemoryOperationResult> {
+    return this.#operation({
+      operation: 'auto_capture',
+      statement,
+      actorId: this.#options.actorId,
+      grantId,
+      grantScope,
+      observedAtMillis,
+    });
+  }
+
+  undoAutoCapture(
+    targetObservationId: string,
+    grantId: string,
+    occurredAtMillis = this.#now(),
+  ): Promise<MemoryOperationResult> {
+    return this.#operation({
+      operation: 'undo_auto_capture',
+      targetObservationId,
+      grantId,
+      actorId: this.#options.actorId,
       occurredAtMillis,
     });
   }

@@ -17,6 +17,9 @@ export const renderMemoryList = (
   : entries.map((entry, index) => `${index + 1}. ${memorySummary(entry)}`);
 
 export const renderMemoryOperation = (result: MemoryOperationResult): readonly string[] => {
+  if (result.activeObservation === undefined) {
+    throw new Error('Memory content operation completed without an active observation.');
+  }
   const verb = result.status === 'unchanged'
     ? 'Already remembered'
     : result.status === 'corrected'
@@ -25,7 +28,7 @@ export const renderMemoryOperation = (result: MemoryOperationResult): readonly s
         ? 'Restored'
         : 'Remembered';
   return [
-    `${verb} for this repository: ${result.activeObservation.statement}`,
+    `${verb} ${result.activeObservation.scope.kind === 'developer' ? 'as your developer preference' : 'for this repository'}: ${result.activeObservation.statement}`,
     `Active: ${result.activeCount}; recovery: ${result.recoveryCount}${result.compacted ? '; storage compacted' : ''}.`,
     'Next: forge memory explain <words from this memory>',
   ];
@@ -38,10 +41,13 @@ export const renderMemoryExplanation = (entry: ProjectedMemory): readonly string
     ? provenance.kind.replaceAll('_', ' ')
     : 'attributable input';
   const actor = typeof provenance.actorId === 'string' ? provenance.actorId : 'recorded source';
+  const developerPreference = observation.scope.kind === 'developer';
   return [
     observation.statement,
-    'Applies to: this repository (exact repository scope).',
-    `Why retained: explicitly reviewed repository decision; freshness=${freshnessLabel(observation)}.`,
+    developerPreference
+      ? 'Applies to: your exact local developer identity; automatic capture, when used, was granted only for this repository.'
+      : 'Applies to: this repository (exact repository scope).',
+    `Why retained: ${developerPreference ? 'direct preference admitted by review or standing grant' : 'explicitly reviewed repository decision'}; freshness=${freshnessLabel(observation)}.`,
     `Source: ${sourceKind} from ${actor}; observed=${new Date(observation.observedAtMillis).toISOString()}.`,
     'Retrieval: not injected into a planner or provider in CLI8A.',
   ];

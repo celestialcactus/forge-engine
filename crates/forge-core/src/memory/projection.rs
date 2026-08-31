@@ -3,8 +3,9 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    MemoryCorrectionDisposition, MemoryEvent, MemoryLineageId, MemoryNonContentReceipt,
-    MemoryObservation, MemoryObservationId, MemoryScope, MemoryStoreLimits,
+    MemoryCorrectionDisposition, MemoryEvent, MemoryGrantId, MemoryLineageId,
+    MemoryNonContentReceipt, MemoryObservation, MemoryObservationId, MemoryProvenance, MemoryScope,
+    MemoryStandingGrant, MemoryStoreLimits, PreferenceAdmission,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,6 +36,7 @@ pub struct MemoryProjection {
     pub active: Vec<ProjectedMemory>,
     pub recovery: Vec<RecoveryMemory>,
     pub receipts: Vec<MemoryNonContentReceipt>,
+    pub grants: Vec<MemoryStandingGrant>,
 }
 
 impl MemoryProjection {
@@ -45,6 +47,7 @@ impl MemoryProjection {
             active: Vec::new(),
             recovery: Vec::new(),
             receipts: Vec::new(),
+            grants: Vec::new(),
         }
     }
 
@@ -87,6 +90,69 @@ impl MemoryProjection {
                 let lineage_id = MemoryLineageId(observation.observation_id.0.clone());
                 self.active.push(ProjectedMemory {
                     lineage_id,
+                    observation: observation.clone(),
+                    admitted_sequence: sequence,
+                    updated_sequence: sequence,
+                });
+                change.active_observation = Some(observation.clone());
+            }
+            MemoryEvent::ObservationAutoCaptured {
+                observation,
+                grant_id,
+                grant_scope,
+            } => {
+                observation
+                    .validate_identity()
+                    .map_err(|error| ProjectionError::new(error.code(), error.to_string()))?;
+                let grant = self
+                    .grants
+                    .iter()
+                    .find(|grant| &grant.grant_id == grant_id)
+                    .ok_or_else(|| {
+                        ProjectionError::new(
+                            "memory_admission_grant_missing",
+                            "automatic memory capture requires an existing standing grant",
+                        )
+                    })?;
+                if !grant.is_active_auto() {
+                    return Err(ProjectionError::new(
+                        "memory_admission_grant_inactive",
+                        "automatic memory capture requires an active auto grant",
+                    ));
+                }
+                if &grant.scope != grant_scope {
+                    return Err(ProjectionError::new(
+                        "memory_admission_scope_mismatch",
+                        "automatic memory capture does not match the grant scope",
+                    ));
+                }
+                validate_standing_grant_observation(observation, grant)?;
+                if self
+                    .active
+                    .iter()
+                    .any(|entry| entry.observation.observation_id == observation.observation_id)
+                {
+                    change.unchanged = true;
+                    change.active_observation = Some(observation.clone());
+                    return Ok(change);
+                }
+                if let Some(existing) = self
+                    .active
+                    .iter()
+                    .find(|entry| entry.observation.claim_id == observation.claim_id)
+                {
+                    change.unchanged = true;
+                    change.active_observation = Some(existing.observation.clone());
+                    return Ok(change);
+                }
+                if self.contains_observation(&observation.observation_id) {
+                    return Err(ProjectionError::new(
+                        "memory_transition_duplicate_observation",
+                        "memory observation already exists in recovery",
+                    ));
+                }
+                self.active.push(ProjectedMemory {
+                    lineage_id: MemoryLineageId(observation.observation_id.0.clone()),
                     observation: observation.clone(),
                     admitted_sequence: sequence,
                     updated_sequence: sequence,
@@ -190,6 +256,69 @@ impl MemoryProjection {
                 });
                 change.active_observation = Some(active_observation);
             }
+            MemoryEvent::GrantChanged { grant } => {
+                grant
+                    .validate_identity()
+                    .map_err(|error| ProjectionError::new(error.code(), error.to_string()))?;
+                self.grants
+                    .retain(|current| current.grant_id != grant.grant_id);
+                self.grants.push(grant.clone());
+                change.grant = Some(grant.clone());
+            }
+            MemoryEvent::GrantRevoked {
+                grant_id,
+                actor_id,
+                revoked_at_millis,
+            } => {
+                validate_time(*revoked_at_millis)?;
+                let grant = self
+                    .grants
+                    .iter_mut()
+                    .find(|grant| &grant.grant_id == grant_id)
+                    .ok_or_else(|| {
+                        ProjectionError::new(
+                            "memory_admission_grant_missing",
+                            "memory grant does not exist",
+                        )
+                    })?;
+                if grant.actor_id != *actor_id {
+                    return Err(ProjectionError::new(
+                        "memory_admission_actor_mismatch",
+                        "only the grant actor may revoke the memory grant",
+                    ));
+                }
+                if grant.revoked_at_millis.is_some() {
+                    change.unchanged = true;
+                    change.grant = Some(grant.clone());
+                    return Ok(change);
+                }
+                if *revoked_at_millis < grant.created_at_millis {
+                    return Err(ProjectionError::new(
+                        "memory_grant_time_invalid",
+                        "memory grant revocation cannot precede creation",
+                    ));
+                }
+                grant.revoked_at_millis = Some(*revoked_at_millis);
+                change.grant = Some(grant.clone());
+            }
+            MemoryEvent::AutoCaptureUndone {
+                target,
+                grant_id,
+                actor_id,
+                occurred_at_millis,
+            } => {
+                validate_time(*occurred_at_millis)?;
+                let index = self.active_index(target).ok_or_else(|| {
+                    ProjectionError::new(
+                        "memory_transition_target_not_active",
+                        "automatic memory capture is no longer active",
+                    )
+                })?;
+                let entry = &self.active[index];
+                validate_undo_authority(&entry.observation, grant_id, actor_id)?;
+                self.active.remove(index);
+                change.erased_records = 1;
+            }
             MemoryEvent::CompactionStarted {
                 compacted_at_millis,
             } => {
@@ -197,6 +326,7 @@ impl MemoryProjection {
                 self.active.clear();
                 self.recovery.clear();
                 self.receipts.clear();
+                self.grants.clear();
             }
             MemoryEvent::CompactedActive { entry } => {
                 entry
@@ -236,6 +366,22 @@ impl MemoryProjection {
             }
             MemoryEvent::CompactedReceipt { receipt } => {
                 self.receipts.push(receipt.clone());
+            }
+            MemoryEvent::CompactedGrant { grant } => {
+                grant
+                    .validate_identity()
+                    .map_err(|error| ProjectionError::new(error.code(), error.to_string()))?;
+                if self
+                    .grants
+                    .iter()
+                    .any(|current| current.grant_id == grant.grant_id)
+                {
+                    return Err(ProjectionError::new(
+                        "memory_integrity_duplicate_grant",
+                        "compacted memory state contains a duplicate grant",
+                    ));
+                }
+                self.grants.push(grant.clone());
             }
         }
         if self.active.len() > limits.maximum_active_records as usize {
@@ -361,6 +507,11 @@ impl MemoryProjection {
                 .cmp(&right.performed_at_millis)
                 .then_with(|| left.operation_id.cmp(&right.operation_id))
         });
+        self.grants.sort_by(|left, right| {
+            left.scope
+                .cmp(&right.scope)
+                .then_with(|| left.grant_id.cmp(&right.grant_id))
+        });
     }
 }
 
@@ -369,6 +520,7 @@ pub(crate) struct ProjectionChange {
     pub active_observation: Option<MemoryObservation>,
     pub unchanged: bool,
     pub erased_records: u32,
+    pub grant: Option<MemoryStandingGrant>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -411,6 +563,56 @@ fn validate_replacement(
         return Err(ProjectionError::new(
             "memory_transition_correction_relation",
             "replacement must explicitly correct or supersede its active target",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_standing_grant_observation(
+    observation: &MemoryObservation,
+    grant: &MemoryStandingGrant,
+) -> Result<(), ProjectionError> {
+    let actor_matches = matches!(
+        &observation.scope,
+        MemoryScope::Developer { actor_id } if actor_id == &grant.actor_id
+    );
+    let provenance_matches = matches!(
+        &observation.provenance,
+        MemoryProvenance::DeveloperStatement {
+            actor_id,
+            admission: Some(PreferenceAdmission::StandingGrant { grant_id }),
+            ..
+        } if actor_id == &grant.actor_id && grant_id == &grant.grant_id
+    );
+    if !actor_matches || !provenance_matches {
+        return Err(ProjectionError::new(
+            "memory_admission_grant_mismatch",
+            "automatic memory capture must be exact input from the grant actor",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_undo_authority(
+    observation: &MemoryObservation,
+    grant_id: &MemoryGrantId,
+    actor_id: &str,
+) -> Result<(), ProjectionError> {
+    let authorized = matches!(
+        (&observation.scope, &observation.provenance),
+        (
+            MemoryScope::Developer { actor_id: scope_actor },
+            MemoryProvenance::DeveloperStatement {
+                actor_id: source_actor,
+                admission: Some(PreferenceAdmission::StandingGrant { grant_id: source_grant }),
+                ..
+            }
+        ) if scope_actor == actor_id && source_actor == actor_id && source_grant == grant_id
+    );
+    if !authorized {
+        return Err(ProjectionError::new(
+            "memory_admission_grant_mismatch",
+            "automatic memory undo must match the admitted grant and actor",
         ));
     }
     Ok(())
