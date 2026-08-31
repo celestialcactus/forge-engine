@@ -10,20 +10,60 @@ import {
 } from '../src/interactive-cli.js';
 import type { InferenceRoute } from '../src/inference/contracts.js';
 
-test('terminal input is echoed through the configured interactive output', async () => {
+class TestTerminalInput extends PassThrough {
+  readonly isTTY = true;
+  isRaw = false;
+  readonly rawModeChanges: boolean[] = [];
+
+  setRawMode(enabled: boolean): this {
+    this.isRaw = enabled;
+    this.rawModeChanges.push(enabled);
+    return this;
+  }
+}
+
+test('terminal input owns raw editing for backspace, delete, and cursor movement', async () => {
+  const input = new TestTerminalInput();
+  const output = new PassThrough();
+  output.setEncoding('utf8');
+  let rendered = '';
+  output.on('data', (chunk: string) => { rendered += chunk; });
+  const io = createNodeInteractiveIo({ input, output });
+
+  const answer = io.question('forge> ');
+  input.write('/helpx');
+  input.write('\u001b[D');
+  input.write('\u001b[3~');
+  input.write('\u001b[D');
+  input.write('\u001b[C');
+  input.write('z');
+  input.write('\u007f');
+  input.write('\r');
+
+  assert.equal(await answer, '/help');
+  assert.match(rendered, /forge> /u);
+  assert.match(rendered, /\/help/u);
+  assert.deepEqual(input.rawModeChanges, [true]);
+  io.close();
+  assert.deepEqual(input.rawModeChanges, [true, false]);
+  assert.equal(input.isPaused(), true);
+});
+
+test('non-terminal input queues multiple early lines for scripted sessions', async () => {
   const input = new PassThrough();
   const output = new PassThrough();
   output.setEncoding('utf8');
   let rendered = '';
   output.on('data', (chunk: string) => { rendered += chunk; });
-  const io = createNodeInteractiveIo({ input, output, terminal: true });
+  const io = createNodeInteractiveIo({ input, output });
 
-  const answer = io.question('forge> ');
-  input.write('/help\r');
+  input.write('/help\n/exit\n');
+  const firstAnswer = io.question('forge> ');
+  const secondAnswer = io.question('forge> ');
 
-  assert.equal(await answer, '/help');
-  assert.match(rendered, /forge> /u);
-  assert.match(rendered, /\/help/u);
+  assert.equal(await firstAnswer, '/help');
+  assert.equal(await secondAnswer, '/exit');
+  assert.equal(rendered, 'forge> forge> ');
   io.close();
 });
 
