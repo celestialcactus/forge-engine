@@ -15,6 +15,10 @@
   explicit ignored cases, 154 Node tests, 59/66 hybrid with seven explicit skips,
   and source smoke), RustSec over 46 dependencies, clean-install package lifecycle,
   native archive packing, and a 20-sample benchmark with 90.757-ms Rust bridge p95.
+- Initial hosted run `33429950359` exposed a Windows-only `.exe` filename in the new
+  memory hybrid fixture after Rust and Node checks had passed on macOS ARM64 and
+  Ubuntu x64. The fixture now selects the platform-native kernel filename; focused
+  and full local hybrid reruns pass before the replacement hosted run.
 - This closes the local supported-toolchain and separate VS Code product gate only.
   Hosted targets, merge, and Slices 3–5 remain explicitly unaccepted.
 

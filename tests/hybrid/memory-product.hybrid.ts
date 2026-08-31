@@ -9,7 +9,12 @@ import { test } from 'node:test';
 const execute = promisify(execFile);
 const repositoryRoot = resolve(import.meta.dirname, '..', '..');
 const cliPath = join(repositoryRoot, 'src', 'cli.ts');
-const kernelPath = join(repositoryRoot, 'target', 'debug', 'forge-kernel.exe');
+const kernelPath = join(
+  repositoryRoot,
+  'target',
+  'debug',
+  process.platform === 'win32' ? 'forge-kernel.exe' : 'forge-kernel',
+);
 
 const runMemory = async (
   engineRoot: string,
