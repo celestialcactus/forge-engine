@@ -3,6 +3,9 @@ use forge_core::{
     MemoryObservationRelation, MemoryOperation, MemoryProvenance, MemoryScope, MemoryStatementKind,
     MemoryStore, MemoryStoreLimits, MemorySubjectKind, PreferenceAdmission,
 };
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static TEST_ROOT_NONCE: AtomicU64 = AtomicU64::new(0);
 
 fn scope() -> MemoryScope {
     MemoryScope::Repository {
@@ -128,13 +131,15 @@ fn explicit_compaction_expires_recovery_without_another_correction() {
 }
 
 fn test_root() -> std::path::PathBuf {
+    let nonce = TEST_ROOT_NONCE.fetch_add(1, Ordering::Relaxed);
     let root = std::env::temp_dir().join(format!(
-        "forge-memory-retention-{}-{}",
+        "forge-memory-retention-{}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_nanos()
+            .as_nanos(),
+        nonce
     ));
     std::fs::create_dir_all(&root).unwrap();
     root
