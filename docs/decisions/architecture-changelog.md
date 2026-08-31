@@ -1,3 +1,105 @@
+# 2026-08-31 - CLI8A memory Slices 0–2 pass the hosted gate
+
+- Exact implementation candidate `e9e8cd9` passed cross-platform run `33433043538`
+  and hybrid run `33433043562`: Node, RustSec, Rust, hybrid, source
+  product, native package, clean-install package, and benchmark gates on Windows
+  x64, macOS ARM64, macOS x64, and Ubuntu x64.
+- The first hosted candidate exposed a Windows-only `.exe` name in the memory
+  hybrid fixture. The replacement exposed an existing 10-ms service-timeout test
+  racing workspace snapshot construction on loaded macOS x64. The final candidate
+  uses the native kernel filename and a deterministic snapshot fixture with a
+  bounded planner-cancellation deadline.
+- An earlier hybrid attempt passed macOS x64 behavior through the clean-install
+  package proof, then GitHub artifact upload failed with DNS `ENOTFOUND`. Its
+  targeted retry exposed a concurrent temporary-root collision in the two new
+  retention tests. The final candidate adds a process-local atomic test nonce and
+  passed 100/100 focused repetitions before the complete hosted rerun; no product
+  lock or retry semantics were weakened.
+- [Checkpoint 92](checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md)
+  accepts explicit remember/inspect/correct/recovery through PR #32. Autosave,
+  forget/purge/history-clear, context preview/retrieval, and skills remain gated.
+
+# 2026-08-31 - CLI8A Slice 0–2 passes the independent local product gate
+
+- Exact implementation `6f37c8c` passed in a clean VS Code worktree using Rust
+  1.97.1, Visual Studio Build Tools 2022 17.14.37614.0, MSVC 14.44.35207, and
+  Windows SDK 10.0.26100.0.
+- The four focused memory binaries passed 16/16, `npm run check` passed 154/154,
+  the source kernel built/probed as `source-debug`, and the focused real-CLI hybrid
+  passed 1/1.
+- Fifteen separate CLI processes proved remember across restart, natural selectors,
+  explainable provenance/scope, bounded correction/history, restore, and final
+  erase-previous. One active version remained, erased prior content was absent from
+  Forge memory state, stderr was empty, and retrieval/provider/network activity
+  remained inactive.
+- The authoritative follow-up passed the full product gate (191 Rust tests with 16
+  explicit ignored cases, 154 Node tests, 59/66 hybrid with seven explicit skips,
+  and source smoke), RustSec over 46 dependencies, clean-install package lifecycle,
+  native archive packing, and a 20-sample benchmark with 90.757-ms Rust bridge p95.
+- Initial hosted run `33429950359` exposed a Windows-only `.exe` filename in the new
+  memory hybrid fixture after Rust and Node checks had passed on macOS ARM64 and
+  Ubuntu x64. The fixture now selects the platform-native kernel filename; focused
+  and full local hybrid reruns pass before the replacement hosted run.
+- This closes the local supported-toolchain and separate VS Code product gate only.
+  Hosted targets, merge, and Slices 3–5 remain explicitly unaccepted.
+
+# 2026-08-29 - CLI8A Slice 0–2 four-gate packet is approved and implemented as a candidate
+
+- Approved the individual-developer product outcome and explicit non-claims, the
+  Rust-authority/TypeScript-orchestration split, bounded recovery, and the six-slice
+  dependency graph. Only prerequisite Slice 0 and implementation Slices 1–2 are
+  authorized; Slices 3–5 remain gated.
+- Accepted ADR-0039 as the capture/recovery amendment to ADR-0038. The alpha safety
+  budgets are 8-KiB normalized text, 64-KiB frames, 48-MiB compaction trigger,
+  64-MiB ledger, 4,096 active records, and recovery bounded by 30 days, five
+  versions, and 16 MiB per exact scope. A total-engine multi-scope budget remains
+  deferred pending evidence.
+- Implemented the candidate Rust hash-linked NDJSON ledger, projection rebuild,
+  correction/recovery/restore, erase-previous rewrite, one-request kernel bridge,
+  and TypeScript CLI orchestration for remember/find/show/explain/correct/history/
+  restore. Retrieval, provider/planner injection, autosave, forget/purge, and skills
+  remain inactive.
+- Focused Rust tests and clippy initially passed under the available GNU-LLVM
+  toolchain; the later 2026-08-31 entry records the exact MSVC and separate VS Code
+  pass. Hosted and merge evidence remain before checkpoint acceptance. See
+  [ADR-0039](ADRs/ADR-0039-cli8a-hybrid-memory-capture-and-recovery.md) and the
+  [four-gate packet](../tasks/CLI8A-MEMORY-FOUR-GATE-REVIEW.md).
+
+# 2026-08-28 - Consequential work adopts four proportional approval gates
+
+- Connected Forge's existing build plan, task, ADR, fixture, and checkpoint
+  practices into one explicit Product, Architecture, Program Design, and Vertical
+  Slices workflow. Full approval is required before consequential implementation;
+  fast and compact paths keep low-risk changes proportional.
+- Required Program Design to freeze file layout, types/signatures, call stacks,
+  errors, fixtures, shared boundaries, and ownership before parallel packages
+  begin. Vertical slice packets must name independent evidence, merge order, and
+  re-steer points.
+- Preserved completed CLI8A Package 1 candidate work and required the later
+  combined packet to be the first full-path application. That packet was approved
+  for Slice 0–2 on 2026-08-29; this entry records the workflow decision at adoption.
+  See the [workflow](../development/four-gate-delivery-workflow.md),
+  [template](../tasks/FOUR-GATE-TASK-TEMPLATE.md), and
+  [CLI8 task](../tasks/SLICE-CLI8-differentiated-learning-loop.md).
+
+# 2026-08-20 - CLI8A memory policy is locked before implementation
+
+- Accepted separate semantic claim and attributable observation identities, exact
+  tagged scopes, and conservative `memory_text_v1` normalization. The normalization
+  deliberately preserves case, punctuation, internal whitespace, Unicode, paths,
+  and identifiers rather than attempting an opaque semantic merge.
+- Required explicit remember/review admission for durable developer preferences;
+  incidental conversation, model prose, repository text, and inferred behavior
+  cannot silently become developer-scoped instruction.
+- Separated append-only forgetting from explicit privacy purge and selected
+  evidence-driven freshness instead of a universal TTL. Purge receipts retain no
+  claim/observation digests or content and do not imply canonical run/artifact
+  deletion.
+- Kept the first CLI8A increment runtime-inactive and rejected a verbatim replay of
+  stale candidate `b5effea`. Only conforming bounded types, limits, lifecycle ideas,
+  and adversarial fixtures may be reimplemented. See [ADR-0038](ADRs/ADR-0038-cli8a-memory-identity-admission-and-retention.md)
+  and [CLI8](../tasks/SLICE-CLI8-differentiated-learning-loop.md).
+
 # 2026-08-19 - CLI7 effective configuration passes the hosted gate
 
 - Accepted one immutable effective configuration across CLI, interactive,

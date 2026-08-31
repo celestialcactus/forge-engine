@@ -46,6 +46,14 @@ import {
 } from './config/commands.js';
 import { ConfigurationIssueError } from './config/schema.js';
 import { ConfigurationResolutionError } from './config/resolve.js';
+import { MemoryCommands, MemorySelectionError, repositoryMemoryScope } from './memory/commands.js';
+import {
+  memoryStatusReport,
+  renderMemoryExplanation,
+  renderMemoryList,
+  renderMemoryOperation,
+} from './memory/presentation.js';
+import { MemoryRuntimeError, RustMemoryRuntime } from './memory/runtime.js';
 
 const parseCliArguments = () => {
   try {
@@ -77,6 +85,8 @@ const parseCliArguments = () => {
     'approval-profile': { type: 'string' },
     approve: { type: 'boolean', default: false },
     'retry-evidence': { type: 'boolean', default: false },
+    replacement: { type: 'string' },
+    'erase-previous': { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
       } as const,
     });
@@ -153,6 +163,16 @@ const workspaceService = (): ForgeWorkspaceService => {
   service ??= new ForgeWorkspaceService(workspaceRoot, productServiceOptions());
   return service;
 };
+
+const memoryCommands = async (): Promise<MemoryCommands> => new MemoryCommands(
+  new RustMemoryRuntime({
+    kernelPath: requireKernel(),
+    engineRoot: effectiveConfiguration().engineRoot.value,
+    workspaceRoot,
+    scope: await repositoryMemoryScope(workspaceRoot),
+    actorId: 'developer:local',
+  }),
+);
 
 const executeProviderTask = async (
   task: string,
@@ -424,6 +444,7 @@ try {
     && command !== 'doctor'
     && command !== 'onboard'
     && command !== 'config'
+    && command !== 'memory'
     && command !== 'help') {
     throw new Error('--json cannot be used while the effective approval profile is review because consent prompts require human-mode output. Run forge config show to inspect its source.');
   }
@@ -619,6 +640,59 @@ try {
       console.log(`Trust disclosure: ${report.containment.disclosure}`);
       console.log(`Release status: private acceptance candidate; ${report.releaseBlockers.join('; ')}`);
       for (const next of report.nextCommands) console.log(`Next: ${next}`);
+    }
+  } else if (command === 'memory') {
+    const action = positionals[1] ?? 'find';
+    const memory = await memoryCommands();
+    if (action === 'remember') {
+      const statement = positionals.slice(2).join(' ').trim();
+      const result = await memory.remember(statement);
+      if (values.json) printJsonArtifact({ ok: true, operation: action, result });
+      else for (const line of renderMemoryOperation(result)) console.log(line);
+    } else if (action === 'find') {
+      const found = await memory.find(positionals.slice(2).join(' '));
+      if (values.json) printJsonArtifact({ ok: true, operation: action, ...found });
+      else for (const line of renderMemoryList(found.matches, 'No active memories match.')) console.log(line);
+    } else if (action === 'show') {
+      const entry = await memory.show(positionals.slice(2).join(' '));
+      if (values.json) printJsonArtifact({ ok: true, operation: action, entry });
+      else for (const line of renderMemoryList([entry], 'No matching active memory.')) console.log(line);
+    } else if (action === 'explain') {
+      const entry = await memory.explain(positionals.slice(2).join(' '));
+      if (values.json) {
+        printJsonArtifact({ ok: true, operation: action, entry, retrievalActive: false });
+      } else {
+        for (const line of renderMemoryExplanation(entry)) console.log(line);
+      }
+    } else if (action === 'correct') {
+      const selection = positionals.slice(2).join(' ').trim();
+      if (values.replacement === undefined) {
+        throw new Error('Usage: forge memory correct <words from memory> --replacement <corrected text> [--erase-previous] [--json]');
+      }
+      const result = await memory.correct(
+        selection,
+        values.replacement,
+        values['erase-previous'] ? 'erase_previous' : 'keep_bounded',
+      );
+      if (values.json) printJsonArtifact({ ok: true, operation: action, result });
+      else for (const line of renderMemoryOperation(result)) console.log(line);
+    } else if (action === 'history') {
+      const history = await memory.history(positionals.slice(2).join(' '));
+      if (values.json) printJsonArtifact({ ok: true, operation: action, ...history });
+      else for (const line of renderMemoryList(history.matches, 'No recoverable memory history matches.')) console.log(line);
+    } else if (action === 'restore') {
+      const result = await memory.restore(positionals.slice(2).join(' '));
+      if (values.json) printJsonArtifact({ ok: true, operation: action, result });
+      else for (const line of renderMemoryOperation(result)) console.log(line);
+    } else if (action === 'status') {
+      const report = memoryStatusReport(await memory.status());
+      if (values.json) printJsonArtifact(report);
+      else {
+        console.log(`Forge memory: ${String(report.activeCount)} active; ${String(report.recoveryCount)} recoverable.`);
+        console.log('Retrieval: inactive until CLI8B evaluation.');
+      }
+    } else {
+      throw new Error('Usage: forge memory <remember|find|show|explain|correct|history|restore|status> ...');
     }
   } else if (command === 'runs') {
     const operation = positionals[1];
@@ -889,6 +963,14 @@ try {
       '  forge change discard <transaction-id> --approve [--json]',
       '',
       'Evidence commands:',
+      '  forge memory remember <text> [--json]',
+      '  forge memory find [query] [--json]',
+      '  forge memory show <words from memory> [--json]',
+      '  forge memory explain <words from memory> [--json]',
+      '  forge memory correct <words from memory> --replacement <text> [--erase-previous] [--json]',
+      '  forge memory history [query] [--json]',
+      '  forge memory restore <words from history> [--json]',
+      '  forge memory status [--json]',
       '  forge config path [workspace|user] [--json]',
       '  forge config init <workspace|user> [--json]',
       '  forge config validate [--json]',
@@ -942,6 +1024,12 @@ try {
       console.error(`Path: ${error.path}`);
       console.error(`Next: ${error.hint}`);
     }
+  } else if (values.json && command === 'memory'
+    && (error instanceof MemorySelectionError || error instanceof MemoryRuntimeError)) {
+    console.error(JSON.stringify({
+      ok: false,
+      error: { code: error.code, message: error.message },
+    }));
   } else if (values.json && command === 'config') {
     const message = error instanceof Error ? error.message : String(error);
     console.error(JSON.stringify({

@@ -13,10 +13,11 @@ slice by slice from the contracts in `docs/architecture/`.
 The current implementation provides; acceptance status is recorded by the linked checkpoints:
 
 - a Rust-owned run, approval, event, artifact, transaction, and recovery authority;
-- a bridge-v10 Rust outer-run ledger at its local gate: request-before-run,
+- a bridge-v10 Rust outer-run ledger accepted through the private hosted regression:
+  request-before-run,
   append-before-notify events, terminal-before-result artifacts, bounded interaction
   transcripts, deterministic same-runtime continuation, and read-only
-  terminal/open/repair inspection; exact-head hosted acceptance remains pending;
+  terminal/open/repair inspection;
 - deterministic workspace inventory, literal search, bounded line reads,
   TypeScript declarations/diagnostics, and read-only Git evidence;
 - a seven-tool stdio MCP evidence adapter tested with VS Code;
@@ -27,13 +28,29 @@ The current implementation provides; acceptance status is recorded by the linked
   bounded read-only transaction audit;
 - supervised verifier process-tree cleanup on Windows, macOS, and Linux;
 - authenticated, replay-resistant host-managed execution grants for embedding in a
-  boundary supplied by another host.
+  boundary supplied by another host;
+- explicit repository memory through `forge memory remember`, `find`, `show`,
+  `explain`, `correct`, `history`, `restore`, and `status`, with Rust-authoritative
+  identity, provenance, correction, bounded recovery, and erasure rewrite. Memory
+  is not automatically captured, retrieved, or injected into a run.
 
 The public CLI and MCP server require the Rust kernel. A source checkout discovers
 `target/release/forge-kernel` and then `target/debug/forge-kernel`; an exact
 `FORGE_KERNEL_BINARY` override is also supported. Forge fails closed if an explicit
 kernel path is invalid. The TypeScript coordinator is retained only as an explicitly
 selected conformance fixture.
+
+Packaged users do not need Rust, Visual Studio, or another native compiler. A normal
+install includes the exact-version `forge-engine-kernel-<platform>-<arch>` optional
+package for the host. A missing kernel after a packaged install is an installation or
+packaging defect: verify that npm did not omit optional dependencies and that the main
+and native package versions match. Do not ask an end user to compile the kernel or use
+an unrelated binary as a workaround.
+
+A Git source checkout is different: compiled artifacts are intentionally absent and
+`target/` is ignored. Each checkout or worktree has its own build output, so a kernel
+built in another checkout is not discovered. Build the current checkout as described
+under [Development from source](#development-from-source).
 
 Plain `forge` starts an interactive local-first prompt shell and auto-discovers an
 installed Ollama model when no route is supplied. Each prompt creates a separate
@@ -61,9 +78,10 @@ digest diagnostics without requiring a kernel or probing a provider.
 - `restricted` execution remains unavailable and fails closed until native platform
   providers pass adversarial gates.
 - There is no public MCP mutation tool, generic shell, unrestricted write tool,
-  cross-prompt conversational memory, skills, compression, connector, or automation
-  surface yet. Safe continuation is bounded; ambiguous provider/approval requests
-  and unresolved mutation capabilities are intentionally not retried.
+  automatic cross-prompt conversational capture/retrieval, skills, compression,
+  connector, or automation surface yet. Safe continuation is bounded; ambiguous
+  provider/approval requests and unresolved mutation capabilities are intentionally
+  not retried.
 - OpenAI transport conformance is tested, but a live cloud acceptance run requires
   the user's own `OPENAI_API_KEY`; Forge does not accept credentials as CLI flags or
   write them into run evidence.
@@ -100,22 +118,56 @@ for every existing contribution.
 
 ## Development from source
 
-Requires Node.js 22 or newer and Rust 1.97.1. Windows also needs the Visual C++ build
-tools/linker; macOS needs the Xcode command-line tools.
+Requires Git, Node.js 22 or newer with npm, and Rust 1.97.1. Platform prerequisites
+are:
+
+- Windows: the `x86_64-pc-windows-msvc` Rust toolchain, Visual Studio Build Tools
+  2022 with the **Desktop development with C++** workload (MSVC x64/x86 build tools),
+  and a Windows 10 or Windows 11 SDK. Run native builds in the **x64 Native Tools
+  Command Prompt for VS 2022**, or launch VS Code from that prompt. After installing
+  the tools, restart VS Code and open a new integrated terminal so it receives the
+  updated environment.
+- macOS: the Xcode command-line tools.
+- Linux: the distribution C/C++ compiler and linker toolchain.
+
+On Windows, this preflight must find the MSVC linker and SDK resource compiler from
+the developer terminal, and Rust must report the MSVC host:
+
+```powershell
+rustup show active-toolchain
+where.exe link
+where.exe rc
+```
+
+Install dependencies, run the Node/TypeScript checks, then build the complete source
+product:
 
 ```powershell
 npm ci
 npm run check
-npm run rust:build
-npm run build
+npm run build:product
+node dist/src/cli.js doctor --json
 npm run smoke
 ```
 
-`npm run build:product` builds the Rust kernel and TypeScript adapter. `forge doctor`
-reports the exact kernel path, discovery source, runtime posture, isolation
-limitation, effective run-store root/recovery posture, and whether the state root is
-outside the governed workspace. Rust revalidates canonical paths when opening the
-transaction authority.
+`npm run check` type-checks, tests, and builds the Node/TypeScript layer; it does
+**not** invoke Cargo and does not create the native kernel. `npm run build:product`
+runs the Rust workspace build and then the TypeScript build. A successful debug build
+creates `target/debug/forge-kernel.exe` on Windows or
+`target/debug/forge-kernel` on macOS/Linux. `forge doctor` reports the exact selected
+kernel path and discovery source, runtime posture, isolation limitation, effective
+run-store root/recovery posture, and whether the state root is outside the governed
+workspace. Rust revalidates canonical paths when opening the transaction authority.
+
+Common kernel failures:
+
+| Symptom | Meaning and action |
+| --- | --- |
+| `link.exe` or Windows SDK tools are missing | Install the Windows prerequisites above, restart VS Code, and build from a fresh x64 developer terminal. |
+| `Forge Rust kernel is unavailable` after `npm run check` | This is expected for a fresh source checkout; run `npm run build:product` in that same checkout. |
+| A kernel exists in another Git worktree | Build the current worktree. Discovery is deliberately package-root-relative. |
+| An explicit kernel path fails | Remove a stale `FORGE_KERNEL_BINARY` value or set it to the exact trusted binary; invalid overrides fail closed. |
+| A packaged install has no kernel | Confirm optional dependencies were enabled and the exact-version host-native package was installed; treat a missing published package as a release defect. |
 
 Useful commands after the product build:
 

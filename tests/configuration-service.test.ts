@@ -155,9 +155,14 @@ test('configured service timeouts cancel cooperative planner work and reject inv
 
   const service = new ForgeWorkspaceService(fixtureRoot, {
     runtime: typeScriptConformanceFixture,
+    snapshotProvider: async () => ({
+      id: 'workspace:configuration-timeout-fixture',
+      rootLabel: 'fixture',
+      files: [],
+    }),
     execution: {
       maxTurns: 8,
-      timeoutMs: 10,
+      timeoutMs: 500,
       executionBudget: {
         schemaVersion: 1,
         maxCapabilityCalls: 6,
@@ -170,7 +175,7 @@ test('configured service timeouts cancel cooperative planner work and reject inv
     id: 'waiting-configuration-fixture',
     async next(_request, signal) {
       return new Promise<never>((_resolve, reject) => {
-        const keepAlive = setTimeout(() => reject(new Error('Fixture timeout did not fire.')), 1_000);
+        const keepAlive = setTimeout(() => reject(new Error('Fixture timeout did not fire.')), 5_000);
         signal.addEventListener('abort', () => {
           clearTimeout(keepAlive);
           reject(signal.reason);

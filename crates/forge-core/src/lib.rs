@@ -6,6 +6,7 @@ pub mod context;
 pub mod contracts;
 pub mod host_authority;
 pub mod isolation;
+pub mod memory;
 pub mod run_store;
 pub mod runtime;
 pub mod sovereign_change;
@@ -20,6 +21,7 @@ pub use context::{compile_context, required_context_bytes};
 pub use contracts::*;
 pub use host_authority::*;
 pub use isolation::*;
+pub use memory::*;
 pub use run_store::*;
 pub use runtime::{
     ApprovalPolicy, Cancellation, CapabilityAdapter, EventSink, NoCancellation, NoopEventSink,

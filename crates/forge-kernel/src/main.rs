@@ -1,4 +1,5 @@
 mod candidate_bridge;
+mod memory_bridge;
 mod protocol;
 mod run_store_bridge;
 mod sovereign_change_bridge;
@@ -25,9 +26,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::protocol::{
-    MAX_HOST_FRAME_BYTES, MAX_START_FRAME_BYTES, PROBE_PROTOCOL_VERSION, RUN_PROTOCOL_VERSION,
-    RUN_STORE_PROTOCOL_VERSION, StartDiscriminator, read_bounded_frame, send_json,
-    send_protocol_error,
+    MAX_HOST_FRAME_BYTES, MAX_START_FRAME_BYTES, MEMORY_PROTOCOL_VERSION, PROBE_PROTOCOL_VERSION,
+    RUN_PROTOCOL_VERSION, RUN_STORE_PROTOCOL_VERSION, StartDiscriminator, read_bounded_frame,
+    send_json, send_protocol_error,
 };
 
 #[derive(Debug, Deserialize)]
@@ -984,6 +985,7 @@ fn main() {
                 "transactionProtocolVersion": protocol::TRANSACTION_PROTOCOL_VERSION,
                 "candidateProtocolVersion": protocol::CANDIDATE_PROTOCOL_VERSION,
                 "sovereignChangeProtocolVersion": protocol::SOVEREIGN_CHANGE_PROTOCOL_VERSION,
+                "memoryProtocolVersion": protocol::MEMORY_PROTOCOL_VERSION,
                 "isolationProvider": isolation_provider_probe(isolation),
                 "isolationCandidates": isolation_candidates,
             }),
@@ -1050,6 +1052,32 @@ fn main() {
                 RUN_STORE_PROTOCOL_VERSION,
                 failure.request_id.as_deref(),
                 failure.code,
+                &failure.message,
+            );
+            std::process::exit(2);
+        }
+        return;
+    }
+
+    if discriminator.message_type == "memory.execute"
+        && discriminator.protocol_version == MEMORY_PROTOCOL_VERSION
+    {
+        if frame.len() > protocol::MAX_MEMORY_CONTROL_FRAME_BYTES {
+            send_protocol_error(
+                &mut writer,
+                MEMORY_PROTOCOL_VERSION,
+                None,
+                "memory_request_too_large",
+                "Memory request exceeds the 256 KiB frame ceiling.",
+            );
+            std::process::exit(2);
+        }
+        if let Err(failure) = memory_bridge::execute(&frame, &mut writer) {
+            send_protocol_error(
+                &mut writer,
+                MEMORY_PROTOCOL_VERSION,
+                failure.request_id.as_deref(),
+                &failure.code,
                 &failure.message,
             );
             std::process::exit(2);

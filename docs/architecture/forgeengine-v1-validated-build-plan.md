@@ -2,7 +2,7 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
-**Last groomed:** 2026-08-19 after the CLI7 effective-configuration hosted gate
+**Last groomed:** 2026-08-31 for the CLI8A Slice 0–2 hosted gate
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
 
@@ -126,8 +126,11 @@ the ADR-0036 design, PR #30 (`89eec1f`) froze its contracts, and PR #31 candidat
 with the exact-target evidence in
 [Checkpoint 91](../decisions/checkpoints/2026-08-19-91-effective-configuration-hosted-gate.md).
 Native restricted execution continues as the independent
-`SBX-PROVIDER-LIFECYCLE` lane. `CLI8A-MEMORY-FOUNDATION` remains runtime-inactive
-until its own policy, evaluation, and integration gates pass.
+`SBX-PROVIDER-LIFECYCLE` lane. `CLI8A-MEMORY-FOUNDATION` Slices 0–2 are accepted
+through PR #32 and
+[Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md):
+explicit control and bounded recovery are active, while planner/provider retrieval,
+autosave, broader privacy lifecycle, and skills remain inactive until their gates.
 
 Slice 2F remains the native-isolation hardening boundary. Slice 2F-1 is accepted: provider
 authority is explicit and raw host/restricted claims fail closed. Slice 2F-2a is
@@ -558,8 +561,9 @@ promotion/discard. Continue as follows:
     package, install, diagnose, configure, update, uninstall, and run the trusted
     alpha on the declared hosted matrix. ADR-0036 selection, tightening,
     attribution, redaction, and no-fallback conformance pass Checkpoint 91.
-14. **Next bounded lane:** begin the context/memory/reviewed-skill learning loop.
-    Expand providers, a high-level
+14. **Attributable memory Slices 0–2 accepted through PR #32:** preserve the
+    Rust-authoritative explicit control/recovery boundary and resolve the Slice 3
+    autosave authorization before implementation. Expand providers, a high-level
     MCP/VS Code mutation workflow, and other advanced platform surfaces on separate
     measured lanes; native sandbox completion does not block the learning loop.
 
@@ -633,7 +637,7 @@ not source volume or the number of abstractions present.
 | Minimum outer-run recovery | Accepted through the private trusted-alpha hosted regression | Rust durably records request/events/artifact plus the bounded interaction transcript. Terminal return and proven-safe same-runtime continuation work; ambiguous and non-idempotent frontiers block. Complete initial state is privately staged and atomically published. A pending governed change carries one durably acknowledged reference to its registered authoritative ChangeSet transaction while the outer capability remains non-replayable. Checkpoint 90 reran the complete Rust/Node/hybrid product gate on hosted Windows/macOS/Ubuntu. Orphaned staging and registered-but-never-finalized ChangeSet policy remain release-hardening work. |
 | Transaction retention and isolation truth | Trusted-alpha regression accepted; restricted-provider production gate open | Lock-safe transaction retention and truthful readiness reporting remain accepted. Managed Windows and AppContainer each pass the local 17-case schema-v4 corpus under Rust-owned lifecycle/resource/evidence authority; probe v4 reports both as `setup_required` and restricted-ready false. The trusted-alpha hosted matrix does not close the separate VM lifecycle, real second-pin upgrade, broader credential, macOS, or adversarial provider gates. See [ADR-0031](../decisions/ADRs/ADR-0031-transaction-retention-and-native-sandbox-sequencing.md), [ADR-0033](../decisions/ADRs/ADR-0033-sandbox-policy-compilation-and-provider-conformance.md), [Checkpoint 83](../decisions/checkpoints/2026-08-12-83-managed-windows-provider-adapter-local-gate.md), [Checkpoint 84](../decisions/checkpoints/2026-08-12-84-packaged-provider-lifecycle-gate-preparation.md), and [Checkpoint 85](../decisions/checkpoints/2026-08-12-85-consolidated-transaction-sandbox-local-gate.md). |
 | Installable developer alpha | Configuration-conformant private foundation accepted; public-release gates open | PR #27 and Checkpoint 90 accept ADR-0032 exact-version native packaging, local install/update/uninstall, the tester kit, and hosted Windows/macOS/Ubuntu product evidence. PR #31 and Checkpoint 91 accept effective configuration, config UX, and clean-install conformance. Contributor-rights attestation and public artifact signing/provenance remain open; no public artifact has been published. |
-| Differentiated learning loop | Next bounded implementation lane; runtime-inactive until its own gate | Attributable scoped memory, measured retrieval, pattern recognition, and reviewed skill promotion are the product critical path under ADR-0034. Stale-base candidate `b5effea` must be replayed and tested before review, after the unresolved memory-policy choices are settled. Exit: one repeated-workflow fixture proves quality/effort improvement over a no-memory baseline without hidden instructions or policy bypass. |
+| Differentiated learning loop | Slices 0–2 accepted through PR #32 and Checkpoint 92 | ADR-0038/0039 lock identity, normalization, exact scope, Rust authority, TypeScript orchestration, reviewed decisions, and bounded recovery. Candidate `e9e8cd9` passes exact MSVC, separate VS Code, hosted Windows/macOS/Ubuntu, package, and benchmark gates for remember/restart/explain plus correction/recovery/restore/erase without retrieval. Slices 3–5 and CLI8B/C remain unauthorized. |
 | Broader V1 platform | Deferred beyond the bounded learning loop | Advanced compression/retrieval, MCP client/mutation symmetry, connectors, automation, and generalized UI retain their later roadmap gates. Windows/macOS restricted providers continue as a bounded, actively scheduled commodity-platform lane under ADR-0031/0033/0034 and cannot borrow acceptance from trusted mode. |
 
 Percent-complete figures are intentionally not used. They hid the difference
@@ -656,7 +660,10 @@ expansion, the current planning ranges are:
 - private trusted-alpha foundation: **accepted through PR #27 and Checkpoint 90 with exact-version native packaging, local install/update/uninstall, onboarding/tester documentation, and hosted Windows/macOS/Ubuntu product gates; PR #28 aligns the reported blockers**;
 - configuration-conformant standalone CLI alpha: **accepted through PR #31 and Checkpoint 91** with ADR-0036 selection precedence, monotonic policy tightening, secret redaction, effective-source reporting, and cross-platform fixtures; native restricted execution remains a separately gated pilot boundary;
 - public alpha distribution: **still blocked independently** on contributor-rights attestation and artifact signing/provenance; no public package or artifact has shipped;
-- first attributable memory/retrieval demonstration: **the next bounded lane, estimated at about one focused week after its policy lock and clean replay**;
+- first attributable memory/retrieval demonstration: **CLI8A Slices 0–2 are accepted
+  through PR #32 and Checkpoint 92 for explicit remember/restart/explain plus
+  correction/recovery; Slice 3 autosave, Slice 4 privacy lifecycle, Slice 5 preview,
+  and CLI8B retrieval remain unauthorized**;
 - reviewed pattern-to-skill vertical slice: **a further 2-3 focused weeks**, contingent on the evaluation fixture proving better accepted outcomes rather than token reduction alone;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
@@ -665,10 +672,11 @@ The source-backed
 [CLI harness comparison](../audit/2026-08-05-cli-harness-core-comparison.md)
 calibrates Forge as a strong narrow evidence/transaction core rather than a mature
 CLI peer. With repository authority, native packaging, the tester kit, the
-trusted-alpha hosted matrix, and effective configuration accepted, the immediate
-implementation order is the bounded CLI8 memory-policy and attributable
-observation/replay lane. Rights attestation and artifact signing/provenance proceed
-as separate public-distribution gates;
+trusted-alpha hosted matrix, effective configuration, and CLI8A Slices 0–2 accepted,
+the immediate gate is explicit authorization of the bounded Slice 3 autosave proof.
+Later privacy lifecycle, context preview, retrieval, and skills remain separately
+gated. Rights attestation and artifact
+signing/provenance proceed as separate public-distribution gates;
 Windows managed/fallback and macOS preview/signed-helper work remain a separately
 accepted provider lane. The trusted alpha must not wait for those native providers,
 but it also must not advertise restricted execution.
@@ -737,8 +745,9 @@ cross-platform fixtures are now part of the private alpha boundary. It adds no
 public publication, sandbox-provider promotion, or organization inference-policy
 claim.
 
-**Go for the bounded attributable-memory, measured-retrieval, and reviewed-skill
-vertical slice next;
+**Slices 0–2 are accepted; resolve the explicit Slice 3 autosave authorization next.
+Do not begin autosave, privacy lifecycle, measured retrieval, or reviewed skills
+from directional approval alone;
 do not wait for native sandbox promotion.** Broad compression, connector,
 automation, generalized UI, and raw MCP mutation programs remain no-go until that
 learning slice proves value. No raw shell or file-write MCP tool is permitted; any
@@ -747,11 +756,19 @@ contract.
 
 ## Change-control rule
 
-At every framework, service, or host integration decision we will add:
+Consequential features, bounded slices, and contract or authority changes follow
+the [four-gate delivery workflow](../development/four-gate-delivery-workflow.md):
+Product, Architecture, Program Design, then Vertical Slices. The full path freezes
+user outcome, system boundary, code-level contracts, and the slice/parallelization
+graph before implementation. Small local changes use the proportional fast or
+compact path; classification triggers and approval semantics live in that workflow.
+
+At every framework, service, or host integration decision we will also add:
 
 1. a plain-language checkpoint explaining the user impact and trade-off;
 2. an ADR where a durable architectural choice is made;
 3. a measurable acceptance or rejection gate;
 4. a changelog entry linking the decision, implementation, and validation result.
 
-See `docs/decisions/` for the templates and prior checkpoints.
+See `docs/tasks/FOUR-GATE-TASK-TEMPLATE.md` for the approval and planning template,
+and `docs/decisions/` for ADR/checkpoint templates and prior evidence.

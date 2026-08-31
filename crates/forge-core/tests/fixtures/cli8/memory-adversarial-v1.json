@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    { "id": "partial-frame", "expectedError": "memory_integrity_partial_frame" },
+    { "id": "hash-mismatch", "expectedError": "memory_integrity_frame_hash" },
+    { "id": "scope-mismatch", "expectedError": "memory_scope_mismatch" },
+    { "id": "target-not-active", "expectedError": "memory_transition_target_not_active" },
+    { "id": "ambiguous-human-selector", "expectedError": "memory_selector_ambiguous" },
+    { "id": "standing-grant-reviewed-decision", "expectedError": "memory_reviewed_decision_admission_required" },
+    { "id": "symbolic-link-state", "expectedError": "memory_store_link_rejected" },
+    { "id": "oversized-frame", "expectedError": "memory_store_frame_capacity" }
+  ]
+}
