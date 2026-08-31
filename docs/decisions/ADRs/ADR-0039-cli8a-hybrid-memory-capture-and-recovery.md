@@ -1,7 +1,7 @@
 # ADR-0039: Use hybrid memory machinery with standing capture grants and bounded recovery
 
 **Date:** 2026-08-29
-**Status:** Accepted for the bounded Slice 0–2 implementation packet; Slices 3–5
+**Status:** Accepted for the bounded Slice 0–3 implementation packet; Slices 4–5
 remain separately gated
 **Scope:** CLI8A capture, lifecycle, recovery, and future retrieval boundary
 **Amends:** ADR-0038 if accepted
@@ -81,8 +81,8 @@ candidates fall back to `ask`.
 Immediate undo of an automatically saved memory purges that memory content rather
 than leaving an unapproved recoverable copy.
 
-Automatic capture remains an accepted architectural seam but is not implementation
-authority in the current packet; Slice 3 requires a separate authorization.
+Automatic capture is authorized only for the bounded Slice 3 proof approved on
+2026-08-31. Slices 4–5, CLI8B retrieval, and CLI8C skills remain separately gated.
 
 ### 3. Separate active memory, bounded recovery, and non-content receipts
 

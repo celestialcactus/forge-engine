@@ -1,3 +1,17 @@
+# 2026-08-31 - CLI8A Slice 3 autosave proof is explicitly authorized
+
+- Approved the restated Product, Architecture, Program Design, and Vertical Slice
+  boundary for repo-scoped autosave `off|ask|auto`; `ask` remains the default.
+- Only local user action may create or revoke an actor/scope-bound standing grant.
+  Rust validates grant, provenance, eligibility, and durable admission; TypeScript
+  owns candidate construction, orchestration, and `Remembered · Undo · Explain`
+  presentation.
+- Secrets, capability/approval changes, model/tool/repository text, speculative
+  inference, organization policy, scope widening, and ambiguous candidates cannot
+  auto-save. Ambiguity falls back to `ask`; undo removes the just-admitted content.
+- This authorization does not include Slice 4 forget/purge/history-clear, Slice 5
+  context preview, CLI8B retrieval, or CLI8C skills.
+
 # 2026-08-31 - CLI8A memory Slices 0–2 pass the hosted gate
 
 - Exact implementation candidate `e9e8cd9` passed cross-platform run `33433043538`
