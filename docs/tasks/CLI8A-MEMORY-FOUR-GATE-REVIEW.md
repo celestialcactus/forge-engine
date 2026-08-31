@@ -1,7 +1,8 @@
 # CLI8A memory control: four-gate review packet
 
-**Status:** Product, Architecture, and Program Design approved for the bounded
-Slice 0–2 packet; Slices 3–5 remain unapproved
+**Status:** Slices 0–2 accepted through PR #32 and
+[Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md);
+Slices 3–5 remain unapproved
 **Date:** 2026-08-29
 **Delivery path:** full
 **Active task:** [Slice CLI8](SLICE-CLI8-differentiated-learning-loop.md)
@@ -551,16 +552,22 @@ find/show/explain without a full internal ID, bounded correction/history, restor
 and final `--erase-previous`. It retained one active version, removed erased prior
 content from all Forge memory-state files, emitted empty stderr, performed no
 planner/provider/retrieval/discovery/network work, and reported retrieval inactive.
-Temporary validation state was removed. This is local evidence only; hosted target
-acceptance, merge, and Slices 3–5 remain open.
+Temporary validation state was removed. Slices 3–5 remain open.
 
 The authoritative worktree follow-up also passed `npm run check:product` under the
 supported MSVC environment (191 Rust tests passed with 16 explicit ignored helper/
 external-corpus cases, 154 Node tests, 59/66 hybrid with seven explicit skips, and
 source product smoke). RustSec scanned 46 locked dependencies without findings; the
 clean-install/update/uninstall package lifecycle, native-package archive, and
-20-sample benchmark passed with a 90.757-ms Rust bridge p95. These results still do
-not substitute for the declared hosted target matrix.
+20-sample benchmark passed with a 90.757-ms Rust bridge p95.
+
+Exact candidate `e9e8cd9` then passed the declared Windows x64, macOS ARM64,
+macOS x64, and Ubuntu x64 hosted matrix in cross-platform run `33433043538` and
+hybrid run `33433043562`. The
+hosted gate found and corrected a platform-native kernel-name fixture, an existing
+10-ms snapshot race, and a concurrent temporary-root collision before acceptance.
+An external GitHub artifact-upload DNS failure separated two diagnostic attempts.
+Checkpoint 92 records the full evidence and retained non-claims.
 
 ### Ownership and parallel safety
 

@@ -1,3 +1,24 @@
+# 2026-08-31 - CLI8A memory Slices 0–2 pass the hosted gate
+
+- Exact implementation candidate `e9e8cd9` passed cross-platform run `33433043538`
+  and hybrid run `33433043562`: Node, RustSec, Rust, hybrid, source
+  product, native package, clean-install package, and benchmark gates on Windows
+  x64, macOS ARM64, macOS x64, and Ubuntu x64.
+- The first hosted candidate exposed a Windows-only `.exe` name in the memory
+  hybrid fixture. The replacement exposed an existing 10-ms service-timeout test
+  racing workspace snapshot construction on loaded macOS x64. The final candidate
+  uses the native kernel filename and a deterministic snapshot fixture with a
+  bounded planner-cancellation deadline.
+- An earlier hybrid attempt passed macOS x64 behavior through the clean-install
+  package proof, then GitHub artifact upload failed with DNS `ENOTFOUND`. Its
+  targeted retry exposed a concurrent temporary-root collision in the two new
+  retention tests. The final candidate adds a process-local atomic test nonce and
+  passed 100/100 focused repetitions before the complete hosted rerun; no product
+  lock or retry semantics were weakened.
+- [Checkpoint 92](checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md)
+  accepts explicit remember/inspect/correct/recovery through PR #32. Autosave,
+  forget/purge/history-clear, context preview/retrieval, and skills remain gated.
+
 # 2026-08-31 - CLI8A Slice 0–2 passes the independent local product gate
 
 - Exact implementation `6f37c8c` passed in a clean VS Code worktree using Rust

@@ -2,8 +2,7 @@
 
 **Status:** operational ground truth for active ForgeEngine delivery
 **As of:** 2026-08-31
-**Accepted implementation baseline:** PR #31 merge `f36a767` (implementation
-candidate `e7ba284`)
+**Accepted implementation baseline:** PR #32 (implementation candidate `e9e8cd9`)
 **Documentation baseline:** the commit containing this file
 
 This file answers what is active now. The
@@ -49,10 +48,11 @@ foundation is accepted** through PR #31 and
 One immutable, redacted, source-attributed configuration now drives every product
 entry path on the declared target matrix. Organizational inference governance
 belongs to the operator; Forge retains faithful/no-fallback routing and intrinsic
-harness security. ADR-0038 and ADR-0039 now lock the bounded CLI8A identity,
-authority, capture, and recovery policy. The active branch implements the authorized
-Slice 0–2 candidate: Rust owns the canonical ledger/lifecycle, while TypeScript
-orchestrates CLI UX. It activates no planner/provider retrieval. Public
+harness security. ADR-0038 and ADR-0039 lock the bounded CLI8A identity,
+authority, capture, and recovery policy. Slices 0–2 are accepted through PR #32 and
+[Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md):
+Rust owns the canonical ledger/lifecycle, while TypeScript orchestrates CLI UX.
+They activate no planner/provider retrieval. Public
 distribution still requires contributor-rights attestation and artifact
 signing/provenance. Trusted execution has no
 Forge-enforced OS containment. Native restricted providers continue independently
@@ -63,19 +63,18 @@ claims permitted at each delivery stage.
 
 ## Active lanes
 
-| Lane | Canonical ID | State on 2026-08-29 | Authority and next gate |
+| Lane | Canonical ID | State on 2026-08-31 | Authority and next gate |
 | --- | --- | --- | --- |
 | Documentation reconciliation | `DOC-GROUND-TRUTH` | Accepted at `5fff597` through PR #25 | Preserve Checkpoint 88 and the execution/release-profile authority during every lane replay. |
 | Authority and contract clarification | `ARCH-AUTHORITY` | Accepted through PR #26 (`70a3288`) | Preserve the repository guard, Apache-2.0 alignment, target/config/protocol decisions, memory primer, and system map. |
 | Trusted-alpha release | `CLI7-ALPHA` | Private distribution/onboarding foundation accepted through PR #27 (`6cc90c1`) and Checkpoint 90; PR #28 (`2882550`) corrects reported blockers | Preserve the accepted private tester boundary. Rights attestation and artifact signing/provenance remain separate public-distribution gates; no public artifact has shipped. |
 | Effective configuration | `CLI7-ALPHA-CONFIG` | Accepted through PR #31 candidate `e7ba284` and Checkpoint 91 | Preserve the fixed files, immutable compiler, source attribution, secret-safe projection, atomic route, monotonic ceilings, and no-fallback behavior. Do not add an organization provider-policy subsystem. |
 | Sandbox provider lifecycle | `SBX-PROVIDER-LIFECYCLE` | Independent and unaccepted for production; local managed-Windows/AppContainer conformance exists | Complete disposable-Windows-VM install/upgrade/uninstall/reboot/residue plus macOS/adversarial evidence. Do not advertise `restrictedReady` or promote a provider until the exact gate passes. |
-| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Slice 0–2 candidate `6f37c8c` passes exact MSVC, separate VS Code lifecycle, 16 focused Rust tests, 154 Node tests, and real source-CLI/hybrid evidence; hosted and merge evidence pending | Validate the exact candidate on hosted Windows x64, macOS ARM64/x64, and Ubuntu x64, then checkpoint and merge. Do not begin Slices 3–5, cherry-pick stale candidate `b5effea`, or activate retrieval. |
+| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Slices 0–2 accepted through PR #32 candidate `e9e8cd9` and Checkpoint 92 | Preserve explicit remember/inspect/correct/recovery authority and the inactive-retrieval truth. Obtain a new explicit four-gate authorization before beginning Slice 3; Slices 3–5 and CLI8B/C remain gated. |
 
 The stale-base CLI7 candidate was successfully replayed without importing its old
-ancestry. The remaining CLI8A candidate is useful source material, not accepted
-Forge state; selectively reimplement only behavior that conforms to ADR-0038 on
-fresh ancestry.
+ancestry. The stale CLI8A candidate `b5effea` remains reference material only; the
+accepted implementation is the ADR-0038/0039-conformant PR #32 lineage.
 
 ## Merge order and shared-boundary rule
 
@@ -84,11 +83,11 @@ fresh ancestry.
    through PR #27; PR #28 aligns the product-reported remaining blockers.
 3. The [ADR-0036 effective-configuration loader/conformance suite](../tasks/SLICE-CLI7-ALPHA-effective-configuration.md)
    is accepted through PR #31 and Checkpoint 91.
-4. ADR-0038 and ADR-0039 settle the authorized memory boundary, and the
+4. ADR-0038 and ADR-0039 settle the memory boundary, and the
    [combined four-gate packet](../tasks/CLI8A-MEMORY-FOUR-GATE-REVIEW.md) authorizes
-   Slice 0–2. Exact MSVC and separate VS Code product-lifecycle evidence pass at
-   `6f37c8c`; hosted target and merge evidence remain. Runtime retrieval remains
-   gated by CLI8B.
+   Slice 0–2. PR #32 and Checkpoint 92 accept their exact MSVC, separate VS Code,
+   hosted, package, and benchmark evidence. Runtime retrieval remains gated by
+   CLI8B; Slices 3–5 require new explicit authorization.
 5. Merge `SBX-PROVIDER-LIFECYCLE` only after its independent VM/provider gate; its
    timing does not redefine the trusted-alpha claim.
 
@@ -111,15 +110,17 @@ rebased and reconciled before merge rather than resolved by taking an entire sid
 
 ## Next three gates
 
-1. Validate the exact CLI8A Slice 0–2 candidate on the declared hosted targets;
-   record a checkpoint and merge only if those gates pass. The supported MSVC and
-   separate VS Code product-lifecycle gates already pass at `6f37c8c`.
-2. After that candidate is accepted and later retrieval authorization is granted,
-   run CLI8B
-   no-memory/retrieved-memory evaluation, with no automatic retrieval
-   until measurable quality and isolation gates pass.
-3. Gate reviewed skill-candidate promotion on attributable evidence and the same
-   Rust-owned capability, approval, transaction, and artifact authority.
+1. Review and explicitly authorize or reject CLI8A Slice 3: repo-scoped autosave
+   `off|ask|auto`, Rust-validated standing grants, visible save attribution, and
+   non-blocking undo. Do not begin implementation from the prior directional packet
+   alone.
+2. If Slice 3 is approved, implement only that vertical proof and preserve the
+   accepted no-retrieval boundary. Slice 4 privacy lifecycle and Slice 5 context
+   preview retain separate authorizations.
+3. After complete CLI8A acceptance and later CLI8B authorization, run paired
+   no-memory/retrieved-memory evaluation; automatic retrieval remains disabled until
+   measurable quality and isolation gates pass. Reviewed skills remain a later
+   separately measured CLI8C gate.
 
 Contributor-rights attestation and artifact signing/provenance remain independent
 pre-publication gates. The accepted tester kit may be used privately without

@@ -1,7 +1,8 @@
 # Slice CLI8: Attributable memory and reviewed skill learning loop
 
-**State:** Slice 0–2 implementation authorized; Product, Architecture, and bounded
-Program Design approved, Slices 3–5 gated
+**State:** Slices 0–2 accepted through PR #32 and
+[Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md);
+Slices 3–5 gated
 **Authority:**
 [ADR-0034](../decisions/ADRs/ADR-0034-commodity-sandbox-and-differentiated-learning-lane.md),
 [ADR-0038](../decisions/ADRs/ADR-0038-cli8a-memory-identity-admission-and-retention.md),
@@ -27,11 +28,10 @@ implementation Slices 1–2 are currently authorized.
 | Program Design | approved for Slice 0–2 | Review packet Gate 3 | Alpha ceilings are conservative safety budgets; `reviewed_decision` closes the repository-decision contract gap. |
 | Vertical Slices | partially approved | Review packet Gate 4 | Prerequisite Slice 0 and implementation Slices 1–2 authorized; Slices 3–5 remain gated. |
 
-Slice 0 and the Slice 1–2 candidate are implemented on the active branch. Exact
-MSVC, separate VS Code product-lifecycle, focused Rust, Node, and hybrid validation
-pass for implementation `6f37c8c`; hosted target evidence and merge remain before
-acceptance. Autosave, privacy lifecycle, context preview, retrieval, and skills
-remain gated.
+Slice 0 and implementation Slices 1–2 are accepted through PR #32. Exact MSVC,
+separate VS Code product-lifecycle, focused Rust, Node, hybrid, package, benchmark,
+and hosted target validation pass through exact implementation candidate `e9e8cd9`.
+Autosave, privacy lifecycle, context preview, retrieval, and skills remain gated.
 
 Current local evidence:
 
@@ -54,6 +54,11 @@ Current local evidence:
   hybrid with seven explicit skips, and source product smoke), `npm run rust:audit`
   over 46 locked dependencies, the clean-install/update/uninstall release smoke,
   native-package packing, and the 20-sample benchmark (Rust bridge p95 90.757 ms).
+- exact candidate `e9e8cd9` passes hosted Node and hybrid/native/package/benchmark
+  gates on Windows x64, macOS ARM64, macOS x64, and Ubuntu x64 in runs
+  `33433043538` and `33433043562`; Checkpoint 92 records the platform-name,
+  timeout-snapshot, and concurrent-retention-root test-fixture corrections plus the
+  external GitHub artifact-upload DNS failure that separated the final attempts.
 
 ## Boundary
 
@@ -132,7 +137,8 @@ Current package status:
       erase-previous rewrite;
 - [ ] unapproved Slice 3–5 autosave, forget/purge/history-clear, and preview;
 - [x] exact-candidate local MSVC and separate VS Code product-lifecycle gate;
-- [ ] exact-candidate hosted and merge acceptance gate.
+- [x] exact-candidate hosted and merge acceptance gate through PR #32 and
+      Checkpoint 92.
 
 The stale-base candidate `b5effea` may be used as a reference for bounded limits,
 append/rebuild mechanics, and adversarial tests. It must not be cherry-picked or

@@ -13,10 +13,11 @@ slice by slice from the contracts in `docs/architecture/`.
 The current implementation provides; acceptance status is recorded by the linked checkpoints:
 
 - a Rust-owned run, approval, event, artifact, transaction, and recovery authority;
-- a bridge-v10 Rust outer-run ledger at its local gate: request-before-run,
+- a bridge-v10 Rust outer-run ledger accepted through the private hosted regression:
+  request-before-run,
   append-before-notify events, terminal-before-result artifacts, bounded interaction
   transcripts, deterministic same-runtime continuation, and read-only
-  terminal/open/repair inspection; exact-head hosted acceptance remains pending;
+  terminal/open/repair inspection;
 - deterministic workspace inventory, literal search, bounded line reads,
   TypeScript declarations/diagnostics, and read-only Git evidence;
 - a seven-tool stdio MCP evidence adapter tested with VS Code;
@@ -27,7 +28,11 @@ The current implementation provides; acceptance status is recorded by the linked
   bounded read-only transaction audit;
 - supervised verifier process-tree cleanup on Windows, macOS, and Linux;
 - authenticated, replay-resistant host-managed execution grants for embedding in a
-  boundary supplied by another host.
+  boundary supplied by another host;
+- explicit repository memory through `forge memory remember`, `find`, `show`,
+  `explain`, `correct`, `history`, `restore`, and `status`, with Rust-authoritative
+  identity, provenance, correction, bounded recovery, and erasure rewrite. Memory
+  is not automatically captured, retrieved, or injected into a run.
 
 The public CLI and MCP server require the Rust kernel. A source checkout discovers
 `target/release/forge-kernel` and then `target/debug/forge-kernel`; an exact
@@ -73,9 +78,10 @@ digest diagnostics without requiring a kernel or probing a provider.
 - `restricted` execution remains unavailable and fails closed until native platform
   providers pass adversarial gates.
 - There is no public MCP mutation tool, generic shell, unrestricted write tool,
-  cross-prompt conversational memory, skills, compression, connector, or automation
-  surface yet. Safe continuation is bounded; ambiguous provider/approval requests
-  and unresolved mutation capabilities are intentionally not retried.
+  automatic cross-prompt conversational capture/retrieval, skills, compression,
+  connector, or automation surface yet. Safe continuation is bounded; ambiguous
+  provider/approval requests and unresolved mutation capabilities are intentionally
+  not retried.
 - OpenAI transport conformance is tested, but a live cloud acceptance run requires
   the user's own `OPENAI_API_KEY`; Forge does not accept credentials as CLI flags or
   write them into run evidence.
