@@ -66,8 +66,12 @@ The product exposes three autosave modes:
 - `auto`: admit eligible memories under a standing user grant, display a
   non-blocking notification, and offer immediate undo.
 
-`ask` is the default. A standing grant is created only by a local user action and
-is bound to its actor and either the current repository or the developer profile.
+`ask` is the default. A standing grant is created only by a local user action. The
+bounded Slice 3 implementation permits only a current-repository grant; the
+developer-profile grant shape is reserved but rejected by the store until a later
+gate. The grant and developer preference are stored under the exact developer
+actor ledger, while the grant carries the repository identity at which automatic
+capture was authorized. Repository decisions remain in their repository ledger.
 Checked-in workspace configuration, repository text, model output, and external
 providers cannot create or widen a grant.
 
@@ -78,8 +82,16 @@ ineligible for secrets, capability/approval changes, speculative model output,
 tool output, organization policy, and repository-to-developer promotion. Ambiguous
 candidates fall back to `ask`.
 
+TypeScript admits `auto` without review only for a deliberately narrow,
+deterministic presentation/style grammar such as `I prefer concise test output.`
+Preference-like text outside that grammar falls back to `ask`; ordinary task text
+is not a candidate. Control characters, structured/remote material, secret-like
+tokens, and authority-changing language fail the automatic path.
+
 Immediate undo of an automatically saved memory purges that memory content rather
-than leaving an unapproved recoverable copy.
+than leaving an unapproved recoverable copy. Slice 3 implements this as the narrow
+`UndoAutoCapture` authority for the just-admitted observation, not as the generic
+Slice 4 `purge` command.
 
 Automatic capture is authorized only for the bounded Slice 3 proof approved on
 2026-08-31. Slices 4–5, CLI8B retrieval, and CLI8C skills remain separately gated.

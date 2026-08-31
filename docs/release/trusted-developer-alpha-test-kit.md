@@ -58,7 +58,8 @@ packages, and installs both with scripts disabled into an isolated project and
 home. It sanitizes every covered environment variable, exercises fixed user and
 workspace configuration paths, safe no-overwrite initialization, validation,
 redacted show/doctor output, partial-route refusal before kernel/provider work,
-conformant onboarding, and a real Rust-backed inspection. It then runs an exact-
+conformant onboarding, installed autosave `ask → auto → off`, and a real
+Rust-backed inspection. It then runs an exact-
 pair update and uninstalls both packages. It removes its temporary project unless
 `FORGE_KEEP_PACKAGE_SMOKE=1` is set.
 
@@ -88,6 +89,34 @@ fields, and partial routes fail with a location, message, and next-action hint.
 `show` reports values only for non-secret fields; the OpenAI credential diagnostic
 contains its fixed reference and presence, never credential bytes. These commands
 do not require Rust, construct a provider, or probe a network endpoint.
+
+## Memory capture experience
+
+Repository decisions remain explicit through `forge memory remember`. Slice 3 adds
+a separate local capture control for direct developer preferences:
+
+```powershell
+forge memory autosave status
+forge memory autosave off
+forge memory autosave ask
+forge memory autosave auto
+forge memory find "concise test output"
+forge memory explain "concise test output"
+```
+
+`ask` is the default. These commands are not workspace configuration: checked-in
+files, model output, tools, and providers cannot enable or widen the standing
+grant. Slice 3 accepts only a grant for the current repository and local developer
+actor. In interactive Forge, a narrow safe statement such as `I prefer concise
+test output.` saves without pausing in `auto` and prints `Remembered · /memory undo
+· /memory explain`. Other preference-like statements ask; ordinary prompts are
+ignored by capture; secret-like or authority-changing content is ineligible.
+
+Immediate `/memory undo` removes the just-admitted content from Forge memory state
+without a recovery copy. It does not erase independently retained run artifacts,
+conversation logs, backups, filesystem journals, or storage media. Memory remains
+excluded from planner/provider prompt context until the separately gated CLI8B
+evaluation.
 
 ## Prompts and expected evidence
 

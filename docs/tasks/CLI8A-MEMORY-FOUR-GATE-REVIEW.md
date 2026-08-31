@@ -2,7 +2,8 @@
 
 **Status:** Slices 0–2 accepted through PR #32 and
 [Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md);
-Slice 3 authorized 2026-08-31; Slices 4–5 remain unapproved
+Slice 3 implemented at candidate `afa6e67` with local gates passing; hosted/merge
+acceptance pending; Slices 4–5 remain unapproved
 **Date:** 2026-08-29
 **Delivery path:** full
 **Active task:** [Slice CLI8](SLICE-CLI8-differentiated-learning-loop.md)
@@ -95,6 +96,12 @@ than raw schema vocabulary.
   autosave on the user's behalf.
 - Secrets, inferred personality, model/tool/repository instructions, capability
   escalation, and ambiguous candidates never auto-save.
+- Slice 3 accepts only current-repository grants. They are stored in the exact
+  developer ledger and bind automatic capture to the repository; developer-profile
+  grants remain unavailable.
+- Only the narrow deterministic presentation/style grammar is eligible without a
+  pause. Other preference-like direct input falls back to `ask`; normal task input
+  is ignored by capture orchestration.
 
 ### Correction, recovery, and deletion experience
 
@@ -345,6 +352,16 @@ pub enum MemoryOperation {
     },
     Forget { target: MemoryObservationId, reason: MemoryReasonCode },
     Restore { target: MemoryObservationId },
+    AutoCapture {
+        observation: MemoryObservation,
+        grant_id: MemoryGrantId,
+        grant_scope: MemoryGrantScope,
+    },
+    UndoAutoCapture {
+        target: MemoryObservationId,
+        grant_id: MemoryGrantId,
+        actor_id: String,
+    },
     Purge { selector: MemoryPurgeSelector, reason: MemoryReasonCode },
     ClearRecovery { scope: Option<MemoryScopeKind> },
     SetCaptureMode { grant: MemoryStandingGrant },
@@ -364,6 +381,16 @@ pub enum MemoryEvent {
     ObservationForgotten { target: MemoryObservationId, reason: MemoryReasonCode },
     ObservationRestored { target: MemoryObservationId },
     GrantChanged { grant: MemoryStandingGrant },
+    ObservationAutoCaptured {
+        observation: MemoryObservation,
+        grant_id: MemoryGrantId,
+        grant_scope: MemoryGrantScope,
+    },
+    AutoCaptureUndone {
+        target: MemoryObservationId,
+        grant_id: MemoryGrantId,
+        actor_id: String,
+    },
     NonContentReceipt { receipt: MemoryNonContentReceipt },
 }
 
@@ -373,6 +400,7 @@ pub struct MemoryProjection {
     pub active: Vec<ProjectedMemory>,
     pub recovery: Vec<RecoveryMemory>,
     pub receipts: Vec<MemoryNonContentReceipt>,
+    pub grants: Vec<MemoryStandingGrant>,
 }
 
 pub struct MemoryStoreLimits {
@@ -443,7 +471,8 @@ exact developer input
 → Rust validates active standing grant + actor + exact scope + provenance
 → append before acknowledgement
 → non-blocking notification
-→ Undo sends Purge for the just-admitted content
+→ Undo sends narrow UndoAutoCapture for the just-admitted content
+→ Rust atomically rewrites that content away and retains a non-content receipt
 ```
 
 Correction with recovery:
@@ -552,8 +581,8 @@ find/show/explain without a full internal ID, bounded correction/history, restor
 and final `--erase-previous`. It retained one active version, removed erased prior
 content from all Forge memory-state files, emitted empty stderr, performed no
 planner/provider/retrieval/discovery/network work, and reported retrieval inactive.
-Temporary validation state was removed. Slice 3 was later authorized on 2026-08-31;
-Slices 4–5 remain open.
+Temporary validation state was removed. Slice 3 was later authorized on 2026-08-31
+and is now implemented at local-gated candidate `afa6e67`; Slices 4–5 remain open.
 
 The authoritative worktree follow-up also passed `npm run check:product` under the
 supported MSVC environment (191 Rust tests passed with 16 explicit ignored helper/
@@ -646,6 +675,13 @@ editing configuration.
 **Gate:** only local user action creates the standing grant; unsafe/ambiguous
 sources fall back to ask or fail; repository/model/tool text cannot self-authorize;
 undo removes content; CLI and conversational behavior use the same Rust grant.
+
+**Implemented candidate:** `afa6e67`. The local Windows x64 product gate passes
+195 Rust tests with 16 explicit helper/external-corpus ignores, 159 Node tests,
+the real configured interactive no-pause/explain/undo fixture, the two-case memory
+product fixture, RustSec audit, clean-install ask/auto/off lifecycle, native packing,
+and the 20-sample benchmark assertion. Hosted target and merge acceptance remain
+open; this evidence does not authorize Slice 4 or 5.
 
 May develop in parallel with Slice 2 after the shared contract freeze.
 

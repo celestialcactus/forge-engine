@@ -1,10 +1,31 @@
+# 2026-08-31 - CLI8A Slice 3 autosave candidate passes the local product gate
+
+- Candidate `afa6e67` implements current-repository `off|ask|auto` controls. The
+  standing grant and developer preference live in the exact developer ledger; the
+  grant carries the repository identity, and developer-profile grants fail closed.
+- TypeScript limits no-pause auto capture to a narrow deterministic
+  presentation/style grammar. Preference-like ambiguity falls back to `ask`;
+  normal task text is ignored, and secret-like, structured/remote,
+  authority-changing, repository, model, and tool material cannot use the auto
+  candidate path.
+- Rust validates the active grant, actor, exact provenance and scope, appends before
+  acknowledgement, and performs immediate undo as a narrow atomic rewrite with a
+  content-free receipt and no recovery copy. Ordinary find/show/explain see the
+  developer preference across process restart; planner/provider retrieval remains
+  inactive.
+- The local Windows x64 gate passes 195 Rust tests with 16 explicit ignores, 159
+  Node tests, real memory and configured-interactive product fixtures, RustSec,
+  clean-install ask/auto/off lifecycle, native packing, and the 20-sample benchmark
+  assertion. Hosted target, merge, and checkpoint acceptance remain open; Slices
+  4–5 and CLI8B/C remain unauthorized.
+
 # 2026-08-31 - CLI8A Slice 3 autosave proof is explicitly authorized
 
 - Approved the restated Product, Architecture, Program Design, and Vertical Slice
   boundary for repo-scoped autosave `off|ask|auto`; `ask` remains the default.
 - Only local user action may create or revoke an actor/scope-bound standing grant.
-  Rust validates grant, provenance, eligibility, and durable admission; TypeScript
-  owns candidate construction, orchestration, and `Remembered · Undo · Explain`
+  Rust validates grant, provenance, scope, and durable admission; TypeScript owns
+  bounded candidate eligibility, orchestration, and `Remembered · Undo · Explain`
   presentation.
 - Secrets, capability/approval changes, model/tool/repository text, speculative
   inference, organization policy, scope widening, and ambiguous candidates cannot
