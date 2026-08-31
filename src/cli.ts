@@ -989,7 +989,10 @@ try {
           const undone = latestAutoSave;
           await autosave.undo(undone);
           latestAutoSave = undefined;
-          return [`Undone: ${undone.statement}. No recovery copy was retained.`];
+          return [
+            `Undone: ${undone.statement}`,
+            'No recovery copy was retained.',
+          ];
         },
         async explain() {
           if (latestAutoSave === undefined) return ['No automatic save in this session is available to explain.'];

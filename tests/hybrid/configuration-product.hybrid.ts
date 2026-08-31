@@ -159,6 +159,7 @@ test('source-built configured run and interactive commands use one fixed route w
     assert.match(interactive.stdout, /Remembered: I prefer concise test output\./u);
     assert.match(interactive.stdout, /exact direct input under this repository’s local auto grant/u);
     assert.match(interactive.stdout, /No recovery copy was retained/u);
+    assert.doesNotMatch(interactive.stdout, /\.\. No recovery copy was retained/u);
     assert.doesNotMatch(interactive.stdout, /Remember this preference\?/u);
     assert.doesNotMatch(interactive.stdout + interactive.stderr, /fallback provider/u);
     assert.equal(requests.length, 2);
