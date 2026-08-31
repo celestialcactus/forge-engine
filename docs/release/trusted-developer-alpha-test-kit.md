@@ -12,6 +12,27 @@ publish a public release.
 - Git for workspace evidence; and
 - the platform build tools listed in the root README.
 
+Packaged end users do not need a compiler: the install must supply the matching
+exact-version `forge-engine-kernel-<platform>-<arch>` optional package. The source
+acceptance path does compile the kernel. On Windows it specifically requires the
+`x86_64-pc-windows-msvc` Rust toolchain, Visual Studio Build Tools 2022 with the
+**Desktop development with C++** workload, the MSVC x64/x86 build tools, and a
+Windows 10 or Windows 11 SDK. Open the x64 Native Tools developer terminal (or launch
+VS Code from it) and verify:
+
+```powershell
+rustup show active-toolchain
+where.exe link
+where.exe rc
+```
+
+`npm run check` does not compile the Rust kernel. Use `npm run onboard` for the
+one-command source path, or run `npm run build:product` before invoking
+`node dist/src/cli.js`. A fresh source build should leave the native binary at
+`target/debug/forge-kernel.exe` on Windows or `target/debug/forge-kernel` on
+macOS/Linux. Because `target/` is ignored and discovery is checkout-relative, a
+binary built in a different worktree does not satisfy this prerequisite.
+
 Trusted verification inherits the launching developer account's filesystem,
 network, credentials, privileges, and resource access. Forge owns process
 lifecycle and transaction policy; that is not an accepted OS sandbox.

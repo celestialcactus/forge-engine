@@ -1,3 +1,23 @@
+# 2026-08-31 - CLI8A Slice 0–2 passes the independent local product gate
+
+- Exact implementation `6f37c8c` passed in a clean VS Code worktree using Rust
+  1.97.1, Visual Studio Build Tools 2022 17.14.37614.0, MSVC 14.44.35207, and
+  Windows SDK 10.0.26100.0.
+- The four focused memory binaries passed 16/16, `npm run check` passed 154/154,
+  the source kernel built/probed as `source-debug`, and the focused real-CLI hybrid
+  passed 1/1.
+- Fifteen separate CLI processes proved remember across restart, natural selectors,
+  explainable provenance/scope, bounded correction/history, restore, and final
+  erase-previous. One active version remained, erased prior content was absent from
+  Forge memory state, stderr was empty, and retrieval/provider/network activity
+  remained inactive.
+- The authoritative follow-up passed the full product gate (191 Rust tests with 16
+  explicit ignored cases, 154 Node tests, 59/66 hybrid with seven explicit skips,
+  and source smoke), RustSec over 46 dependencies, clean-install package lifecycle,
+  native archive packing, and a 20-sample benchmark with 90.757-ms Rust bridge p95.
+- This closes the local supported-toolchain and separate VS Code product gate only.
+  Hosted targets, merge, and Slices 3–5 remain explicitly unaccepted.
+
 # 2026-08-29 - CLI8A Slice 0–2 four-gate packet is approved and implemented as a candidate
 
 - Approved the individual-developer product outcome and explicit non-claims, the
@@ -14,9 +34,9 @@
   and TypeScript CLI orchestration for remember/find/show/explain/correct/history/
   restore. Retrieval, provider/planner injection, autosave, forget/purge, and skills
   remain inactive.
-- Focused Rust tests and clippy pass under the available GNU-LLVM toolchain; 154
-  Node tests and the retained hybrid suite pass. Exact supported MSVC, separate VS
-  Code, hosted, and merge evidence remain before checkpoint acceptance. See
+- Focused Rust tests and clippy initially passed under the available GNU-LLVM
+  toolchain; the later 2026-08-31 entry records the exact MSVC and separate VS Code
+  pass. Hosted and merge evidence remain before checkpoint acceptance. See
   [ADR-0039](ADRs/ADR-0039-cli8a-hybrid-memory-capture-and-recovery.md) and the
   [four-gate packet](../tasks/CLI8A-MEMORY-FOUR-GATE-REVIEW.md).
 

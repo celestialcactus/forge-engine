@@ -537,6 +537,31 @@ The hosted gate must cover Windows x64, macOS ARM64/x64, and Ubuntu x64 on the e
 candidate. CLI8A acceptance records counts, OS/arch, exact kernel, state root,
 storage ceilings, compaction results, and retained non-claims.
 
+### Local candidate evidence
+
+Implementation `6f37c8c` passed the independent Windows/VS Code local gate on
+2026-08-31. The clean exact-commit worktree used Rust 1.97.1, Visual Studio Build
+Tools 2022 17.14.37614.0, MSVC 14.44.35207, and Windows SDK 10.0.26100.0. The
+four focused memory binaries passed 16/16 tests, `npm run check` passed 154/154,
+the source kernel built and probed as `source-debug`, and the focused real-CLI
+hybrid passed 1/1.
+
+The product run used 15 separate CLI processes to prove remember across restart,
+find/show/explain without a full internal ID, bounded correction/history, restore,
+and final `--erase-previous`. It retained one active version, removed erased prior
+content from all Forge memory-state files, emitted empty stderr, performed no
+planner/provider/retrieval/discovery/network work, and reported retrieval inactive.
+Temporary validation state was removed. This is local evidence only; hosted target
+acceptance, merge, and Slices 3–5 remain open.
+
+The authoritative worktree follow-up also passed `npm run check:product` under the
+supported MSVC environment (191 Rust tests passed with 16 explicit ignored helper/
+external-corpus cases, 154 Node tests, 59/66 hybrid with seven explicit skips, and
+source product smoke). RustSec scanned 46 locked dependencies without findings; the
+clean-install/update/uninstall package lifecycle, native-package archive, and
+20-sample benchmark passed with a 90.757-ms Rust bridge p95. These results still do
+not substitute for the declared hosted target matrix.
+
 ### Ownership and parallel safety
 
 Before the tracer slice, one integration owner freezes:

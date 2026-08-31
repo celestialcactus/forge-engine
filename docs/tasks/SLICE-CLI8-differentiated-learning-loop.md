@@ -27,24 +27,33 @@ implementation Slices 1–2 are currently authorized.
 | Program Design | approved for Slice 0–2 | Review packet Gate 3 | Alpha ceilings are conservative safety budgets; `reviewed_decision` closes the repository-decision contract gap. |
 | Vertical Slices | partially approved | Review packet Gate 4 | Prerequisite Slice 0 and implementation Slices 1–2 authorized; Slices 3–5 remain gated. |
 
-Slice 0 and the Slice 1–2 candidate are implemented on the active branch. Focused
-Rust tests, clippy, 154 Node tests, and the retained hybrid suite pass; exact MSVC
-workspace validation, separate VS Code product validation, and hosted evidence
-remain before acceptance. Autosave, privacy lifecycle, context preview, retrieval,
-and skills remain gated.
+Slice 0 and the Slice 1–2 candidate are implemented on the active branch. Exact
+MSVC, separate VS Code product-lifecycle, focused Rust, Node, and hybrid validation
+pass for implementation `6f37c8c`; hosted target evidence and merge remain before
+acceptance. Autosave, privacy lifecycle, context preview, retrieval, and skills
+remain gated.
 
 Current local evidence:
 
-- `cargo +1.97.1-x86_64-pc-windows-gnullvm clippy --workspace --all-targets
-  --locked -- -D warnings` passes;
-- the four focused memory test binaries pass 16 tests;
-- `npm run check` passes 154 tests plus typecheck/build;
-- `npm run test:hybrid` passes 59 scenarios with seven existing explicit
-  separate-kernel skips, including the new source-CLI memory lifecycle;
-- the ordinary MSVC command cannot start because this workstation currently lacks
-  Visual Studio Build Tools/Windows SDK (`link.exe`). A full alternate-toolchain
-  Rust run is not substituted as acceptance evidence because pre-existing
-  `ReplaceFileW` and AppContainer tests require the supported Windows environment.
+- a clean VS Code worktree at exact implementation `6f37c8c` used Rust 1.97.1,
+  Visual Studio Build Tools 2022 17.14.37614.0, MSVC 14.44.35207, and Windows SDK
+  10.0.26100.0;
+- the four focused MSVC memory test binaries pass 16/16 tests and the source kernel
+  builds and probes as `target/debug/forge-kernel.exe` (`source-debug`);
+- `npm run check` passes 154/154 tests plus typecheck/build with empty stderr;
+- the real source CLI passes remember/restart/find/show/explain, bounded correction,
+  history, restore, and erase-previous across 15 separate processes without a full
+  internal ID; one active version remains and erased content is absent from all
+  Forge memory-state files;
+- the focused source CLI hybrid passes 1/1, and the retained hybrid suite passes 59
+  scenarios with seven existing explicit separate-kernel skips;
+- the lifecycle creates no planner/provider/retrieval/discovery/network activity,
+  and `explain`/`status` truthfully report retrieval inactive;
+- the authoritative worktree then passes `npm run check:product` under the supported
+  MSVC environment (191 Rust tests passed/16 explicit ignored, 154 Node tests, 59/66
+  hybrid with seven explicit skips, and source product smoke), `npm run rust:audit`
+  over 46 locked dependencies, the clean-install/update/uninstall release smoke,
+  native-package packing, and the 20-sample benchmark (Rust bridge p95 90.757 ms).
 
 ## Boundary
 
@@ -122,7 +131,8 @@ Current package status:
 - [x] authorized Slice 2 correction, bounded recovery, restoration, and
       erase-previous rewrite;
 - [ ] unapproved Slice 3–5 autosave, forget/purge/history-clear, and preview;
-- [ ] exact-candidate local and hosted acceptance gate.
+- [x] exact-candidate local MSVC and separate VS Code product-lifecycle gate;
+- [ ] exact-candidate hosted and merge acceptance gate.
 
 The stale-base candidate `b5effea` may be used as a reference for bounded limits,
 append/rebuild mechanics, and adversarial tests. It must not be cherry-picked or

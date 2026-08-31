@@ -1,7 +1,7 @@
 # ForgeEngine current execution index
 
 **Status:** operational ground truth for active ForgeEngine delivery
-**As of:** 2026-08-29
+**As of:** 2026-08-31
 **Accepted implementation baseline:** PR #31 merge `f36a767` (implementation
 candidate `e7ba284`)
 **Documentation baseline:** the commit containing this file
@@ -70,7 +70,7 @@ claims permitted at each delivery stage.
 | Trusted-alpha release | `CLI7-ALPHA` | Private distribution/onboarding foundation accepted through PR #27 (`6cc90c1`) and Checkpoint 90; PR #28 (`2882550`) corrects reported blockers | Preserve the accepted private tester boundary. Rights attestation and artifact signing/provenance remain separate public-distribution gates; no public artifact has shipped. |
 | Effective configuration | `CLI7-ALPHA-CONFIG` | Accepted through PR #31 candidate `e7ba284` and Checkpoint 91 | Preserve the fixed files, immutable compiler, source attribution, secret-safe projection, atomic route, monotonic ceilings, and no-fallback behavior. Do not add an organization provider-policy subsystem. |
 | Sandbox provider lifecycle | `SBX-PROVIDER-LIFECYCLE` | Independent and unaccepted for production; local managed-Windows/AppContainer conformance exists | Complete disposable-Windows-VM install/upgrade/uninstall/reboot/residue plus macOS/adversarial evidence. Do not advertise `restrictedReady` or promote a provider until the exact gate passes. |
-| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Slice 0–2 candidate implemented; focused Rust/clippy, 154 Node tests, and retained hybrid suite pass; exact supported-toolchain/VS Code and hosted evidence pending | Validate the exact candidate with MSVC and a separate VS Code product run, then hosted targets. Do not begin Slices 3–5, cherry-pick stale candidate `b5effea`, or activate retrieval. |
+| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Slice 0–2 candidate `6f37c8c` passes exact MSVC, separate VS Code lifecycle, 16 focused Rust tests, 154 Node tests, and real source-CLI/hybrid evidence; hosted and merge evidence pending | Validate the exact candidate on hosted Windows x64, macOS ARM64/x64, and Ubuntu x64, then checkpoint and merge. Do not begin Slices 3–5, cherry-pick stale candidate `b5effea`, or activate retrieval. |
 
 The stale-base CLI7 candidate was successfully replayed without importing its old
 ancestry. The remaining CLI8A candidate is useful source material, not accepted
@@ -86,8 +86,9 @@ fresh ancestry.
    is accepted through PR #31 and Checkpoint 91.
 4. ADR-0038 and ADR-0039 settle the authorized memory boundary, and the
    [combined four-gate packet](../tasks/CLI8A-MEMORY-FOUR-GATE-REVIEW.md) authorizes
-   Slice 0–2. The implementation candidate now needs exact supported-toolchain,
-   separate VS Code, and hosted evidence; runtime retrieval remains gated by CLI8B.
+   Slice 0–2. Exact MSVC and separate VS Code product-lifecycle evidence pass at
+   `6f37c8c`; hosted target and merge evidence remain. Runtime retrieval remains
+   gated by CLI8B.
 5. Merge `SBX-PROVIDER-LIFECYCLE` only after its independent VM/provider gate; its
    timing does not redefine the trusted-alpha claim.
 
@@ -110,9 +111,9 @@ rebased and reconciled before merge rather than resolved by taking an entire sid
 
 ## Next three gates
 
-1. Validate the exact CLI8A Slice 0–2 candidate with the supported MSVC toolchain,
-   a separate VS Code product lifecycle, and the declared hosted targets; record a
-   checkpoint only if those gates pass.
+1. Validate the exact CLI8A Slice 0–2 candidate on the declared hosted targets;
+   record a checkpoint and merge only if those gates pass. The supported MSVC and
+   separate VS Code product-lifecycle gates already pass at `6f37c8c`.
 2. After that candidate is accepted and later retrieval authorization is granted,
    run CLI8B
    no-memory/retrieved-memory evaluation, with no automatic retrieval
