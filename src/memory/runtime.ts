@@ -374,7 +374,7 @@ export class RustMemoryRuntime implements MemoryCaptureRuntime {
         if (stderr.length < 65_536) stderr += chunk.slice(0, 65_536 - stderr.length);
       });
       child.once('error', (error) => finish(new Error(`Rust kernel failed to start: ${error.message}`)));
-      child.once('exit', (code) => {
+      child.once('close', (code) => {
         if (settled) return;
         try {
           const frames = stdout.trim().split(/\r?\n/u);
