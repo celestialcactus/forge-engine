@@ -1,12 +1,31 @@
 import assert from 'node:assert/strict';
+import { PassThrough } from 'node:stream';
 import { test } from 'node:test';
 import {
   chooseOllamaModel,
+  createNodeInteractiveIo,
   resolveInteractiveRoute,
   runInteractiveSession,
   type InteractiveSessionIo,
 } from '../src/interactive-cli.js';
 import type { InferenceRoute } from '../src/inference/contracts.js';
+
+test('terminal input is echoed through the configured interactive output', async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  output.setEncoding('utf8');
+  let rendered = '';
+  output.on('data', (chunk: string) => { rendered += chunk; });
+  const io = createNodeInteractiveIo({ input, output, terminal: true });
+
+  const answer = io.question('forge> ');
+  input.write('/help\r');
+
+  assert.equal(await answer, '/help');
+  assert.match(rendered, /forge> /u);
+  assert.match(rendered, /\/help/u);
+  io.close();
+});
 
 test('discovers a deterministic local coding model without selecting cloud inference', async () => {
   assert.equal(chooseOllamaModel(['zeta', 'qwen2.5-coder:7b', 'alpha-coder']), 'qwen2.5-coder:7b');

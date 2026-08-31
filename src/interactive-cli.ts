@@ -109,6 +109,12 @@ export interface InteractiveSessionIo {
   close(): void;
 }
 
+export interface NodeInteractiveIoOptions {
+  readonly input?: NodeJS.ReadableStream;
+  readonly output?: NodeJS.WritableStream;
+  readonly terminal?: boolean;
+}
+
 export interface InteractiveRunSummary {
   readonly runId: string;
   readonly status: RunStatus;
@@ -166,8 +172,11 @@ interface InteractiveLineWaiter {
 const abortReason = (signal: AbortSignal): unknown =>
   signal.reason ?? new Error('Forge interactive prompt was cancelled.');
 
-export function createNodeInteractiveIo(): InteractiveSessionIo {
-  const readline = createInterface({ input: process.stdin, terminal: process.stdin.isTTY });
+export function createNodeInteractiveIo(options: NodeInteractiveIoOptions = {}): InteractiveSessionIo {
+  const input = options.input ?? process.stdin;
+  const output = options.output ?? process.stdout;
+  const terminal = options.terminal ?? process.stdin.isTTY;
+  const readline = createInterface({ input, output, terminal });
   const queuedLines: string[] = [];
   const waiters: InteractiveLineWaiter[] = [];
   let closed = false;
@@ -194,7 +203,7 @@ export function createNodeInteractiveIo(): InteractiveSessionIo {
   return {
     async question(prompt, signal) {
       if (signal?.aborted === true) throw abortReason(signal);
-      process.stdout.write(prompt);
+      output.write(prompt);
       const queued = queuedLines.shift();
       if (queued !== undefined) return queued;
       if (closed) return undefined;
@@ -217,11 +226,11 @@ export function createNodeInteractiveIo(): InteractiveSessionIo {
       });
     },
     write(line) {
-      process.stdout.write(line + '\n');
+      output.write(line + '\n');
     },
     clear() {
-      if (process.stdout.isTTY) process.stdout.write('\u001bc');
-      else process.stdout.write('\n');
+      if (terminal) output.write('\u001bc');
+      else output.write('\n');
     },
     close() {
       if (!closed) readline.close();
