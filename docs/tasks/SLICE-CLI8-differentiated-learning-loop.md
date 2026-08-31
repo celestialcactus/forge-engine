@@ -2,8 +2,8 @@
 
 **State:** Slices 0–2 accepted through PR #32 and
 [Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md);
-Slice 3 implementation candidate `afa6e67` passes local gates; hosted/merge
-acceptance pending; Slices 4–5 gated
+Slice 3 corrected candidate `5c84a97` passes local gates; corrected live VS Code,
+hosted, and merge acceptance pending; Slices 4–5 gated
 **Authority:**
 [ADR-0034](../decisions/ADRs/ADR-0034-commodity-sandbox-and-differentiated-learning-lane.md),
 [ADR-0038](../decisions/ADRs/ADR-0038-cli8a-memory-identity-admission-and-retention.md),
@@ -61,14 +61,15 @@ Current local evidence:
   `33433043538` and `33433043562`; Checkpoint 92 records the platform-name,
   timeout-snapshot, and concurrent-retention-root test-fixture corrections plus the
   external GitHub artifact-upload DNS failure that separated the final attempts.
-- Slice 3 candidate `afa6e67` adds exact developer-ledger standing grants bound to
+- Slice 3 implementation `afa6e67`, with corrected UX candidate `5c84a97`, adds exact developer-ledger standing grants bound to
   the current repository, `ask` default and local `off|ask|auto` controls, narrow
   deterministic direct-preference eligibility, cross-process find/explain, and
   narrow immediate undo with no recovery copy. Local Windows x64 gates pass 195
-  Rust tests (16 ignored helpers/external corpora), 159 Node tests, both real memory
-  product cases, configured interactive no-pause/explain/undo, package lifecycle,
-  RustSec audit, native packing, and the 20-sample benchmark assertion. Hosted and
-  merge acceptance are still required.
+  Rust tests (16 ignored helpers/external corpora), 160 Node tests, both real memory
+  product cases, a terminal-stream prompt/input-echo regression, configured
+  interactive no-pause/explain/undo, package lifecycle,
+  RustSec audit, native packing, and the 20-sample benchmark assertion. Corrected
+  live VS Code, hosted, and merge acceptance are still required.
 
 ## Boundary
 

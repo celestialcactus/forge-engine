@@ -1,4 +1,4 @@
-# 2026-08-31 - CLI8A Slice 3 autosave candidate passes the local product gate
+# 2026-08-31 - CLI8A Slice 3 candidate corrects the interactive PTY gate
 
 - Candidate `afa6e67` implements current-repository `off|ask|auto` controls. The
   standing grant and developer preference live in the exact developer ledger; the
@@ -13,7 +13,13 @@
   content-free receipt and no recovery copy. Ordinary find/show/explain see the
   developer preference across process restart; planner/provider retrieval remains
   inactive.
-- The local Windows x64 gate passes 195 Rust tests with 16 explicit ignores, 159
+- The first live VS Code pilot found that terminal input was accepted but rendered
+  invisibly because the readline terminal adapter omitted its output stream. Candidate
+  `33ee986` supplies the exact output stream and adds a terminal-stream regression that
+  proves both prompt rendering and typed-command echo. The pilot must pass again on the
+  corrected candidate before acceptance. Follow-up `5c84a97` removes the doubled-period
+  undo notification exposed by that PTY pilot.
+- The corrected local Windows x64 gate passes 195 Rust tests with 16 explicit ignores, 160
   Node tests, real memory and configured-interactive product fixtures, RustSec,
   clean-install ask/auto/off lifecycle, native packing, and the 20-sample benchmark
   assertion. Hosted target, merge, and checkpoint acceptance remain open; Slices
