@@ -2,8 +2,9 @@
 
 **State:** Slices 0–2 accepted through PR #32 and
 [Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md);
-Slice 3 corrected candidate `3849cd0` passes local gates; corrected live VS Code,
-hosted, and merge acceptance pending; Slices 4–5 gated
+Slice 3 accepted for merge through PR #33 implementation candidate `26f011e` and
+[Checkpoint 93](../decisions/checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md);
+Slices 4–5 gated
 **Authority:**
 [ADR-0034](../decisions/ADRs/ADR-0034-commodity-sandbox-and-differentiated-learning-lane.md),
 [ADR-0038](../decisions/ADRs/ADR-0038-cli8a-memory-identity-admission-and-retention.md),
@@ -32,7 +33,8 @@ implementation Slices 1–3 are currently authorized.
 Slice 0 and implementation Slices 1–2 are accepted through PR #32. Exact MSVC,
 separate VS Code product-lifecycle, focused Rust, Node, hybrid, package, benchmark,
 and hosted target validation pass through exact implementation candidate `e9e8cd9`.
-Slice 3 autosave is implemented as a locally gated candidate. Slice 4 privacy lifecycle,
+Slice 3 autosave is accepted for merge through PR #33 candidate `26f011e` after
+exact local, hosted, real PTY, and live VS Code gates. Slice 4 privacy lifecycle,
 Slice 5 context preview, retrieval, and skills remain gated.
 
 Current local evidence:
@@ -61,16 +63,18 @@ Current local evidence:
   `33433043538` and `33433043562`; Checkpoint 92 records the platform-name,
   timeout-snapshot, and concurrent-retention-root test-fixture corrections plus the
   external GitHub artifact-upload DNS failure that separated the final attempts.
-- Slice 3 implementation `afa6e67`, with corrected candidate `3849cd0`, adds exact developer-ledger standing grants bound to
+- Slice 3 implementation `afa6e67`, with final implementation candidate `26f011e`, adds exact developer-ledger standing grants bound to
   the current repository, `ask` default and local `off|ask|auto` controls, narrow
   deterministic direct-preference eligibility, cross-process find/explain, and
   narrow immediate undo with no recovery copy. Local Windows x64 gates pass 195
-  Rust tests (16 ignored helpers/external corpora), 161 Node tests, both real memory
-  product cases, a terminal-stream prompt/input-echo regression, configured
+  Rust tests (16 ignored helpers/external corpora), 162 Node tests, both real memory
+  product cases, owned TTY editing plus queued non-TTY regressions, configured
   interactive no-pause/explain/undo, package lifecycle,
   RustSec audit, native packing, the 20-sample benchmark assertion, and a deterministic
-  protocol-stream close regression. Corrected
-  live VS Code, hosted, and merge acceptance are still required.
+  protocol-stream close regression. Cross-platform runs `33449198939` and
+  `33449198943` pass all nine declared hosted jobs. A real VS Code integrated-terminal
+  pilot on exact `26f011e` confirms Backspace editing, `/help`, and `/exit`.
+  Checkpoint 93 accepts this boundary for merge without authorizing Slice 4 or 5.
 
 ## Boundary
 
@@ -147,12 +151,10 @@ Current package status:
 - [x] authorized Slice 1 append/rebuild plus explicit remember/find/show/explain;
 - [x] authorized Slice 2 correction, bounded recovery, restoration, and
       erase-previous rewrite;
-- [ ] authorized Slice 3 implementation complete locally; hosted/merge acceptance
-      gate remains;
+- [x] authorized Slice 3 accepted for merge through PR #33 and Checkpoint 93;
 - [ ] unapproved Slice 4–5 forget/purge/history-clear and preview;
 - [x] exact-candidate local MSVC and separate VS Code product-lifecycle gate;
-- [x] exact-candidate hosted and merge acceptance gate through PR #32 and
-      Checkpoint 92.
+- [x] exact-candidate hosted acceptance through PRs #32–33 and Checkpoints 92–93.
 
 The stale-base candidate `b5effea` may be used as a reference for bounded limits,
 append/rebuild mechanics, and adversarial tests. It must not be cherry-picked or

@@ -1,3 +1,25 @@
+# 2026-09-01 - CLI8A Slice 3 passes the hosted and real VS Code gate
+
+- PR #33 implementation candidate `26f011e` is accepted for merge through
+  [Checkpoint 93](checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md).
+- The accepted boundary is deliberately narrow: current-repository `off|ask|auto`,
+  exact developer-ledger standing grants, bounded direct-preference eligibility,
+  visible attribution, narrow immediate undo without a recovery copy, and the same
+  Rust grant authority across CLI and conversation orchestration.
+- The gate includes 195 Rust tests, 162 Node tests, 60/67 hybrid results with seven
+  explicit skips, RustSec, clean-install package lifecycle, native packing,
+  benchmark assertion, all nine declared hosted jobs, a separate real Windows PTY,
+  and the user's exact-head VS Code integrated-terminal Backspace/`/help`/`/exit`
+  confirmation.
+- The UX investigation corrected two real adapter defects rather than weakening
+  the gate: terminal output was first bound explicitly, and the final candidate
+  separates owned TTY editing from queued non-TTY pipe ingestion while preserving
+  Rust run and memory authority.
+- Retrieval, planner/context injection, developer-profile grants, privacy
+  forget/purge/history-clear, context preview, skills, and Slices 4–5 remain
+  inactive. The next smallest lane is a separate four-gate review and explicit
+  authorization of Slice 4.
+
 # 2026-08-31 - CLI8A Slice 3 candidate corrects the interactive PTY gate
 
 - Candidate `afa6e67` implements current-repository `off|ask|auto` controls. The

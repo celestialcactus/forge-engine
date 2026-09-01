@@ -2,8 +2,9 @@
 
 **Status:** Slices 0–2 accepted through PR #32 and
 [Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md);
-Slice 3 corrected candidate `3849cd0` passes local gates; corrected live VS Code,
-hosted, and merge acceptance pending; Slices 4–5 remain unapproved
+Slice 3 accepted for merge through PR #33 implementation candidate `26f011e` and
+[Checkpoint 93](../decisions/checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md);
+Slices 4–5 remain unapproved
 **Date:** 2026-08-29
 **Delivery path:** full
 **Active task:** [Slice CLI8](SLICE-CLI8-differentiated-learning-loop.md)
@@ -582,8 +583,8 @@ and final `--erase-previous`. It retained one active version, removed erased pri
 content from all Forge memory-state files, emitted empty stderr, performed no
 planner/provider/retrieval/discovery/network work, and reported retrieval inactive.
 Temporary validation state was removed. Slice 3 was later authorized on 2026-08-31
-and is now implemented at `afa6e67` with corrected candidate `3849cd0`;
-Slices 4–5 remain open.
+and is implemented at `afa6e67`, with final implementation candidate `26f011e`
+accepted for merge by Checkpoint 93. Slices 4–5 remain open.
 
 The authoritative worktree follow-up also passed `npm run check:product` under the
 supported MSVC environment (191 Rust tests passed with 16 explicit ignored helper/
@@ -677,18 +678,24 @@ editing configuration.
 sources fall back to ask or fail; repository/model/tool text cannot self-authorize;
 undo removes content; CLI and conversational behavior use the same Rust grant.
 
-**Corrected candidate:** `3849cd0` (`afa6e67` is the underlying autosave implementation).
+**Accepted implementation candidate:** `26f011e` (`afa6e67` is the underlying
+autosave implementation).
 The first live VS Code pilot found accepted-but-invisible terminal input; `33ee986`
 binds readline to the terminal output and adds a prompt/input-echo regression. The
 follow-up `5c84a97` also removes a doubled-period undo notification. The
 first corrected hosted attempt exposed a Linux stdout-drain race; `3849cd0` waits
 for the protocol stream to close and adds a deterministic delayed-writer regression.
+A later real VS Code pilot found that the shared queued-line adapter ignored
+Backspace despite a valid raw TTY. Candidate `26f011e` separates transport behavior:
+Forge owns TTY editing while retaining queued ingestion for deterministic pipes.
 The local Windows x64 product gate passes 195 Rust tests with 16 explicit
-helper/external-corpus ignores, 161 Node tests,
+helper/external-corpus ignores, 162 Node tests,
 the real configured interactive no-pause/explain/undo fixture, the two-case memory
 product fixture, RustSec audit, clean-install ask/auto/off lifecycle, native packing,
-and the 20-sample benchmark assertion. Corrected live VS Code, hosted target, and
-merge acceptance remain open; this evidence does not authorize Slice 4 or 5.
+and the benchmark assertion. Cross-platform runs `33449198939` and `33449198943`
+pass all nine declared jobs, and a live VS Code integrated-terminal pilot at exact
+`26f011e` confirms Backspace, `/help`, and `/exit`. Checkpoint 93 accepts Slice 3
+for merge; this evidence does not authorize Slice 4 or 5.
 
 May develop in parallel with Slice 2 after the shared contract freeze.
 
