@@ -1,4 +1,5 @@
 import { createInterface } from 'node:readline';
+import { StringDecoder } from 'node:string_decoder';
 import type { OutcomeStatus, RunStatus } from './slice0/contracts.js';
 import type { InferenceFetch, InferenceRoute } from './inference/contracts.js';
 import type { ProductApprovalProfile } from './approval-profile.js';
@@ -109,6 +110,12 @@ export interface InteractiveSessionIo {
   close(): void;
 }
 
+export interface NodeInteractiveIoOptions {
+  readonly input?: NodeJS.ReadableStream;
+  readonly output?: NodeJS.WritableStream;
+  readonly terminal?: boolean;
+}
+
 export interface InteractiveRunSummary {
   readonly runId: string;
   readonly status: RunStatus;
@@ -123,6 +130,14 @@ export interface InteractiveSessionOptions {
   readonly runTask: (task: string, route: InferenceRoute) => Promise<InteractiveRunSummary>;
   readonly validateRoute?: (route: InferenceRoute) => void | Promise<void>;
   readonly notices?: readonly string[];
+  readonly memory?: InteractiveMemoryControls;
+}
+
+export interface InteractiveMemoryControls {
+  capture(input: string): Promise<readonly string[]>;
+  status(): Promise<readonly string[]>;
+  undo(): Promise<readonly string[]>;
+  explain(): Promise<readonly string[]>;
 }
 
 const sessionHelp = [
@@ -131,6 +146,9 @@ const sessionHelp = [
   '/permissions                  Explain the active approval profile',
   '/model                        Show the active provider/model',
   '/model <ollama|openai> <name> Change the route for this session',
+  '/memory                       Show the current memory capture mode',
+  '/memory undo                  Undo the latest automatic save from this session',
+  '/memory explain               Explain the latest automatic save',
   '/clear                        Clear the terminal',
   '/exit                         Exit Forge',
 ].join('\n');
@@ -155,8 +173,241 @@ interface InteractiveLineWaiter {
 const abortReason = (signal: AbortSignal): unknown =>
   signal.reason ?? new Error('Forge interactive prompt was cancelled.');
 
-export function createNodeInteractiveIo(): InteractiveSessionIo {
-  const readline = createInterface({ input: process.stdin, terminal: process.stdin.isTTY });
+interface RawModeReadableStream extends NodeJS.ReadableStream {
+  readonly isTTY?: boolean;
+  readonly isRaw?: boolean;
+  setRawMode?(enabled: boolean): unknown;
+}
+
+interface RawTerminalEditor {
+  prompt(value: string): void;
+  close(): void;
+}
+
+const terminalEscapeActions = new Map<string, 'left' | 'right' | 'up' | 'down' | 'home' | 'end' | 'delete'>([
+  ['\u001b[A', 'up'],
+  ['\u001b[B', 'down'],
+  ['\u001b[C', 'right'],
+  ['\u001b[D', 'left'],
+  ['\u001bOA', 'up'],
+  ['\u001bOB', 'down'],
+  ['\u001bOC', 'right'],
+  ['\u001bOD', 'left'],
+  ['\u001b[H', 'home'],
+  ['\u001b[F', 'end'],
+  ['\u001bOH', 'home'],
+  ['\u001bOF', 'end'],
+  ['\u001b[1~', 'home'],
+  ['\u001b[3~', 'delete'],
+  ['\u001b[4~', 'end'],
+  ['\u001b[7~', 'home'],
+  ['\u001b[8~', 'end'],
+]);
+
+const createRawTerminalEditor = (
+  input: RawModeReadableStream,
+  output: NodeJS.WritableStream,
+  onLine: (line: string) => void,
+  onClose: () => void,
+): RawTerminalEditor => {
+  const decoder = new StringDecoder('utf8');
+  const knownEscapeSequences = [...terminalEscapeActions.keys()];
+  const history: string[] = [];
+  let historyIndex = 0;
+  let historyDraft: string[] = [];
+  let prompt = '';
+  let characters: string[] = [];
+  let cursor = 0;
+  let pendingEscape = '';
+  let skipLineFeed = false;
+  let closed = false;
+  const changedRawMode = input.setRawMode !== undefined && input.isRaw !== true;
+
+  const redraw = (): void => {
+    const line = characters.join('');
+    const prefix = characters.slice(0, cursor).join('');
+    // Reprinting the prefix after a carriage return positions the cursor without
+    // guessing the display width of Unicode characters.
+    output.write('\r' + prompt + line + '\u001b[K\r' + prompt + prefix);
+  };
+  const leaveHistory = (): void => {
+    historyIndex = history.length;
+    historyDraft = [];
+  };
+  const replaceLine = (value: string): void => {
+    characters = Array.from(value);
+    cursor = characters.length;
+    redraw();
+  };
+  const submit = (): void => {
+    const line = characters.join('');
+    output.write('\r\n');
+    if (line.length > 0 && history.at(-1) !== line) history.push(line);
+    historyIndex = history.length;
+    historyDraft = [];
+    characters = [];
+    cursor = 0;
+    prompt = '';
+    onLine(line);
+  };
+  const applyAction = (action: 'left' | 'right' | 'up' | 'down' | 'home' | 'end' | 'delete'): void => {
+    if (action === 'left') cursor = Math.max(0, cursor - 1);
+    else if (action === 'right') cursor = Math.min(characters.length, cursor + 1);
+    else if (action === 'home') cursor = 0;
+    else if (action === 'end') cursor = characters.length;
+    else if (action === 'delete') {
+      if (cursor < characters.length) {
+        characters.splice(cursor, 1);
+        leaveHistory();
+      }
+    } else if (action === 'up') {
+      if (history.length === 0) return;
+      if (historyIndex === history.length) historyDraft = [...characters];
+      historyIndex = Math.max(0, historyIndex - 1);
+      replaceLine(history[historyIndex] ?? '');
+      return;
+    } else {
+      if (historyIndex >= history.length) return;
+      historyIndex++;
+      replaceLine(historyIndex === history.length ? historyDraft.join('') : (history[historyIndex] ?? ''));
+      return;
+    }
+    redraw();
+  };
+  const applyEscapeCharacter = (character: string): void => {
+    pendingEscape += character;
+    const action = terminalEscapeActions.get(pendingEscape);
+    if (action !== undefined) {
+      pendingEscape = '';
+      applyAction(action);
+      return;
+    }
+    if (knownEscapeSequences.some((sequence) => sequence.startsWith(pendingEscape))) return;
+    if (pendingEscape.startsWith('\u001b[')) {
+      const controlSequence = pendingEscape.slice(2);
+      const finalCode = controlSequence.codePointAt(controlSequence.length - 1);
+      if (controlSequence.length === 0 || finalCode === undefined || finalCode < 0x40 || finalCode > 0x7e) return;
+    } else if (pendingEscape.startsWith('\u001bO') && pendingEscape.length < 3) {
+      return;
+    }
+    // Unknown terminal control sequences are ignored instead of becoming prompt text.
+    pendingEscape = '';
+  };
+  const applyCharacter = (character: string): void => {
+    if (pendingEscape.length > 0) {
+      applyEscapeCharacter(character);
+      return;
+    }
+    if (character === '\u001b') {
+      pendingEscape = character;
+      return;
+    }
+    if (character === '\r') {
+      skipLineFeed = true;
+      submit();
+      return;
+    }
+    if (character === '\n') {
+      if (skipLineFeed) skipLineFeed = false;
+      else submit();
+      return;
+    }
+    skipLineFeed = false;
+    if (character === '\b' || character === '\u007f') {
+      if (cursor > 0) {
+        characters.splice(cursor - 1, 1);
+        cursor--;
+        leaveHistory();
+        redraw();
+      }
+      return;
+    }
+    if (character === '\u0003') {
+      output.write('^C\r\n');
+      editor.close();
+      return;
+    }
+    if (character === '\u0004') {
+      if (characters.length === 0) editor.close();
+      else applyAction('delete');
+      return;
+    }
+    if (character === '\u0001') {
+      applyAction('home');
+      return;
+    }
+    if (character === '\u0005') {
+      applyAction('end');
+      return;
+    }
+    if (character === '\u0015') {
+      if (cursor > 0) {
+        characters.splice(0, cursor);
+        cursor = 0;
+        leaveHistory();
+        redraw();
+      }
+      return;
+    }
+    if (character === '\u000b') {
+      if (cursor < characters.length) {
+        characters.splice(cursor);
+        leaveHistory();
+        redraw();
+      }
+      return;
+    }
+    if (character < ' ' || character === '\u007f') return;
+    characters.splice(cursor, 0, character);
+    cursor++;
+    leaveHistory();
+    redraw();
+  };
+  const onData = (chunk: unknown): void => {
+    const decoded = typeof chunk === 'string'
+      ? chunk
+      : chunk instanceof Uint8Array
+        ? decoder.write(chunk)
+        : String(chunk);
+    for (const character of decoded) applyCharacter(character);
+  };
+  const finish = (): void => {
+    if (closed) return;
+    const remaining = decoder.end();
+    for (const character of remaining) applyCharacter(character);
+    if (characters.length > 0) onLine(characters.join(''));
+    editor.close();
+  };
+  const onError = (): void => { editor.close(); };
+  const editor: RawTerminalEditor = {
+    prompt(value) {
+      prompt = value;
+      output.write(prompt);
+      if (characters.length > 0) redraw();
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      input.removeListener('data', onData);
+      input.removeListener('end', finish);
+      input.removeListener('error', onError);
+      if (changedRawMode) input.setRawMode?.(false);
+      input.pause();
+      onClose();
+    },
+  };
+  input.on('data', onData);
+  input.once('end', finish);
+  input.once('error', onError);
+  if (changedRawMode) input.setRawMode?.(true);
+  input.resume();
+  return editor;
+};
+
+export function createNodeInteractiveIo(options: NodeInteractiveIoOptions = {}): InteractiveSessionIo {
+  const input = (options.input ?? process.stdin) as RawModeReadableStream;
+  const output = options.output ?? process.stdout;
+  const terminal = options.terminal ?? input.isTTY === true;
   const queuedLines: string[] = [];
   const waiters: InteractiveLineWaiter[] = [];
   let closed = false;
@@ -165,25 +416,33 @@ export function createNodeInteractiveIo(): InteractiveSessionIo {
       waiter.signal.removeEventListener('abort', waiter.onAbort);
     }
   };
-  readline.on('line', (line) => {
+  const acceptLine = (line: string): void => {
     const waiter = waiters.shift();
     if (waiter === undefined) queuedLines.push(line);
     else {
       detach(waiter);
       waiter.resolve(line);
     }
-  });
-  readline.once('close', () => {
+  };
+  const acceptClose = (): void => {
+    if (closed) return;
     closed = true;
     for (const waiter of waiters.splice(0)) {
       detach(waiter);
       waiter.resolve(undefined);
     }
-  });
+  };
+  const readline = terminal ? undefined : createInterface({ input, output, terminal: false });
+  const terminalEditor = terminal
+    ? createRawTerminalEditor(input, output, acceptLine, acceptClose)
+    : undefined;
+  readline?.on('line', acceptLine);
+  readline?.once('close', acceptClose);
   return {
     async question(prompt, signal) {
       if (signal?.aborted === true) throw abortReason(signal);
-      process.stdout.write(prompt);
+      if (terminalEditor === undefined) output.write(prompt);
+      else terminalEditor.prompt(prompt);
       const queued = queuedLines.shift();
       if (queued !== undefined) return queued;
       if (closed) return undefined;
@@ -206,14 +465,16 @@ export function createNodeInteractiveIo(): InteractiveSessionIo {
       });
     },
     write(line) {
-      process.stdout.write(line + '\n');
+      output.write(line + '\n');
     },
     clear() {
-      if (process.stdout.isTTY) process.stdout.write('\u001bc');
-      else process.stdout.write('\n');
+      if (terminal) output.write('\u001bc');
+      else output.write('\n');
     },
     close() {
-      if (!closed) readline.close();
+      if (closed) return;
+      if (terminalEditor !== undefined) terminalEditor.close();
+      else readline?.close();
     },
   };
 }
@@ -236,6 +497,13 @@ export async function runInteractiveSession(options: InteractiveSessionOptions):
       if (input.length === 0) continue;
       if (!input.startsWith('/')) {
         try {
+          if (options.memory !== undefined) {
+            try {
+              for (const line of await options.memory.capture(input)) options.io.write(line);
+            } catch (error) {
+              options.io.write('[forge] memory unchanged: ' + (error instanceof Error ? error.message : String(error)));
+            }
+          }
           lastRun = await options.runTask(input, selection.route);
         } catch (error) {
           options.io.write('[forge] task error: ' + (error instanceof Error ? error.message : String(error)));
@@ -274,6 +542,18 @@ export async function runInteractiveSession(options: InteractiveSessionOptions):
           } catch (error) {
             options.io.write('[forge] route unchanged: ' + (error instanceof Error ? error.message : String(error)));
           }
+        }
+      } else if (command === '/memory') {
+        if (options.memory === undefined) {
+          options.io.write('memory: unavailable');
+        } else if (argumentsList.length === 0 || argumentsList[0] === 'status') {
+          for (const line of await options.memory.status()) options.io.write(line);
+        } else if (argumentsList.length === 1 && argumentsList[0] === 'undo') {
+          for (const line of await options.memory.undo()) options.io.write(line);
+        } else if (argumentsList.length === 1 && argumentsList[0] === 'explain') {
+          for (const line of await options.memory.explain()) options.io.write(line);
+        } else {
+          options.io.write('usage: /memory [status|undo|explain]');
         }
       } else if (command === '/clear') {
         options.io.clear();

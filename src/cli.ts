@@ -48,6 +48,11 @@ import { ConfigurationIssueError } from './config/schema.js';
 import { ConfigurationResolutionError } from './config/resolve.js';
 import { MemoryCommands, MemorySelectionError, repositoryMemoryScope } from './memory/commands.js';
 import {
+  MemoryAutoSaveController,
+  type AutoSaveReceipt,
+  type MemoryCaptureOutcome,
+} from './memory/autosave.js';
+import {
   memoryStatusReport,
   renderMemoryExplanation,
   renderMemoryList,
@@ -164,15 +169,34 @@ const workspaceService = (): ForgeWorkspaceService => {
   return service;
 };
 
-const memoryCommands = async (): Promise<MemoryCommands> => new MemoryCommands(
-  new RustMemoryRuntime({
+const memoryCommands = async (): Promise<MemoryCommands> => {
+  const repositoryScope = await repositoryMemoryScope(workspaceRoot);
+  const shared = {
     kernelPath: requireKernel(),
     engineRoot: effectiveConfiguration().engineRoot.value,
     workspaceRoot,
-    scope: await repositoryMemoryScope(workspaceRoot),
     actorId: 'developer:local',
-  }),
-);
+  } as const;
+  return new MemoryCommands(
+    new RustMemoryRuntime({ ...shared, scope: repositoryScope }),
+    [new RustMemoryRuntime({ ...shared, scope: { kind: 'developer', actorId: 'developer:local' } })],
+  );
+};
+
+const memoryActorId = 'developer:local';
+const memoryAutoSave = async (): Promise<MemoryAutoSaveController> => {
+  const grantScope = await repositoryMemoryScope(workspaceRoot);
+  return new MemoryAutoSaveController(
+    new RustMemoryRuntime({
+      kernelPath: requireKernel(),
+      engineRoot: effectiveConfiguration().engineRoot.value,
+      workspaceRoot,
+      scope: { kind: 'developer', actorId: memoryActorId },
+      actorId: memoryActorId,
+    }),
+    grantScope,
+  );
+};
 
 const executeProviderTask = async (
   task: string,
@@ -643,56 +667,95 @@ try {
     }
   } else if (command === 'memory') {
     const action = positionals[1] ?? 'find';
-    const memory = await memoryCommands();
-    if (action === 'remember') {
-      const statement = positionals.slice(2).join(' ').trim();
-      const result = await memory.remember(statement);
-      if (values.json) printJsonArtifact({ ok: true, operation: action, result });
-      else for (const line of renderMemoryOperation(result)) console.log(line);
-    } else if (action === 'find') {
-      const found = await memory.find(positionals.slice(2).join(' '));
-      if (values.json) printJsonArtifact({ ok: true, operation: action, ...found });
-      else for (const line of renderMemoryList(found.matches, 'No active memories match.')) console.log(line);
-    } else if (action === 'show') {
-      const entry = await memory.show(positionals.slice(2).join(' '));
-      if (values.json) printJsonArtifact({ ok: true, operation: action, entry });
-      else for (const line of renderMemoryList([entry], 'No matching active memory.')) console.log(line);
-    } else if (action === 'explain') {
-      const entry = await memory.explain(positionals.slice(2).join(' '));
-      if (values.json) {
-        printJsonArtifact({ ok: true, operation: action, entry, retrievalActive: false });
+    if (action === 'autosave') {
+      const autosave = await memoryAutoSave();
+      const requestedMode = positionals[2];
+      if (requestedMode === undefined || requestedMode === 'status') {
+        const state = await autosave.state();
+        if (values.json) printJsonArtifact({ ok: true, operation: 'autosave', ...state });
+        else {
+          console.log(`Memory autosave for this repository: ${state.mode}.`);
+          console.log(state.mode === 'auto'
+            ? 'Eligible direct preferences are saved without pausing; use /memory undo in the same interactive session.'
+            : state.mode === 'ask'
+              ? 'Forge asks before saving an eligible direct preference.'
+              : 'Automatic capture is off; forge memory remember still works.');
+        }
+      } else if (requestedMode === 'off' || requestedMode === 'ask' || requestedMode === 'auto') {
+        const result = await autosave.setMode(requestedMode);
+        const state = await autosave.state();
+        if (values.json) printJsonArtifact({ ok: true, operation: 'autosave', result, ...state });
+        else {
+          console.log(`Memory autosave for this repository is now ${state.mode}.`);
+          console.log(state.mode === 'auto'
+            ? 'Next: state a clear preference such as “I prefer concise test output.” in interactive Forge.'
+            : state.mode === 'ask'
+              ? 'Forge will ask before saving a clear preference.'
+              : 'Explicit forge memory remember commands remain available.');
+        }
       } else {
-        for (const line of renderMemoryExplanation(entry)) console.log(line);
-      }
-    } else if (action === 'correct') {
-      const selection = positionals.slice(2).join(' ').trim();
-      if (values.replacement === undefined) {
-        throw new Error('Usage: forge memory correct <words from memory> --replacement <corrected text> [--erase-previous] [--json]');
-      }
-      const result = await memory.correct(
-        selection,
-        values.replacement,
-        values['erase-previous'] ? 'erase_previous' : 'keep_bounded',
-      );
-      if (values.json) printJsonArtifact({ ok: true, operation: action, result });
-      else for (const line of renderMemoryOperation(result)) console.log(line);
-    } else if (action === 'history') {
-      const history = await memory.history(positionals.slice(2).join(' '));
-      if (values.json) printJsonArtifact({ ok: true, operation: action, ...history });
-      else for (const line of renderMemoryList(history.matches, 'No recoverable memory history matches.')) console.log(line);
-    } else if (action === 'restore') {
-      const result = await memory.restore(positionals.slice(2).join(' '));
-      if (values.json) printJsonArtifact({ ok: true, operation: action, result });
-      else for (const line of renderMemoryOperation(result)) console.log(line);
-    } else if (action === 'status') {
-      const report = memoryStatusReport(await memory.status());
-      if (values.json) printJsonArtifact(report);
-      else {
-        console.log(`Forge memory: ${String(report.activeCount)} active; ${String(report.recoveryCount)} recoverable.`);
-        console.log('Retrieval: inactive until CLI8B evaluation.');
+        throw new Error('Usage: forge memory autosave [off|ask|auto|status] [--json]');
       }
     } else {
-      throw new Error('Usage: forge memory <remember|find|show|explain|correct|history|restore|status> ...');
+      const memory = await memoryCommands();
+      if (action === 'remember') {
+        const statement = positionals.slice(2).join(' ').trim();
+        const result = await memory.remember(statement);
+        if (values.json) printJsonArtifact({ ok: true, operation: action, result });
+        else for (const line of renderMemoryOperation(result)) console.log(line);
+      } else if (action === 'find') {
+        const found = await memory.find(positionals.slice(2).join(' '));
+        if (values.json) printJsonArtifact({ ok: true, operation: action, ...found });
+        else for (const line of renderMemoryList(found.matches, 'No active memories match.')) console.log(line);
+      } else if (action === 'show') {
+        const entry = await memory.show(positionals.slice(2).join(' '));
+        if (values.json) printJsonArtifact({ ok: true, operation: action, entry });
+        else for (const line of renderMemoryList([entry], 'No matching active memory.')) console.log(line);
+      } else if (action === 'explain') {
+        const entry = await memory.explain(positionals.slice(2).join(' '));
+        if (values.json) {
+          printJsonArtifact({ ok: true, operation: action, entry, retrievalActive: false });
+        } else {
+          for (const line of renderMemoryExplanation(entry)) console.log(line);
+        }
+      } else if (action === 'correct') {
+        const selection = positionals.slice(2).join(' ').trim();
+        if (values.replacement === undefined) {
+          throw new Error('Usage: forge memory correct <words from memory> --replacement <corrected text> [--erase-previous] [--json]');
+        }
+        const result = await memory.correct(
+          selection,
+          values.replacement,
+          values['erase-previous'] ? 'erase_previous' : 'keep_bounded',
+        );
+        if (values.json) printJsonArtifact({ ok: true, operation: action, result });
+        else for (const line of renderMemoryOperation(result)) console.log(line);
+      } else if (action === 'history') {
+        const history = await memory.history(positionals.slice(2).join(' '));
+        if (values.json) printJsonArtifact({ ok: true, operation: action, ...history });
+        else for (const line of renderMemoryList(history.matches, 'No recoverable memory history matches.')) console.log(line);
+      } else if (action === 'restore') {
+        const result = await memory.restore(positionals.slice(2).join(' '));
+        if (values.json) printJsonArtifact({ ok: true, operation: action, result });
+        else for (const line of renderMemoryOperation(result)) console.log(line);
+      } else if (action === 'status') {
+        const statuses = await memory.statuses();
+        const report = {
+          ...memoryStatusReport(statuses[0] as (typeof statuses)[number]),
+          activeCount: statuses.reduce((sum, inspection) => sum + inspection.activeCount, 0),
+          recoveryCount: statuses.reduce((sum, inspection) => sum + inspection.recoveryCount, 0),
+          scopes: statuses.map((inspection) => inspection.scope),
+        };
+        const capture = await (await memoryAutoSave()).state();
+        if (values.json) printJsonArtifact({ ...report, autosave: capture });
+        else {
+          console.log(`Forge memory: ${String(report.activeCount)} active; ${String(report.recoveryCount)} recoverable.`);
+          console.log(`Autosave: ${capture.mode} for this repository.`);
+          console.log('Retrieval: inactive until CLI8B evaluation.');
+        }
+      } else {
+        throw new Error('Usage: forge memory <remember|find|show|explain|correct|history|restore|autosave|status> ...');
+      }
     }
   } else if (command === 'runs') {
     const operation = positionals[1];
@@ -890,6 +953,16 @@ try {
     const checkIds = verificationChecks.length === 0 ? [] : selectedChecks(verificationChecks);
     const governedChanges = verificationChecks.length > 0;
     const io = interactiveIo();
+    const autosave = await memoryAutoSave();
+    let latestAutoSave: AutoSaveReceipt | undefined;
+    const memoryCaptureLines = (outcome: MemoryCaptureOutcome): readonly string[] => {
+      if (outcome.kind !== 'remembered') return [];
+      if (outcome.receipt === undefined) {
+        return [`Remembered after your review: ${outcome.result.activeObservation?.statement ?? 'preference'}.`];
+      }
+      latestAutoSave = outcome.receipt;
+      return [`Remembered: ${outcome.receipt.statement} · /memory undo · /memory explain`];
+    };
     await runInteractiveSession({
       workspaceRoot,
       initialRoute: selection,
@@ -898,6 +971,37 @@ try {
       notices: [governedChanges
         ? `changes: governed inside the Rust run; verification=${checkIds.join(', ')}`
         : 'changes: disabled; start with --policy <file> or set FORGE_VERIFICATION_POLICY to enable verified edits'],
+      memory: {
+        async capture(input) {
+          const outcome = await autosave.captureDirectInput(input, async (statement) =>
+            approvedChoice(await io.question(`Remember this preference? “${statement}” [y/N] `)));
+          return memoryCaptureLines(outcome);
+        },
+        async status() {
+          const state = await autosave.state();
+          return [
+            `memory autosave: ${state.mode} for this repository`,
+            'memory retrieval: inactive until CLI8B evaluation',
+          ];
+        },
+        async undo() {
+          if (latestAutoSave === undefined) return ['Nothing automatically saved in this session is available to undo.'];
+          const undone = latestAutoSave;
+          await autosave.undo(undone);
+          latestAutoSave = undefined;
+          return [
+            `Undone: ${undone.statement}`,
+            'No recovery copy was retained.',
+          ];
+        },
+        async explain() {
+          if (latestAutoSave === undefined) return ['No automatic save in this session is available to explain.'];
+          return [
+            `Remembered from your exact direct input under this repository’s local auto grant: ${latestAutoSave.statement}`,
+            'It is developer-scoped, is not injected into prompts, and can be removed now with /memory undo.',
+          ];
+        },
+      },
       validateRoute: (route) => { createInferenceProvider(route, { configuration: effectiveConfiguration() }); },
       runTask: async (task, route) => {
         const presenter = new LiveCliPresenter();
@@ -970,6 +1074,7 @@ try {
       '  forge memory correct <words from memory> --replacement <text> [--erase-previous] [--json]',
       '  forge memory history [query] [--json]',
       '  forge memory restore <words from history> [--json]',
+      '  forge memory autosave [off|ask|auto|status] [--json]',
       '  forge memory status [--json]',
       '  forge config path [workspace|user] [--json]',
       '  forge config init <workspace|user> [--json]',

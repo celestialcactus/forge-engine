@@ -29,10 +29,14 @@ The current implementation provides; acceptance status is recorded by the linked
 - supervised verifier process-tree cleanup on Windows, macOS, and Linux;
 - authenticated, replay-resistant host-managed execution grants for embedding in a
   boundary supplied by another host;
-- explicit repository memory through `forge memory remember`, `find`, `show`,
-  `explain`, `correct`, `history`, `restore`, and `status`, with Rust-authoritative
-  identity, provenance, correction, bounded recovery, and erasure rewrite. Memory
-  is not automatically captured, retrieved, or injected into a run.
+- attributable repository decisions and developer preferences through `forge memory
+  remember`, `find`, `show`, `explain`, `correct`, `history`, `restore`, `autosave`,
+  and `status`, with Rust-authoritative identity, provenance, standing grants,
+  correction, bounded recovery, and erasure rewrite. Autosave defaults to `ask`;
+  only a local `forge memory autosave off|ask|auto` action can change it for the
+  current repository. A narrow safe preference grammar can save without pausing in
+  `auto`, with `/memory explain` and immediate `/memory undo`. Memory is still not
+  retrieved or injected into a run.
 
 The public CLI and MCP server require the Rust kernel. A source checkout discovers
 `target/release/forge-kernel` and then `target/debug/forge-kernel`; an exact

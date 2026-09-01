@@ -2,7 +2,9 @@
 
 **Status:** Slices 0–2 accepted through PR #32 and
 [Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md);
-Slices 3–5 remain unapproved
+Slice 3 accepted for merge through PR #33 implementation candidate `26f011e` and
+[Checkpoint 93](../decisions/checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md);
+Slices 4–5 remain unapproved
 **Date:** 2026-08-29
 **Delivery path:** full
 **Active task:** [Slice CLI8](SLICE-CLI8-differentiated-learning-loop.md)
@@ -12,16 +14,16 @@ Slices 3–5 remain unapproved
 
 This packet presented Product, Architecture, Program Design, and Vertical Slices
 together for review. The approval ledger below is now authoritative: Slice 0 and
-implementation Slices 1–2 are authorized, while Slices 3–5 remain gated.
+implementation Slices 1–3 are authorized, while Slices 4–5 remain gated.
 
 ## Approval ledger
 
 | Gate | Status | Material | Approval |
 | --- | --- | --- | --- |
 | Product | approved | Gate 1 below | Approved 2026-08-29, including the outcome and explicit non-claims. |
-| Architecture | approved for Slice 0–2 | Gate 2 below plus ADR-0034/0038/0039 | Rust remains authoritative; TypeScript owns orchestration, UX, and replaceable retrieval machinery. |
-| Program Design | approved for Slice 0–2 | Gate 3 below | Conservative alpha ceilings are safety budgets subject to measured checkpoint adjustment. |
-| Vertical Slices | partially approved | Gate 4 below | Contract prerequisite Slice 0 and implementation Slices 1–2 are authorized. Slices 3–5 remain gated. |
+| Architecture | approved for Slice 0–3 | Gate 2 below plus ADR-0034/0038/0039 | Rust remains authoritative; TypeScript owns orchestration, capture-candidate construction, UX, and replaceable retrieval machinery. |
+| Program Design | approved for Slice 0–3 | Gate 3 below | Frozen standing-grant, bridge, eligibility, notification, and undo contracts apply. |
+| Vertical Slices | partially approved | Gate 4 below | Contract prerequisite Slice 0 and implementation Slices 1–3 are authorized. Slice 3 was explicitly approved in the main implementation task on 2026-08-31; Slices 4–5 remain gated. |
 
 ## Gate 1: Product
 
@@ -95,6 +97,12 @@ than raw schema vocabulary.
   autosave on the user's behalf.
 - Secrets, inferred personality, model/tool/repository instructions, capability
   escalation, and ambiguous candidates never auto-save.
+- Slice 3 accepts only current-repository grants. They are stored in the exact
+  developer ledger and bind automatic capture to the repository; developer-profile
+  grants remain unavailable.
+- Only the narrow deterministic presentation/style grammar is eligible without a
+  pause. Other preference-like direct input falls back to `ask`; normal task input
+  is ignored by capture orchestration.
 
 ### Correction, recovery, and deletion experience
 
@@ -345,6 +353,16 @@ pub enum MemoryOperation {
     },
     Forget { target: MemoryObservationId, reason: MemoryReasonCode },
     Restore { target: MemoryObservationId },
+    AutoCapture {
+        observation: MemoryObservation,
+        grant_id: MemoryGrantId,
+        grant_scope: MemoryGrantScope,
+    },
+    UndoAutoCapture {
+        target: MemoryObservationId,
+        grant_id: MemoryGrantId,
+        actor_id: String,
+    },
     Purge { selector: MemoryPurgeSelector, reason: MemoryReasonCode },
     ClearRecovery { scope: Option<MemoryScopeKind> },
     SetCaptureMode { grant: MemoryStandingGrant },
@@ -364,6 +382,16 @@ pub enum MemoryEvent {
     ObservationForgotten { target: MemoryObservationId, reason: MemoryReasonCode },
     ObservationRestored { target: MemoryObservationId },
     GrantChanged { grant: MemoryStandingGrant },
+    ObservationAutoCaptured {
+        observation: MemoryObservation,
+        grant_id: MemoryGrantId,
+        grant_scope: MemoryGrantScope,
+    },
+    AutoCaptureUndone {
+        target: MemoryObservationId,
+        grant_id: MemoryGrantId,
+        actor_id: String,
+    },
     NonContentReceipt { receipt: MemoryNonContentReceipt },
 }
 
@@ -373,6 +401,7 @@ pub struct MemoryProjection {
     pub active: Vec<ProjectedMemory>,
     pub recovery: Vec<RecoveryMemory>,
     pub receipts: Vec<MemoryNonContentReceipt>,
+    pub grants: Vec<MemoryStandingGrant>,
 }
 
 pub struct MemoryStoreLimits {
@@ -443,7 +472,8 @@ exact developer input
 → Rust validates active standing grant + actor + exact scope + provenance
 → append before acknowledgement
 → non-blocking notification
-→ Undo sends Purge for the just-admitted content
+→ Undo sends narrow UndoAutoCapture for the just-admitted content
+→ Rust atomically rewrites that content away and retains a non-content receipt
 ```
 
 Correction with recovery:
@@ -552,7 +582,9 @@ find/show/explain without a full internal ID, bounded correction/history, restor
 and final `--erase-previous`. It retained one active version, removed erased prior
 content from all Forge memory-state files, emitted empty stderr, performed no
 planner/provider/retrieval/discovery/network work, and reported retrieval inactive.
-Temporary validation state was removed. Slices 3–5 remain open.
+Temporary validation state was removed. Slice 3 was later authorized on 2026-08-31
+and is implemented at `afa6e67`, with final implementation candidate `26f011e`
+accepted for merge by Checkpoint 93. Slices 4–5 remain open.
 
 The authoritative worktree follow-up also passed `npm run check:product` under the
 supported MSVC environment (191 Rust tests passed with 16 explicit ignored helper/
@@ -646,6 +678,25 @@ editing configuration.
 sources fall back to ask or fail; repository/model/tool text cannot self-authorize;
 undo removes content; CLI and conversational behavior use the same Rust grant.
 
+**Accepted implementation candidate:** `26f011e` (`afa6e67` is the underlying
+autosave implementation).
+The first live VS Code pilot found accepted-but-invisible terminal input; `33ee986`
+binds readline to the terminal output and adds a prompt/input-echo regression. The
+follow-up `5c84a97` also removes a doubled-period undo notification. The
+first corrected hosted attempt exposed a Linux stdout-drain race; `3849cd0` waits
+for the protocol stream to close and adds a deterministic delayed-writer regression.
+A later real VS Code pilot found that the shared queued-line adapter ignored
+Backspace despite a valid raw TTY. Candidate `26f011e` separates transport behavior:
+Forge owns TTY editing while retaining queued ingestion for deterministic pipes.
+The local Windows x64 product gate passes 195 Rust tests with 16 explicit
+helper/external-corpus ignores, 162 Node tests,
+the real configured interactive no-pause/explain/undo fixture, the two-case memory
+product fixture, RustSec audit, clean-install ask/auto/off lifecycle, native packing,
+and the benchmark assertion. Cross-platform runs `33449198939` and `33449198943`
+pass all nine declared jobs, and a live VS Code integrated-terminal pilot at exact
+`26f011e` confirms Backspace, `/help`, and `/exit`. Checkpoint 93 accepts Slice 3
+for merge; this evidence does not authorize Slice 4 or 5.
+
 May develop in parallel with Slice 2 after the shared contract freeze.
 
 ### Slice 4: Forget, restore, purge, and history clear
@@ -693,9 +744,9 @@ Slice 2 recovery     Slice 3 autosave
         Slice 5 preview + hosted gate
 ```
 
-The authorized packet is **Slice 0, Slice 1, and Slice 2**. Slice 0 is the required
-contract freeze, Slice 1 proves the tracer seam, and Slice 2 may begin only after
-that seam is stable. Slices 3–5 remain unapproved.
+The authorized packet is **Slice 0 through Slice 3**. Slice 0 is the required
+contract freeze, Slice 1 proves the tracer seam, Slice 2 proves recovery, and Slice
+3 proves standing-grant autosave plus undo. Slices 4–5 remain unapproved.
 
 ## Decisions requested from the reviewer
 
@@ -711,7 +762,8 @@ Approval of this packet means all of the following:
    boundary;
 7. approve the six-slice graph (one contract slice plus five product slices);
 8. authorize implementation of prerequisite Slice 0 and implementation Slices 1–2
-   only; Slices 3–5 remain gated.
+   initially; later slice authorization remains explicit.
 
-The reviewer approved decisions 1–8 on 2026-08-29 for Slice 0–2. Slices 3–5 and
-their implementation remain subject to a later explicit authorization.
+The reviewer approved decisions 1–8 on 2026-08-29 for Slice 0–2 and explicitly
+approved Slice 3 on 2026-08-31 after restatement of its Product, Architecture,
+Program Design, and Vertical Slice boundary. Slices 4–5 and CLI8B/C remain gated.

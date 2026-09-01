@@ -1,9 +1,10 @@
 //! CLI8A attributable memory contracts.
 //!
 //! This module defines validated observation material, deterministic identities,
-//! and the bounded explicit-control lifecycle used by CLI8A Slices 1–2. It is not
+//! and the bounded explicit-control lifecycle used by CLI8A Slices 1–3. It is not
 //! connected to the run coordinator, planner, context compiler, MCP, or provider
-//! loop; automatic capture and retrieval remain inactive.
+//! retrieval loop. Slice 3 standing-grant capture is explicit and local; retrieval
+//! and prompt injection remain inactive.
 
 mod grants;
 mod lifecycle;
@@ -464,7 +465,7 @@ pub struct MemoryContractError {
 }
 
 impl MemoryContractError {
-    const fn new(code: &'static str, message: &'static str) -> Self {
+    pub(crate) const fn new(code: &'static str, message: &'static str) -> Self {
         Self { code, message }
     }
 
@@ -680,7 +681,10 @@ fn validate_evidence_binding(
     Ok(())
 }
 
-fn bounded_identifier(field: &'static str, value: String) -> Result<String, MemoryContractError> {
+pub(crate) fn bounded_identifier(
+    field: &'static str,
+    value: String,
+) -> Result<String, MemoryContractError> {
     let value = value.trim_matches(|character: char| character.is_ascii_whitespace());
     if value.is_empty() {
         return Err(MemoryContractError::new(

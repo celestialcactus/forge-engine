@@ -2,7 +2,7 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
-**Last groomed:** 2026-08-31 for the CLI8A Slice 0–2 hosted gate
+**Last groomed:** 2026-09-01 for the CLI8A Slice 3 hosted and VS Code gate
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
 
@@ -129,8 +129,13 @@ Native restricted execution continues as the independent
 `SBX-PROVIDER-LIFECYCLE` lane. `CLI8A-MEMORY-FOUNDATION` Slices 0–2 are accepted
 through PR #32 and
 [Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md):
-explicit control and bounded recovery are active, while planner/provider retrieval,
-autosave, broader privacy lifecycle, and skills remain inactive until their gates.
+explicit control and bounded recovery are active. Slice 3 is accepted through PR
+#33 implementation candidate `26f011e` and
+[Checkpoint 93](../decisions/checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md):
+repo-scoped autosave, exact standing grants, narrow undo, owned TTY editing, and
+queued non-TTY ingestion pass the local, hosted, and real VS Code gates.
+Planner/provider retrieval, broader privacy lifecycle, and skills remain inactive
+until their separate gates.
 
 Slice 2F remains the native-isolation hardening boundary. Slice 2F-1 is accepted: provider
 authority is explicit and raw host/restricted claims fail closed. Slice 2F-2a is
@@ -561,9 +566,11 @@ promotion/discard. Continue as follows:
     package, install, diagnose, configure, update, uninstall, and run the trusted
     alpha on the declared hosted matrix. ADR-0036 selection, tightening,
     attribution, redaction, and no-fallback conformance pass Checkpoint 91.
-14. **Attributable memory Slices 0–2 accepted through PR #32:** preserve the
-    Rust-authoritative explicit control/recovery boundary and resolve the Slice 3
-    autosave authorization before implementation. Expand providers, a high-level
+14. **Attributable memory Slices 0–3 accepted through PRs #32–33:**
+    preserve the Rust-authoritative explicit control/recovery boundary accepted by
+    Checkpoints 92–93. The next smallest lane is the separately reviewed Slice 4
+    privacy lifecycle; do not begin it without explicit four-gate authorization.
+    Expand providers, a high-level
     MCP/VS Code mutation workflow, and other advanced platform surfaces on separate
     measured lanes; native sandbox completion does not block the learning loop.
 
@@ -637,7 +644,7 @@ not source volume or the number of abstractions present.
 | Minimum outer-run recovery | Accepted through the private trusted-alpha hosted regression | Rust durably records request/events/artifact plus the bounded interaction transcript. Terminal return and proven-safe same-runtime continuation work; ambiguous and non-idempotent frontiers block. Complete initial state is privately staged and atomically published. A pending governed change carries one durably acknowledged reference to its registered authoritative ChangeSet transaction while the outer capability remains non-replayable. Checkpoint 90 reran the complete Rust/Node/hybrid product gate on hosted Windows/macOS/Ubuntu. Orphaned staging and registered-but-never-finalized ChangeSet policy remain release-hardening work. |
 | Transaction retention and isolation truth | Trusted-alpha regression accepted; restricted-provider production gate open | Lock-safe transaction retention and truthful readiness reporting remain accepted. Managed Windows and AppContainer each pass the local 17-case schema-v4 corpus under Rust-owned lifecycle/resource/evidence authority; probe v4 reports both as `setup_required` and restricted-ready false. The trusted-alpha hosted matrix does not close the separate VM lifecycle, real second-pin upgrade, broader credential, macOS, or adversarial provider gates. See [ADR-0031](../decisions/ADRs/ADR-0031-transaction-retention-and-native-sandbox-sequencing.md), [ADR-0033](../decisions/ADRs/ADR-0033-sandbox-policy-compilation-and-provider-conformance.md), [Checkpoint 83](../decisions/checkpoints/2026-08-12-83-managed-windows-provider-adapter-local-gate.md), [Checkpoint 84](../decisions/checkpoints/2026-08-12-84-packaged-provider-lifecycle-gate-preparation.md), and [Checkpoint 85](../decisions/checkpoints/2026-08-12-85-consolidated-transaction-sandbox-local-gate.md). |
 | Installable developer alpha | Configuration-conformant private foundation accepted; public-release gates open | PR #27 and Checkpoint 90 accept ADR-0032 exact-version native packaging, local install/update/uninstall, the tester kit, and hosted Windows/macOS/Ubuntu product evidence. PR #31 and Checkpoint 91 accept effective configuration, config UX, and clean-install conformance. Contributor-rights attestation and public artifact signing/provenance remain open; no public artifact has been published. |
-| Differentiated learning loop | Slices 0–2 accepted through PR #32 and Checkpoint 92 | ADR-0038/0039 lock identity, normalization, exact scope, Rust authority, TypeScript orchestration, reviewed decisions, and bounded recovery. Candidate `e9e8cd9` passes exact MSVC, separate VS Code, hosted Windows/macOS/Ubuntu, package, and benchmark gates for remember/restart/explain plus correction/recovery/restore/erase without retrieval. Slices 3–5 and CLI8B/C remain unauthorized. |
+| Differentiated learning loop | Slices 0–3 accepted through PRs #32–33 and Checkpoints 92–93 | ADR-0038/0039 lock identity, normalization, exact scope, Rust authority, TypeScript orchestration, reviewed decisions, bounded recovery, and locally granted capture modes. The repo-scoped autosave/grant/undo proof passes local, hosted, and real VS Code gates. Slices 4–5 and CLI8B/C remain unauthorized. |
 | Broader V1 platform | Deferred beyond the bounded learning loop | Advanced compression/retrieval, MCP client/mutation symmetry, connectors, automation, and generalized UI retain their later roadmap gates. Windows/macOS restricted providers continue as a bounded, actively scheduled commodity-platform lane under ADR-0031/0033/0034 and cannot borrow acceptance from trusted mode. |
 
 Percent-complete figures are intentionally not used. They hid the difference
@@ -662,8 +669,10 @@ expansion, the current planning ranges are:
 - public alpha distribution: **still blocked independently** on contributor-rights attestation and artifact signing/provenance; no public package or artifact has shipped;
 - first attributable memory/retrieval demonstration: **CLI8A Slices 0–2 are accepted
   through PR #32 and Checkpoint 92 for explicit remember/restart/explain plus
-  correction/recovery; Slice 3 autosave, Slice 4 privacy lifecycle, Slice 5 preview,
-  and CLI8B retrieval remain unauthorized**;
+  correction/recovery; Slice 3 is accepted through PR #33 candidate `26f011e` and
+  Checkpoint 93 for repo-scoped autosave, exact grants, narrow undo, and corrected
+  interactive terminal editing; Slice 4 privacy lifecycle, Slice 5 preview, and
+  CLI8B retrieval remain unauthorized**;
 - reviewed pattern-to-skill vertical slice: **a further 2-3 focused weeks**, contingent on the evaluation fixture proving better accepted outcomes rather than token reduction alone;
 - broader enterprise pilot with real restricted execution and policy integration:
   **12–16 weeks**.
@@ -672,10 +681,10 @@ The source-backed
 [CLI harness comparison](../audit/2026-08-05-cli-harness-core-comparison.md)
 calibrates Forge as a strong narrow evidence/transaction core rather than a mature
 CLI peer. With repository authority, native packaging, the tester kit, the
-trusted-alpha hosted matrix, effective configuration, and CLI8A Slices 0–2 accepted,
-the immediate gate is explicit authorization of the bounded Slice 3 autosave proof.
-Later privacy lifecycle, context preview, retrieval, and skills remain separately
-gated. Rights attestation and artifact
+trusted-alpha hosted matrix, effective configuration, and CLI8A Slices 0–3
+accepted, the immediate gate is the separate four-gate review and explicit
+authorization of bounded Slice 4 privacy lifecycle. Context preview, retrieval,
+and skills remain separately gated. Rights attestation and artifact
 signing/provenance proceed as separate public-distribution gates;
 Windows managed/fallback and macOS preview/signed-helper work remain a separately
 accepted provider lane. The trusted alpha must not wait for those native providers,
@@ -745,9 +754,8 @@ cross-platform fixtures are now part of the private alpha boundary. It adds no
 public publication, sandbox-provider promotion, or organization inference-policy
 claim.
 
-**Slices 0–2 are accepted; resolve the explicit Slice 3 autosave authorization next.
-Do not begin autosave, privacy lifecycle, measured retrieval, or reviewed skills
-from directional approval alone;
+**Slices 0–3 are accepted through Checkpoints 92–93. Do not begin Slice 4 privacy
+lifecycle, measured retrieval, or reviewed skills from directional approval alone;
 do not wait for native sandbox promotion.** Broad compression, connector,
 automation, generalized UI, and raw MCP mutation programs remain no-go until that
 learning slice proves value. No raw shell or file-write MCP tool is permitted; any

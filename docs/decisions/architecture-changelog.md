@@ -1,3 +1,69 @@
+# 2026-09-01 - CLI8A Slice 3 passes the hosted and real VS Code gate
+
+- PR #33 implementation candidate `26f011e` is accepted for merge through
+  [Checkpoint 93](checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md).
+- The accepted boundary is deliberately narrow: current-repository `off|ask|auto`,
+  exact developer-ledger standing grants, bounded direct-preference eligibility,
+  visible attribution, narrow immediate undo without a recovery copy, and the same
+  Rust grant authority across CLI and conversation orchestration.
+- The gate includes 195 Rust tests, 162 Node tests, 60/67 hybrid results with seven
+  explicit skips, RustSec, clean-install package lifecycle, native packing,
+  benchmark assertion, all nine declared hosted jobs, a separate real Windows PTY,
+  and the user's exact-head VS Code integrated-terminal Backspace/`/help`/`/exit`
+  confirmation.
+- The UX investigation corrected two real adapter defects rather than weakening
+  the gate: terminal output was first bound explicitly, and the final candidate
+  separates owned TTY editing from queued non-TTY pipe ingestion while preserving
+  Rust run and memory authority.
+- Retrieval, planner/context injection, developer-profile grants, privacy
+  forget/purge/history-clear, context preview, skills, and Slices 4–5 remain
+  inactive. The next smallest lane is a separate four-gate review and explicit
+  authorization of Slice 4.
+
+# 2026-08-31 - CLI8A Slice 3 candidate corrects the interactive PTY gate
+
+- Candidate `afa6e67` implements current-repository `off|ask|auto` controls. The
+  standing grant and developer preference live in the exact developer ledger; the
+  grant carries the repository identity, and developer-profile grants fail closed.
+- TypeScript limits no-pause auto capture to a narrow deterministic
+  presentation/style grammar. Preference-like ambiguity falls back to `ask`;
+  normal task text is ignored, and secret-like, structured/remote,
+  authority-changing, repository, model, and tool material cannot use the auto
+  candidate path.
+- Rust validates the active grant, actor, exact provenance and scope, appends before
+  acknowledgement, and performs immediate undo as a narrow atomic rewrite with a
+  content-free receipt and no recovery copy. Ordinary find/show/explain see the
+  developer preference across process restart; planner/provider retrieval remains
+  inactive.
+- The first live VS Code pilot found that terminal input was accepted but rendered
+  invisibly because the readline terminal adapter omitted its output stream. Candidate
+  `33ee986` supplies the exact output stream and adds a terminal-stream regression that
+  proves both prompt rendering and typed-command echo. The pilot must pass again on the
+  corrected candidate before acceptance. Follow-up `5c84a97` removes the doubled-period
+  undo notification exposed by that PTY pilot.
+- The first corrected hosted attempt then exposed a Linux stdout-drain race: the memory
+  adapter parsed on child `exit` before the protocol stream closed. Candidate `3849cd0`
+  waits for `close` and adds a deterministic delayed-writer regression.
+- The corrected local Windows x64 gate passes 195 Rust tests with 16 explicit ignores, 161
+  Node tests, real memory and configured-interactive product fixtures, RustSec,
+  clean-install ask/auto/off lifecycle, native packing, and the 20-sample benchmark
+  assertion. Hosted target, merge, and checkpoint acceptance remain open; Slices
+  4–5 and CLI8B/C remain unauthorized.
+
+# 2026-08-31 - CLI8A Slice 3 autosave proof is explicitly authorized
+
+- Approved the restated Product, Architecture, Program Design, and Vertical Slice
+  boundary for repo-scoped autosave `off|ask|auto`; `ask` remains the default.
+- Only local user action may create or revoke an actor/scope-bound standing grant.
+  Rust validates grant, provenance, scope, and durable admission; TypeScript owns
+  bounded candidate eligibility, orchestration, and `Remembered · Undo · Explain`
+  presentation.
+- Secrets, capability/approval changes, model/tool/repository text, speculative
+  inference, organization policy, scope widening, and ambiguous candidates cannot
+  auto-save. Ambiguity falls back to `ask`; undo removes the just-admitted content.
+- This authorization does not include Slice 4 forget/purge/history-clear, Slice 5
+  context preview, CLI8B retrieval, or CLI8C skills.
+
 # 2026-08-31 - CLI8A memory Slices 0–2 pass the hosted gate
 
 - Exact implementation candidate `e9e8cd9` passed cross-platform run `33433043538`

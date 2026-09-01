@@ -217,6 +217,28 @@ try {
     throw new Error(`Clean-install onboarding did not report conformant configuration: ${onboard.stdout}`);
   }
 
+  const autosaveInitial = JSON.parse((await runCli([
+    'memory', 'autosave', 'status', '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ])).stdout);
+  if (autosaveInitial.mode !== 'ask' || autosaveInitial.grant !== undefined) {
+    throw new Error(`Clean-install autosave default was not ask: ${JSON.stringify(autosaveInitial)}`);
+  }
+  const autosaveEnabled = JSON.parse((await runCli([
+    'memory', 'autosave', 'auto', '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ])).stdout);
+  if (autosaveEnabled.mode !== 'auto'
+    || autosaveEnabled.grant?.scope?.kind !== 'repository'
+    || autosaveEnabled.grant?.actorId !== 'developer:local') {
+    throw new Error(`Clean-install autosave did not create an exact local grant: ${JSON.stringify(autosaveEnabled)}`);
+  }
+  const autosaveDisabled = JSON.parse((await runCli([
+    'memory', 'autosave', 'off', '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ])).stdout);
+  if (autosaveDisabled.mode !== 'off'
+    || autosaveDisabled.grant?.grantId !== autosaveEnabled.grant?.grantId) {
+    throw new Error(`Clean-install autosave did not persist local disablement: ${JSON.stringify(autosaveDisabled)}`);
+  }
+
   const partialEnvironment = productEnvironment(partialHomeRoot, {
     FORGE_DEFAULT_PROVIDER: 'ollama',
     FORGE_KERNEL_BINARY: join(root, 'kernel-must-not-be-probed'),
@@ -303,6 +325,7 @@ try {
       'config-partial-route-refusal',
       'doctor',
       'onboard',
+      'memory-autosave-ask-auto-off',
       'inspect',
       'update',
       'uninstall',

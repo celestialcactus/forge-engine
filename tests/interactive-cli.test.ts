@@ -1,12 +1,71 @@
 import assert from 'node:assert/strict';
+import { PassThrough } from 'node:stream';
 import { test } from 'node:test';
 import {
   chooseOllamaModel,
+  createNodeInteractiveIo,
   resolveInteractiveRoute,
   runInteractiveSession,
   type InteractiveSessionIo,
 } from '../src/interactive-cli.js';
 import type { InferenceRoute } from '../src/inference/contracts.js';
+
+class TestTerminalInput extends PassThrough {
+  readonly isTTY = true;
+  isRaw = false;
+  readonly rawModeChanges: boolean[] = [];
+
+  setRawMode(enabled: boolean): this {
+    this.isRaw = enabled;
+    this.rawModeChanges.push(enabled);
+    return this;
+  }
+}
+
+test('terminal input owns raw editing for backspace, delete, and cursor movement', async () => {
+  const input = new TestTerminalInput();
+  const output = new PassThrough();
+  output.setEncoding('utf8');
+  let rendered = '';
+  output.on('data', (chunk: string) => { rendered += chunk; });
+  const io = createNodeInteractiveIo({ input, output });
+
+  const answer = io.question('forge> ');
+  input.write('/helpx');
+  input.write('\u001b[D');
+  input.write('\u001b[3~');
+  input.write('\u001b[D');
+  input.write('\u001b[C');
+  input.write('z');
+  input.write('\u007f');
+  input.write('\r');
+
+  assert.equal(await answer, '/help');
+  assert.match(rendered, /forge> /u);
+  assert.match(rendered, /\/help/u);
+  assert.deepEqual(input.rawModeChanges, [true]);
+  io.close();
+  assert.deepEqual(input.rawModeChanges, [true, false]);
+  assert.equal(input.isPaused(), true);
+});
+
+test('non-terminal input queues multiple early lines for scripted sessions', async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  output.setEncoding('utf8');
+  let rendered = '';
+  output.on('data', (chunk: string) => { rendered += chunk; });
+  const io = createNodeInteractiveIo({ input, output });
+
+  input.write('/help\n/exit\n');
+  const firstAnswer = io.question('forge> ');
+  const secondAnswer = io.question('forge> ');
+
+  assert.equal(await firstAnswer, '/help');
+  assert.equal(await secondAnswer, '/exit');
+  assert.equal(rendered, 'forge> forge> ');
+  io.close();
+});
 
 test('discovers a deterministic local coding model without selecting cloud inference', async () => {
   assert.equal(chooseOllamaModel(['zeta', 'qwen2.5-coder:7b', 'alpha-coder']), 'qwen2.5-coder:7b');
@@ -91,4 +150,48 @@ test('runs repeated prompts and session controls without creating another runtim
   assert.ok(output.includes('changes: disabled for fixture'));
   assert.ok(output.some((line) => line.includes('status=completed, outcome=not_evaluated')));
   assert.ok(output.some((line) => line.includes('route changed: ollama/alternate-coder:7b (session)')));
+});
+
+test('interactive memory capture is non-blocking and exposes session-scoped undo and explanation', async () => {
+  const inputs = ['I prefer concise test output.', '/memory', '/memory explain', '/memory undo', '/exit'];
+  const output: string[] = [];
+  const captured: string[] = [];
+  let undoCalls = 0;
+  const io: InteractiveSessionIo = {
+    async question() { return inputs.shift(); },
+    write(line) { output.push(line); },
+    clear() {},
+    close() {},
+  };
+  await runInteractiveSession({
+    workspaceRoot: 'C:/workspace',
+    initialRoute: { route: { provider: 'ollama', model: 'fixture' }, source: 'session' },
+    approvalProfile: 'developer',
+    io,
+    runTask: async (task) => {
+      captured.push(`run:${task}`);
+      return { runId: 'run:memory', status: 'completed', outcome: 'not_evaluated' };
+    },
+    memory: {
+      async capture(input) {
+        captured.push(`memory:${input}`);
+        return ['Remembered: I prefer concise test output. · /memory undo · /memory explain'];
+      },
+      async status() { return ['memory autosave: auto for this repository']; },
+      async explain() { return ['remembered from exact direct input']; },
+      async undo() {
+        undoCalls++;
+        return ['Undone. No recovery copy was retained.'];
+      },
+    },
+  });
+  assert.deepEqual(captured, [
+    'memory:I prefer concise test output.',
+    'run:I prefer concise test output.',
+  ]);
+  assert.equal(undoCalls, 1);
+  assert.ok(output.some((line) => line.includes('/memory undo')));
+  assert.ok(output.includes('memory autosave: auto for this repository'));
+  assert.ok(output.includes('remembered from exact direct input'));
+  assert.ok(output.some((line) => line.includes('No recovery copy')));
 });

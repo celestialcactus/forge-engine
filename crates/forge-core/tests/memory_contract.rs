@@ -78,16 +78,11 @@ fn policy_manifest_freezes_the_bounded_runtime_matrix() {
     assert_eq!(fixture["normalizationId"], "memory_text_v1");
     assert_eq!(fixture["runtimeActive"], true);
     assert_eq!(fixture["runtimeCapabilities"]["explicitControl"], true);
-    assert_eq!(fixture["runtimeCapabilities"]["automaticCapture"], false);
+    assert_eq!(fixture["runtimeCapabilities"]["automaticCapture"], true);
     assert_eq!(fixture["runtimeCapabilities"]["plannerInjection"], false);
     assert_eq!(fixture["runtimeCapabilities"]["providerRetrieval"], false);
     assert_eq!(fixture["runtimeCapabilities"]["skills"], false);
-    for collection in [
-        "normalizationCases",
-        "identityCases",
-        "admissionCases",
-        "freshnessCases",
-    ] {
+    for collection in ["normalizationCases", "identityCases", "freshnessCases"] {
         assert_eq!(
             fixture[collection]
                 .as_array()
@@ -97,6 +92,7 @@ fn policy_manifest_freezes_the_bounded_runtime_matrix() {
             "collection {collection}"
         );
     }
+    assert_eq!(fixture["admissionCases"].as_array().unwrap().len(), 6);
     assert_eq!(fixture["lifecycleCases"].as_array().unwrap().len(), 3);
 }
 
@@ -107,7 +103,7 @@ fn lifecycle_control_and_adversarial_manifests_freeze_slice_zero() {
     assert_eq!(control["protocolVersion"], "forge.kernel.memory.v1");
     assert_eq!(control["maximumRequestBytes"], 256 * 1024);
     assert_eq!(control["transactionEncoding"], "canonical_ndjson");
-    assert_eq!(control["operations"].as_array().unwrap().len(), 4);
+    assert_eq!(control["operations"].as_array().unwrap().len(), 9);
     assert_eq!(control["limits"]["maximumTextBytes"], 8 * 1024);
     assert_eq!(control["limits"]["maximumFrameBytes"], 64 * 1024);
     assert_eq!(
@@ -119,12 +115,13 @@ fn lifecycle_control_and_adversarial_manifests_freeze_slice_zero() {
     assert_eq!(control["limits"]["recoveryVersionsPerLineage"], 5);
     assert_eq!(control["limits"]["maximumRecoveryBytes"], 16 * 1024 * 1024);
     assert_eq!(control["runtimeClaims"]["plannerInjection"], false);
-    assert_eq!(control["runtimeClaims"]["automaticCapture"], false);
+    assert_eq!(control["runtimeClaims"]["automaticCapture"], true);
+    assert_eq!(control["runtimeClaims"]["plannerRetrieval"], false);
 
     let adversarial: Value =
         serde_json::from_str(include_str!("fixtures/cli8/memory-adversarial-v1.json"))
             .expect("adversarial fixture");
-    assert_eq!(adversarial["cases"].as_array().unwrap().len(), 8);
+    assert_eq!(adversarial["cases"].as_array().unwrap().len(), 13);
 }
 
 #[test]

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -112,6 +112,17 @@ test('source-built configured run and interactive commands use one fixed route w
     }), 'utf8');
     const environment = sanitizedEnvironment(home);
 
+    const enabled = await execFileAsync(process.execPath, [
+      ...cli,
+      'memory',
+      'autosave',
+      'auto',
+      '--workspace',
+      workspace,
+      '--json',
+    ], { encoding: 'utf8', timeout: 15_000, windowsHide: true, env: environment });
+    assert.equal((JSON.parse(enabled.stdout) as { readonly mode: string }).mode, 'auto');
+
     const run = await execFileAsync(process.execPath, [
       ...cli,
       'run',
@@ -140,18 +151,37 @@ test('source-built configured run and interactive commands use one fixed route w
     const interactive = await runInteractiveCli(
       ['--workspace', workspace],
       environment,
-      'Return the configured interactive fixture response.\n/exit\n',
+      'I prefer concise test output.\n/memory explain\n/memory undo\n/exit\n',
     );
     assert.equal(interactive.code, 0, interactive.stderr);
     assert.match(interactive.stdout, /route: ollama\/fixture-model \(user\)/u);
     assert.match(interactive.stdout, /assistant> Forge configured response/u);
+    assert.match(interactive.stdout, /Remembered: I prefer concise test output\./u);
+    assert.match(interactive.stdout, /exact direct input under this repository’s local auto grant/u);
+    assert.match(interactive.stdout, /No recovery copy was retained/u);
+    assert.doesNotMatch(interactive.stdout, /\.\. No recovery copy was retained/u);
+    assert.doesNotMatch(interactive.stdout, /Remember this preference\?/u);
     assert.doesNotMatch(interactive.stdout + interactive.stderr, /fallback provider/u);
     assert.equal(requests.length, 2);
     for (const request of requests) {
       assert.equal((request as { readonly model?: unknown }).model, 'fixture-model');
     }
+    assert.doesNotMatch(await readTree(join(engineRoot, 'memory')), /I prefer concise test output\./u);
   } finally {
     await closeServer(server);
     await rm(root, { recursive: true, force: true });
   }
 });
+
+const readTree = async (root: string): Promise<string> => {
+  const chunks: string[] = [];
+  const visit = async (directory: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) await visit(path);
+      else if (entry.isFile()) chunks.push(await readFile(path, 'utf8'));
+    }
+  };
+  await visit(root);
+  return chunks.join('\n');
+};

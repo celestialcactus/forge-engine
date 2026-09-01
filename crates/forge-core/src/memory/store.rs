@@ -9,7 +9,7 @@ use super::{
     MEMORY_LEDGER_SCHEMA_VERSION, MemoryCompactionResult, MemoryCorrectionDisposition, MemoryEvent,
     MemoryInspection, MemoryLedgerFrame, MemoryNonContentReceipt, MemoryObservation,
     MemoryOperation, MemoryOperationResult, MemoryOperationStatus, MemoryProjection,
-    MemoryReceiptReason, MemoryScope, MemoryStoreLimits,
+    MemoryReceiptReason, MemoryScope, MemoryStandingGrant, MemoryStoreLimits,
 };
 
 const MEMORY_DIRECTORY: &str = "memory";
@@ -237,6 +237,64 @@ impl MemoryStore {
                 occurred_at_millis,
                 false,
             ),
+            MemoryOperation::SetCaptureMode { grant } => {
+                self.ensure_grant_actor(&grant)?;
+                let occurred_at_millis = grant.created_at_millis;
+                (
+                    MemoryEvent::GrantChanged { grant },
+                    MemoryOperationStatus::CaptureModeChanged,
+                    occurred_at_millis,
+                    false,
+                )
+            }
+            MemoryOperation::RevokeGrant {
+                grant_id,
+                actor_id,
+                revoked_at_millis,
+            } => (
+                MemoryEvent::GrantRevoked {
+                    grant_id,
+                    actor_id,
+                    revoked_at_millis,
+                },
+                MemoryOperationStatus::GrantRevoked,
+                revoked_at_millis,
+                false,
+            ),
+            MemoryOperation::AutoCapture {
+                observation,
+                grant_id,
+                grant_scope,
+            } => {
+                self.ensure_scope(&observation)?;
+                let occurred_at_millis = observation.observed_at_millis;
+                (
+                    MemoryEvent::ObservationAutoCaptured {
+                        observation,
+                        grant_id,
+                        grant_scope,
+                    },
+                    MemoryOperationStatus::Admitted,
+                    occurred_at_millis,
+                    false,
+                )
+            }
+            MemoryOperation::UndoAutoCapture {
+                target,
+                grant_id,
+                actor_id,
+                occurred_at_millis,
+            } => (
+                MemoryEvent::AutoCaptureUndone {
+                    target,
+                    grant_id,
+                    actor_id,
+                    occurred_at_millis,
+                },
+                MemoryOperationStatus::AutoCaptureUndone,
+                occurred_at_millis,
+                true,
+            ),
         };
 
         let prospective_sequence = self
@@ -248,21 +306,19 @@ impl MemoryStore {
             .apply(prospective_sequence, &event, &self.limits)
             .map_err(|error| MemoryStoreError::new(error.code, error.message))?;
         if change.unchanged {
-            let active = change
-                .active_observation
-                .or_else(|| match &event {
-                    MemoryEvent::ObservationAdmitted { observation } => prospective
-                        .active_by_id(&observation.observation_id)
-                        .map(|entry| entry.observation.clone()),
-                    _ => None,
-                })
-                .ok_or_else(|| {
-                    MemoryStoreError::new(
-                        "memory_integrity_active_missing",
-                        "idempotent memory operation has no active record",
-                    )
-                })?;
-            return self.operation_result(MemoryOperationStatus::Unchanged, active, false);
+            let active = change.active_observation.or_else(|| match &event {
+                MemoryEvent::ObservationAdmitted { observation }
+                | MemoryEvent::ObservationAutoCaptured { observation, .. } => prospective
+                    .active_by_id(&observation.observation_id)
+                    .map(|entry| entry.observation.clone()),
+                _ => None,
+            });
+            return self.operation_result(
+                MemoryOperationStatus::Unchanged,
+                active,
+                change.grant,
+                false,
+            );
         }
 
         let pruned = prospective
@@ -274,7 +330,9 @@ impl MemoryStore {
                 prospective_sequence,
                 as_of_millis,
                 &self.scope,
-                if force_rewrite {
+                if matches!(status, MemoryOperationStatus::AutoCaptureUndone) {
+                    MemoryReceiptReason::AutoCaptureUndone
+                } else if force_rewrite {
                     MemoryReceiptReason::CorrectionHistoryErased
                 } else {
                     MemoryReceiptReason::RecoveryCompacted
@@ -282,12 +340,17 @@ impl MemoryStore {
                 removed,
             )?);
         }
-        let active = change.active_observation.ok_or_else(|| {
-            MemoryStoreError::new(
-                "memory_integrity_active_missing",
-                "memory transition did not produce an active record",
-            )
-        })?;
+        let active = change.active_observation;
+        let grant = change.grant;
+        if active.is_none()
+            && grant.is_none()
+            && !matches!(status, MemoryOperationStatus::AutoCaptureUndone)
+        {
+            return Err(MemoryStoreError::new(
+                "memory_integrity_result_missing",
+                "memory transition did not produce an authoritative result",
+            ));
+        }
 
         let event_frame = build_frame(
             prospective_sequence,
@@ -323,7 +386,7 @@ impl MemoryStore {
         }
         write_projection(&self.projection_path, &prospective, &self.limits)?;
         self.projection = prospective;
-        self.operation_result(status, active, should_rewrite)
+        self.operation_result(status, active, grant, should_rewrite)
     }
 
     pub fn inspect(&self, include_recovery: bool) -> MemoryInspection {
@@ -388,7 +451,8 @@ impl MemoryStore {
     fn operation_result(
         &self,
         status: MemoryOperationStatus,
-        active_observation: MemoryObservation,
+        active_observation: Option<MemoryObservation>,
+        grant: Option<MemoryStandingGrant>,
         compacted: bool,
     ) -> Result<MemoryOperationResult, MemoryStoreError> {
         let ledger_head_sha256 = self
@@ -407,6 +471,7 @@ impl MemoryStore {
             status,
             scope: self.scope.clone(),
             active_observation,
+            grant,
             active_count: self.projection.active.len().try_into().unwrap_or(u32::MAX),
             recovery_count: self
                 .projection
@@ -427,6 +492,25 @@ impl MemoryStore {
             ));
         }
         Ok(())
+    }
+
+    fn ensure_grant_actor(&self, grant: &MemoryStandingGrant) -> Result<(), MemoryStoreError> {
+        grant
+            .validate_identity()
+            .map_err(|error| MemoryStoreError::new(error.code(), error.to_string()))?;
+        if !matches!(grant.scope, super::MemoryGrantScope::Repository { .. }) {
+            return Err(MemoryStoreError::new(
+                "memory_scope_unavailable",
+                "Slice 3 standing grants are limited to the current repository",
+            ));
+        }
+        match &self.scope {
+            MemoryScope::Developer { actor_id } if actor_id == &grant.actor_id => Ok(()),
+            _ => Err(MemoryStoreError::new(
+                "memory_admission_actor_mismatch",
+                "memory standing grants must be stored in their exact developer scope",
+            )),
+        }
     }
 }
 
@@ -584,6 +668,7 @@ fn rebuild_projection(
             MemoryEvent::CompactedActive { .. }
             | MemoryEvent::CompactedRecovery { .. }
             | MemoryEvent::CompactedReceipt { .. }
+            | MemoryEvent::CompactedGrant { .. }
                 if !prefix_open =>
             {
                 return Err(MemoryStoreError::new(
@@ -593,7 +678,11 @@ fn rebuild_projection(
             }
             MemoryEvent::ObservationAdmitted { .. }
             | MemoryEvent::ObservationCorrected { .. }
-            | MemoryEvent::ObservationRestored { .. } => prefix_open = false,
+            | MemoryEvent::ObservationRestored { .. }
+            | MemoryEvent::ObservationAutoCaptured { .. }
+            | MemoryEvent::AutoCaptureUndone { .. }
+            | MemoryEvent::GrantChanged { .. }
+            | MemoryEvent::GrantRevoked { .. } => prefix_open = false,
             _ => {}
         }
         projection
@@ -615,6 +704,15 @@ fn rebuild_projection(
             "memory ledger contains content from another exact scope",
         ));
     }
+    if projection.grants.iter().any(|grant| {
+        !matches!(scope, MemoryScope::Developer { actor_id } if actor_id == &grant.actor_id)
+            || !matches!(grant.scope, super::MemoryGrantScope::Repository { .. })
+    }) {
+        return Err(MemoryStoreError::new(
+            "memory_admission_actor_mismatch",
+            "memory ledger contains a standing grant outside its exact developer scope",
+        ));
+    }
     Ok(projection)
 }
 
@@ -627,7 +725,8 @@ fn compacted_frames(
         1usize
             .saturating_add(projection.active.len())
             .saturating_add(projection.recovery.len())
-            .saturating_add(projection.receipts.len()),
+            .saturating_add(projection.receipts.len())
+            .saturating_add(projection.grants.len()),
     );
     events.push(MemoryEvent::CompactionStarted {
         compacted_at_millis,
@@ -652,6 +751,13 @@ fn compacted_frames(
             .iter()
             .cloned()
             .map(|receipt| MemoryEvent::CompactedReceipt { receipt }),
+    );
+    events.extend(
+        projection
+            .grants
+            .iter()
+            .cloned()
+            .map(|grant| MemoryEvent::CompactedGrant { grant }),
     );
     let mut frames = Vec::with_capacity(events.len());
     let mut total_bytes = 0u64;

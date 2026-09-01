@@ -7,7 +7,12 @@
     "remember",
     "inspect",
     "correct",
-    "restore"
+    "restore",
+    "remember_preference",
+    "set_capture_mode",
+    "revoke_grant",
+    "auto_capture",
+    "undo_auto_capture"
   ],
   "correctionDispositions": [
     "keep_bounded",
@@ -27,6 +32,8 @@
     "plannerInjection": false,
     "providerCalls": false,
     "mcpMutation": false,
-    "automaticCapture": false
+    "automaticCapture": true,
+    "automaticCaptureBoundary": "eligible_exact_developer_input_under_active_local_grant",
+    "plannerRetrieval": false
   }
 }

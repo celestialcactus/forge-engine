@@ -3,10 +3,10 @@ use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
 use forge_core::{
-    MemoryCorrectionDisposition, MemoryFreshness, MemoryObservation, MemoryObservationId,
-    MemoryObservationInput, MemoryObservationRelation, MemoryOperation, MemoryProvenance,
-    MemoryScope, MemoryStatementKind, MemoryStore, MemoryStoreLimits, MemorySubjectKind,
-    PreferenceAdmission,
+    MemoryCaptureMode, MemoryCorrectionDisposition, MemoryFreshness, MemoryGrantId,
+    MemoryGrantScope, MemoryObservation, MemoryObservationId, MemoryObservationInput,
+    MemoryObservationRelation, MemoryOperation, MemoryProvenance, MemoryScope, MemoryStandingGrant,
+    MemoryStatementKind, MemoryStore, MemoryStoreLimits, MemorySubjectKind, PreferenceAdmission,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -54,6 +54,35 @@ enum MemoryAction {
     },
     Restore {
         target_observation_id: MemoryObservationId,
+        occurred_at_millis: i64,
+    },
+    SetCaptureMode {
+        mode: MemoryCaptureMode,
+        actor_id: String,
+        grant_scope: MemoryGrantScope,
+        occurred_at_millis: i64,
+    },
+    RevokeGrant {
+        grant_id: MemoryGrantId,
+        actor_id: String,
+        occurred_at_millis: i64,
+    },
+    AutoCapture {
+        statement: String,
+        actor_id: String,
+        grant_id: MemoryGrantId,
+        grant_scope: MemoryGrantScope,
+        observed_at_millis: i64,
+    },
+    RememberPreference {
+        statement: String,
+        actor_id: String,
+        observed_at_millis: i64,
+    },
+    UndoAutoCapture {
+        target_observation_id: MemoryObservationId,
+        grant_id: MemoryGrantId,
+        actor_id: String,
         occurred_at_millis: i64,
     },
 }
@@ -168,17 +197,31 @@ pub fn execute(
                     code: "memory_transition_target_not_active".to_owned(),
                     message: "Correction target is not an active memory.".to_owned(),
                 })?;
-            let replacement = reviewed_decision(
-                &start.request_id,
-                actor_id,
-                replacement_statement,
-                start.scope,
-                MemoryObservationRelation::Corrects {
-                    observation_id: target_observation_id.clone(),
-                },
-                occurred_at_millis,
-                PreferenceAdmission::ReviewedAcceptance,
-            )?;
+            let relation = MemoryObservationRelation::Corrects {
+                observation_id: target_observation_id.clone(),
+            };
+            let replacement =
+                if target.observation.statement_kind == MemoryStatementKind::DeveloperPreference {
+                    developer_preference(
+                        &start.request_id,
+                        actor_id,
+                        replacement_statement,
+                        start.scope,
+                        relation,
+                        PreferenceAdmission::ReviewedAcceptance,
+                        occurred_at_millis,
+                    )?
+                } else {
+                    reviewed_decision(
+                        &start.request_id,
+                        actor_id,
+                        replacement_statement,
+                        start.scope,
+                        relation,
+                        occurred_at_millis,
+                        PreferenceAdmission::ReviewedAcceptance,
+                    )?
+                };
             if replacement.subject != target.observation.subject {
                 return Err(MemoryBridgeFailure {
                     request_id: Some(start.request_id),
@@ -205,6 +248,106 @@ pub fn execute(
             let result = store
                 .apply(MemoryOperation::Restore {
                     target: target_observation_id,
+                    occurred_at_millis,
+                })
+                .map_err(|error| store_failure(&start.request_id, error))?;
+            MemoryOutcome::Operation {
+                result: Box::new(result),
+            }
+        }
+        MemoryAction::SetCaptureMode {
+            mode,
+            actor_id,
+            grant_scope,
+            occurred_at_millis,
+        } => {
+            let grant = MemoryStandingGrant::new(actor_id, grant_scope, mode, occurred_at_millis)
+                .map_err(|error| MemoryBridgeFailure {
+                request_id: Some(start.request_id.clone()),
+                code: error.code().to_owned(),
+                message: error.to_string(),
+            })?;
+            let result = store
+                .apply(MemoryOperation::SetCaptureMode { grant })
+                .map_err(|error| store_failure(&start.request_id, error))?;
+            MemoryOutcome::Operation {
+                result: Box::new(result),
+            }
+        }
+        MemoryAction::RevokeGrant {
+            grant_id,
+            actor_id,
+            occurred_at_millis,
+        } => {
+            let result = store
+                .apply(MemoryOperation::RevokeGrant {
+                    grant_id,
+                    actor_id,
+                    revoked_at_millis: occurred_at_millis,
+                })
+                .map_err(|error| store_failure(&start.request_id, error))?;
+            MemoryOutcome::Operation {
+                result: Box::new(result),
+            }
+        }
+        MemoryAction::AutoCapture {
+            statement,
+            actor_id,
+            grant_id,
+            grant_scope,
+            observed_at_millis,
+        } => {
+            let observation = auto_preference(
+                &start.request_id,
+                actor_id,
+                statement,
+                start.scope,
+                grant_id.clone(),
+                observed_at_millis,
+            )?;
+            let result = store
+                .apply(MemoryOperation::AutoCapture {
+                    observation,
+                    grant_id,
+                    grant_scope,
+                })
+                .map_err(|error| store_failure(&start.request_id, error))?;
+            MemoryOutcome::Operation {
+                result: Box::new(result),
+            }
+        }
+        MemoryAction::RememberPreference {
+            statement,
+            actor_id,
+            observed_at_millis,
+        } => {
+            let observation = developer_preference(
+                &start.request_id,
+                actor_id,
+                statement,
+                start.scope,
+                MemoryObservationRelation::Supports,
+                PreferenceAdmission::ReviewedAcceptance,
+                observed_at_millis,
+            )?;
+            let result = store
+                .apply(MemoryOperation::Remember { observation })
+                .map_err(|error| store_failure(&start.request_id, error))?;
+            MemoryOutcome::Operation {
+                result: Box::new(result),
+            }
+        }
+        MemoryAction::UndoAutoCapture {
+            target_observation_id,
+            grant_id,
+            actor_id,
+            occurred_at_millis,
+        } => {
+            let result = store
+                .apply(MemoryOperation::UndoAutoCapture {
+                    target: target_observation_id,
+                    grant_id,
+                    actor_id,
                     occurred_at_millis,
                 })
                 .map_err(|error| store_failure(&start.request_id, error))?;
@@ -258,6 +401,78 @@ fn reviewed_decision(
         scope,
         provenance: MemoryProvenance::DeveloperStatement {
             run_id: "memory:cli8a".to_owned(),
+            actor_id,
+            source_id: format!("memory_input:{request_id}"),
+            input_sha256,
+            admission: Some(admission),
+        },
+        relation,
+        confidence: 100,
+        observed_at_millis,
+        freshness: MemoryFreshness::PersistentUntilReviewed,
+    })
+    .map_err(|error| MemoryBridgeFailure {
+        request_id: Some(request_id.to_owned()),
+        code: error.code().to_owned(),
+        message: error.to_string(),
+    })
+}
+
+fn auto_preference(
+    request_id: &str,
+    actor_id: String,
+    statement: String,
+    scope: MemoryScope,
+    grant_id: MemoryGrantId,
+    observed_at_millis: i64,
+) -> Result<MemoryObservation, MemoryBridgeFailure> {
+    developer_preference(
+        request_id,
+        actor_id,
+        statement,
+        scope,
+        MemoryObservationRelation::Supports,
+        PreferenceAdmission::StandingGrant { grant_id },
+        observed_at_millis,
+    )
+}
+
+fn developer_preference(
+    request_id: &str,
+    actor_id: String,
+    statement: String,
+    scope: MemoryScope,
+    relation: MemoryObservationRelation,
+    admission: PreferenceAdmission,
+    observed_at_millis: i64,
+) -> Result<MemoryObservation, MemoryBridgeFailure> {
+    if !bounded_identifier(&actor_id) {
+        return Err(MemoryBridgeFailure {
+            request_id: Some(request_id.to_owned()),
+            code: "memory_admission_actor_invalid".to_owned(),
+            message: "Memory actor identity is invalid.".to_owned(),
+        });
+    }
+    if !matches!(&scope, MemoryScope::Developer { actor_id: scope_actor } if scope_actor == &actor_id)
+    {
+        return Err(MemoryBridgeFailure {
+            request_id: Some(request_id.to_owned()),
+            code: "memory_scope_mismatch".to_owned(),
+            message: "Automatic preferences require the exact developer scope.".to_owned(),
+        });
+    }
+    let input_sha256 = Sha256::digest(statement.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    MemoryObservation::new(MemoryObservationInput {
+        subject_kind: MemorySubjectKind::DeveloperPreference,
+        statement_kind: MemoryStatementKind::DeveloperPreference,
+        subject: "developer preference".to_owned(),
+        statement,
+        scope,
+        provenance: MemoryProvenance::DeveloperStatement {
+            run_id: "memory:cli8a:auto".to_owned(),
             actor_id,
             source_id: format!("memory_input:{request_id}"),
             input_sha256,
