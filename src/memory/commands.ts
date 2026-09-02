@@ -112,6 +112,48 @@ export class MemoryCommands {
     return owner.runtime.restore(target.observation.observationId);
   }
 
+  async forget(selection: string): Promise<MemoryOperationResult> {
+    const target = await this.#activeTarget(selection);
+    return target.runtime.forget(target.entry.observation.observationId);
+  }
+
+  async purge(
+    selection: string,
+    authorize?: (entry: ProjectedMemory | RecoveryMemory) => Promise<void>,
+  ): Promise<MemoryOperationResult> {
+    const candidates = await Promise.all(this.#runtimes.map(async (runtime) => ({
+      runtime,
+      inspection: await runtime.inspect(true),
+    })));
+    const target = selectOne(
+      candidates.flatMap((candidate) => [
+        ...candidate.inspection.active,
+        ...(candidate.inspection.recovery ?? []),
+      ]),
+      selection,
+      'memory',
+    );
+    const owner = candidates.find((candidate) => sameScope(candidate.inspection.scope, target.observation.scope));
+    if (owner === undefined) throw new Error('Selected memory has no exact-scope runtime.');
+    await authorize?.(target);
+    return owner.runtime.purge(target.observation.observationId);
+  }
+
+  async clearRecoveryHistory(
+    authorize?: (recordCount: number, scopeCount: number) => Promise<void>,
+  ): Promise<readonly MemoryOperationResult[]> {
+    const candidates = await Promise.all(this.#runtimes.map(async (runtime) => ({
+      runtime,
+      inspection: await runtime.inspect(true),
+    })));
+    const withRecovery = candidates.filter((candidate) => candidate.inspection.recoveryCount > 0);
+    await authorize?.(
+      withRecovery.reduce((sum, candidate) => sum + candidate.inspection.recoveryCount, 0),
+      withRecovery.length,
+    );
+    return Promise.all(withRecovery.map((candidate) => candidate.runtime.clearRecoveryHistory()));
+  }
+
   status(): Promise<MemoryInspection> {
     return this.#runtime.inspect(false);
   }

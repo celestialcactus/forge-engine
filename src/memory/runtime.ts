@@ -8,6 +8,7 @@ import type {
   MemoryInspection,
   MemoryObservation,
   MemoryOperationResult,
+  MemoryNonContentReceipt,
   MemoryRuntimeOutcome,
   MemoryScope,
   MemoryStandingGrant,
@@ -131,8 +132,9 @@ const validateRecovery = (
   const value = object(candidate);
   if (typeof value?.lineageId !== 'string'
     || !observationIdPattern.test(value.lineageId)
-    || typeof value.replacementObservationId !== 'string'
-    || !observationIdPattern.test(value.replacementObservationId)
+    || (value.replacementObservationId !== undefined
+      && (typeof value.replacementObservationId !== 'string'
+        || !observationIdPattern.test(value.replacementObservationId)))
     || !Number.isSafeInteger(value.replacedAtMillis)
     || Number(value.replacedAtMillis) < 0
     || !Number.isSafeInteger(value.updatedSequence)
@@ -140,6 +142,33 @@ const validateRecovery = (
   ) throw new Error('Rust kernel returned an invalid recovery memory.');
   validateObservation(value.observation, expectedScope);
   return candidate as RecoveryMemory;
+};
+
+const validateReceipt = (candidate: unknown, expectedScope: MemoryScope): MemoryNonContentReceipt => {
+  const value = object(candidate);
+  const forbidden = [
+    'claimId', 'observationId', 'targetId', 'contentSha256', 'statement', 'subject',
+  ];
+  if (value?.schemaVersion !== 1
+    || typeof value.operationId !== 'string'
+    || !value.operationId.startsWith('memory_operation:v1:sha256:')
+    || !digestPattern.test(value.operationId.slice('memory_operation:v1:sha256:'.length))
+    || !Number.isSafeInteger(value.performedAtMillis)
+    || Number(value.performedAtMillis) < 0
+    || (value.actorId !== undefined && (typeof value.actorId !== 'string' || value.actorId.length === 0))
+    || (value.purgedAtMillis !== undefined
+      && (!Number.isSafeInteger(value.purgedAtMillis) || Number(value.purgedAtMillis) < 0))
+    || value.scopeKind !== expectedScope.kind
+    || ![
+      'correction_history_erased', 'recovery_compacted', 'auto_capture_undone',
+      'memory_purged', 'recovery_history_cleared',
+    ].includes(String(value.reasonCode))
+    || !Number.isSafeInteger(value.removedRecordCount)
+    || Number(value.removedRecordCount) < 0
+    || forbidden.some((key) => Object.hasOwn(value, key))) {
+    throw new Error('Rust kernel returned an invalid memory receipt.');
+  }
+  return candidate as MemoryNonContentReceipt;
 };
 
 const validateInspection = (
@@ -175,7 +204,8 @@ const validateOperation = (
   const value = object(candidate);
   if (value?.schemaVersion !== 1
     || ![
-      'admitted', 'corrected', 'restored', 'unchanged', 'capture_mode_changed',
+      'admitted', 'corrected', 'restored', 'forgotten', 'purged',
+      'recovery_history_cleared', 'unchanged', 'capture_mode_changed',
       'grant_revoked', 'auto_capture_undone',
     ].includes(String(value.status))
     || !sameScope(value.scope, expectedScope)
@@ -189,9 +219,10 @@ const validateOperation = (
   ) throw new Error('Rust kernel returned an invalid memory operation result.');
   if (value.activeObservation !== undefined) validateObservation(value.activeObservation, expectedScope);
   if (value.grant !== undefined) validateGrant(value.grant);
+  if (value.receipt !== undefined) validateReceipt(value.receipt, expectedScope);
   if (value.activeObservation === undefined
     && value.grant === undefined
-    && value.status !== 'auto_capture_undone') {
+    && !['auto_capture_undone', 'forgotten', 'purged', 'recovery_history_cleared'].includes(String(value.status))) {
     throw new Error('Rust kernel returned a memory operation without an authoritative result.');
   }
   return candidate as MemoryOperationResult;
@@ -255,6 +286,27 @@ export class RustMemoryRuntime implements MemoryCaptureRuntime {
       operation: 'restore',
       targetObservationId,
       occurredAtMillis,
+    });
+  }
+
+  forget(targetObservationId: string, occurredAtMillis = this.#now()): Promise<MemoryOperationResult> {
+    return this.#operation({ operation: 'forget', targetObservationId, occurredAtMillis });
+  }
+
+  purge(targetObservationId: string, purgedAtMillis = this.#now()): Promise<MemoryOperationResult> {
+    return this.#operation({
+      operation: 'purge',
+      targetObservationId,
+      actorId: this.#options.actorId,
+      purgedAtMillis,
+    });
+  }
+
+  clearRecoveryHistory(clearedAtMillis = this.#now()): Promise<MemoryOperationResult> {
+    return this.#operation({
+      operation: 'clear_recovery_history',
+      actorId: this.#options.actorId,
+      clearedAtMillis,
     });
   }
 

@@ -23,7 +23,8 @@ pub struct RecoveryMemory {
     pub lineage_id: MemoryLineageId,
     pub observation: MemoryObservation,
     pub replaced_at_millis: i64,
-    pub replacement_observation_id: MemoryObservationId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replacement_observation_id: Option<MemoryObservationId>,
     pub updated_sequence: u64,
 }
 
@@ -196,7 +197,7 @@ impl MemoryProjection {
                         lineage_id: previous.lineage_id.clone(),
                         observation: previous.observation,
                         replaced_at_millis: *occurred_at_millis,
-                        replacement_observation_id: replacement.observation_id.clone(),
+                        replacement_observation_id: Some(replacement.observation_id.clone()),
                         updated_sequence: sequence,
                     });
                 } else {
@@ -232,29 +233,110 @@ impl MemoryProjection {
                 let active_index = self
                     .active
                     .iter()
-                    .position(|entry| entry.lineage_id == restored.lineage_id)
-                    .ok_or_else(|| {
-                        ProjectionError::new(
-                            "memory_integrity_lineage_missing",
-                            "recovery lineage has no active memory",
-                        )
-                    })?;
-                let previous = self.active.remove(active_index);
-                self.recovery.push(RecoveryMemory {
-                    lineage_id: previous.lineage_id.clone(),
-                    observation: previous.observation,
-                    replaced_at_millis: *occurred_at_millis,
-                    replacement_observation_id: restored.observation.observation_id.clone(),
-                    updated_sequence: sequence,
-                });
+                    .position(|entry| entry.lineage_id == restored.lineage_id);
+                let admitted_sequence = if let Some(active_index) = active_index {
+                    let previous = self.active.remove(active_index);
+                    self.recovery.push(RecoveryMemory {
+                        lineage_id: previous.lineage_id.clone(),
+                        observation: previous.observation,
+                        replaced_at_millis: *occurred_at_millis,
+                        replacement_observation_id: Some(
+                            restored.observation.observation_id.clone(),
+                        ),
+                        updated_sequence: sequence,
+                    });
+                    previous.admitted_sequence
+                } else {
+                    if restored.replacement_observation_id.is_some() {
+                        let terminal = self
+                            .recovery
+                            .iter_mut()
+                            .find(|entry| {
+                                entry.lineage_id == restored.lineage_id
+                                    && entry.replacement_observation_id.is_none()
+                            })
+                            .ok_or_else(|| {
+                                ProjectionError::new(
+                                    "memory_integrity_lineage_missing",
+                                    "recovery lineage has neither active nor forgotten terminal memory",
+                                )
+                            })?;
+                        terminal.replaced_at_millis = *occurred_at_millis;
+                        terminal.replacement_observation_id =
+                            Some(restored.observation.observation_id.clone());
+                        terminal.updated_sequence = sequence;
+                    }
+                    restored.updated_sequence
+                };
                 let active_observation = restored.observation;
                 self.active.push(ProjectedMemory {
                     lineage_id: restored.lineage_id,
                     observation: active_observation.clone(),
-                    admitted_sequence: previous.admitted_sequence,
+                    admitted_sequence,
                     updated_sequence: sequence,
                 });
                 change.active_observation = Some(active_observation);
+            }
+            MemoryEvent::ObservationForgotten {
+                target,
+                occurred_at_millis,
+            } => {
+                validate_time(*occurred_at_millis)?;
+                let index = self.active_index(target).ok_or_else(|| {
+                    ProjectionError::new(
+                        "memory_transition_target_not_active",
+                        "forget target is not an active memory",
+                    )
+                })?;
+                let previous = self.active.remove(index);
+                self.recovery.push(RecoveryMemory {
+                    lineage_id: previous.lineage_id,
+                    observation: previous.observation,
+                    replaced_at_millis: *occurred_at_millis,
+                    replacement_observation_id: None,
+                    updated_sequence: sequence,
+                });
+            }
+            MemoryEvent::ObservationPurged {
+                target,
+                actor_id,
+                purged_at_millis,
+            } => {
+                validate_time(*purged_at_millis)?;
+                validate_actor(actor_id)?;
+                let lineage = self
+                    .active
+                    .iter()
+                    .find(|entry| entry.observation.observation_id == *target)
+                    .map(|entry| entry.lineage_id.clone())
+                    .or_else(|| {
+                        self.recovery
+                            .iter()
+                            .find(|entry| entry.observation.observation_id == *target)
+                            .map(|entry| entry.lineage_id.clone())
+                    })
+                    .ok_or_else(|| {
+                        ProjectionError::new(
+                            "memory_transition_target_missing",
+                            "purge target does not exist in active or recovery memory",
+                        )
+                    })?;
+                let before = self.active.len().saturating_add(self.recovery.len());
+                self.active.retain(|entry| entry.lineage_id != lineage);
+                self.recovery.retain(|entry| entry.lineage_id != lineage);
+                change.erased_records = before
+                    .saturating_sub(self.active.len().saturating_add(self.recovery.len()))
+                    .try_into()
+                    .unwrap_or(u32::MAX);
+            }
+            MemoryEvent::RecoveryHistoryCleared {
+                actor_id,
+                cleared_at_millis,
+            } => {
+                validate_time(*cleared_at_millis)?;
+                validate_actor(actor_id)?;
+                change.erased_records = self.recovery.len().try_into().unwrap_or(u32::MAX);
+                self.recovery.clear();
             }
             MemoryEvent::GrantChanged { grant } => {
                 grant
@@ -351,15 +433,10 @@ impl MemoryProjection {
                     .observation
                     .validate_identity()
                     .map_err(|error| ProjectionError::new(error.code(), error.to_string()))?;
-                if self.contains_observation(&entry.observation.observation_id)
-                    || !self
-                        .active
-                        .iter()
-                        .any(|current| current.lineage_id == entry.lineage_id)
-                {
+                if self.contains_observation(&entry.observation.observation_id) {
                     return Err(ProjectionError::new(
-                        "memory_integrity_lineage_missing",
-                        "compacted recovery entry has no unique active lineage",
+                        "memory_integrity_duplicate_observation",
+                        "compacted recovery contains a duplicate observation",
                     ));
                 }
                 self.recovery.push(entry.clone());
@@ -453,6 +530,49 @@ impl MemoryProjection {
             .find(|entry| &entry.observation.observation_id == id)
     }
 
+    pub(crate) fn validate_lineage_integrity(&self) -> Result<(), ProjectionError> {
+        let mut recovery_lineages = BTreeMap::<MemoryLineageId, u32>::new();
+        for entry in &self.recovery {
+            let terminals = recovery_lineages
+                .entry(entry.lineage_id.clone())
+                .or_default();
+            if entry.replacement_observation_id.is_none() {
+                *terminals = terminals.saturating_add(1);
+            } else if let Some(replacement) = &entry.replacement_observation_id {
+                let replacement_lineage = self
+                    .active
+                    .iter()
+                    .find(|candidate| candidate.observation.observation_id == *replacement)
+                    .map(|candidate| &candidate.lineage_id)
+                    .or_else(|| {
+                        self.recovery
+                            .iter()
+                            .find(|candidate| candidate.observation.observation_id == *replacement)
+                            .map(|candidate| &candidate.lineage_id)
+                    });
+                if replacement_lineage != Some(&entry.lineage_id) {
+                    return Err(ProjectionError::new(
+                        "memory_integrity_lineage_replacement",
+                        "recovery replacement does not exist in the same lineage",
+                    ));
+                }
+            }
+        }
+        for (lineage, terminals) in recovery_lineages {
+            let has_active = self
+                .active
+                .iter()
+                .any(|candidate| candidate.lineage_id == lineage);
+            if (has_active && terminals != 0) || (!has_active && terminals != 1) {
+                return Err(ProjectionError::new(
+                    "memory_integrity_lineage_terminal",
+                    "recovery lineage does not have exactly one active or forgotten terminal",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     fn active_index(&self, id: &MemoryObservationId) -> Option<usize> {
         self.active
             .iter()
@@ -521,6 +641,17 @@ pub(crate) struct ProjectionChange {
     pub unchanged: bool,
     pub erased_records: u32,
     pub grant: Option<MemoryStandingGrant>,
+}
+
+fn validate_actor(actor_id: &str) -> Result<(), ProjectionError> {
+    if actor_id.trim().is_empty() || actor_id.len() > 512 || actor_id.chars().any(char::is_control)
+    {
+        return Err(ProjectionError::new(
+            "memory_admission_actor_invalid",
+            "memory actor identity is invalid",
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -42,6 +42,16 @@ const productEnvironment = (homeRoot, additions = {}) => {
     USERPROFILE: homeRoot,
     ...additions,
   };
+};
+
+const readTree = async (directory) => {
+  const chunks = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) chunks.push(await readTree(path));
+    else if (entry.isFile() && entry.name !== 'lock') chunks.push(await readFile(path, 'utf8'));
+  }
+  return chunks.join('\n');
 };
 
 try {
@@ -239,6 +249,77 @@ try {
     throw new Error(`Clean-install autosave did not persist local disablement: ${JSON.stringify(autosaveDisabled)}`);
   }
 
+  const privacyAlpha = 'Package privacy alpha must be removable from memory state.';
+  const privacyBeta = 'Package privacy beta must leave no lineage content behind.';
+  await runCli([
+    'memory', 'remember', privacyAlpha, '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ]);
+  const unconfirmedPurge = await runCli([
+    'memory', 'purge', 'Package privacy alpha', '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ]).then(() => undefined, (error) => error);
+  if (unconfirmedPurge?.code !== 1
+    || !String(unconfirmedPurge.stderr).includes('memory_command_failed')
+    || !String(unconfirmedPurge.stderr).includes('Re-run with --yes')) {
+    throw new Error('Clean-install purge did not require explicit noninteractive confirmation.');
+  }
+  await runCli([
+    'memory', 'forget', 'Package privacy alpha', '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ]);
+  const hidden = JSON.parse((await runCli([
+    'memory', 'find', 'Package privacy alpha', '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ])).stdout);
+  const recoverable = JSON.parse((await runCli([
+    'memory', 'history', 'Package privacy alpha', '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ])).stdout);
+  if (hidden.matches.length !== 0 || recoverable.matches.length !== 1) {
+    throw new Error('Clean-install forget was not inactive and recoverable.');
+  }
+  await runCli([
+    'memory', 'restore', 'Package privacy alpha', '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ]);
+  await runCli([
+    'memory', 'correct', 'Package privacy alpha', '--replacement', privacyBeta,
+    '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ]);
+  const purged = JSON.parse((await runCli([
+    'memory', 'purge', 'Package privacy beta', '--yes',
+    '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ])).stdout);
+  const purgeReceipt = purged.result?.receipt;
+  const forbiddenReceiptFields = [
+    'claimId', 'observationId', 'targetId', 'contentSha256', 'statement', 'subject',
+  ];
+  if (purged.result?.status !== 'purged'
+    || purgeReceipt?.reasonCode !== 'memory_purged'
+    || purgeReceipt?.removedRecordCount !== 2
+    || forbiddenReceiptFields.some((fieldName) => Object.hasOwn(purgeReceipt ?? {}, fieldName))
+    || !String(purged.disclosure).includes('runs, artifacts, conversations, backups, and media')) {
+    throw new Error(`Clean-install purge receipt was not conformant: ${JSON.stringify(purged)}`);
+  }
+  const afterPurge = await readTree(engineRoot);
+  if (afterPurge.includes(privacyAlpha) || afterPurge.includes(privacyBeta)) {
+    throw new Error('Clean-install purge retained lineage content in Forge memory state.');
+  }
+
+  const historyAlpha = 'Package history alpha should be recoverable only.';
+  const historyBeta = 'Package history beta must remain active.';
+  await runCli([
+    'memory', 'remember', historyAlpha, '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ]);
+  await runCli([
+    'memory', 'correct', 'Package history alpha', '--replacement', historyBeta,
+    '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ]);
+  const cleared = JSON.parse((await runCli([
+    'memory', 'history', 'clear', '--yes', '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ])).stdout);
+  const afterClear = await readTree(engineRoot);
+  if (cleared.clearedRecordCount !== 1
+    || afterClear.includes(historyAlpha)
+    || !afterClear.includes(historyBeta)) {
+    throw new Error(`Clean-install history clear did not retain only active memory: ${JSON.stringify(cleared)}`);
+  }
+
   const partialEnvironment = productEnvironment(partialHomeRoot, {
     FORGE_DEFAULT_PROVIDER: 'ollama',
     FORGE_KERNEL_BINARY: join(root, 'kernel-must-not-be-probed'),
@@ -326,6 +407,7 @@ try {
       'doctor',
       'onboard',
       'memory-autosave-ask-auto-off',
+      'memory-forget-restore-purge-history-clear',
       'inspect',
       'update',
       'uninstall',

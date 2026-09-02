@@ -34,6 +34,25 @@ export const renderMemoryOperation = (result: MemoryOperationResult): readonly s
   ];
 };
 
+export const memoryPrivacyBoundary =
+  'This changes Forge memory only. Separately retained runs, artifacts, conversations, backups, and media are not erased.';
+
+export const renderMemoryPrivacyOperation = (result: MemoryOperationResult): readonly string[] => {
+  if (!['forgotten', 'purged', 'recovery_history_cleared'].includes(result.status)) {
+    throw new Error('Expected a memory privacy operation result.');
+  }
+  const summary = result.status === 'forgotten'
+    ? 'Forgotten. The memory is inactive and can be restored from bounded recovery history.'
+    : result.status === 'purged'
+      ? `Purged ${String(result.receipt?.removedRecordCount ?? 0)} record(s) from the selected memory lineage.`
+      : `Cleared ${String(result.receipt?.removedRecordCount ?? 0)} recoverable memory record(s). Active memory was retained.`;
+  return [
+    summary,
+    `Active: ${result.activeCount}; recovery: ${result.recoveryCount}${result.compacted ? '; storage rewritten' : ''}.`,
+    memoryPrivacyBoundary,
+  ];
+};
+
 export const renderMemoryExplanation = (entry: ProjectedMemory): readonly string[] => {
   const observation = entry.observation;
   const provenance = observation.provenance;

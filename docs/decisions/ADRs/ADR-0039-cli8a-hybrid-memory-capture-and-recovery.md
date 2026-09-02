@@ -1,8 +1,8 @@
 # ADR-0039: Use hybrid memory machinery with standing capture grants and bounded recovery
 
 **Date:** 2026-08-29
-**Status:** Accepted for the bounded Slice 0–3 implementation packet; Slices 4–5
-remain separately gated
+**Status:** Accepted through the bounded Slice 0–4 implementation packet; Slice 4
+candidate `20b9bac` is accepted for merge by Checkpoint 94; Slice 5 remains gated
 **Scope:** CLI8A capture, lifecycle, recovery, and future retrieval boundary
 **Amends:** ADR-0038 if accepted
 

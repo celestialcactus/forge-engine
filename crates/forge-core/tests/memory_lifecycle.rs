@@ -146,6 +146,170 @@ fn correction_and_restore_keep_exactly_one_active_version() {
 }
 
 #[test]
+fn forget_is_reversible_and_remains_recoverable_after_restart() {
+    let root = test_root("forget-restore");
+    let original = decision(
+        "Keep the privacy flow reversible until purge.",
+        10,
+        MemoryObservationRelation::Supports,
+        PreferenceAdmission::ExplicitRemember,
+    )
+    .unwrap();
+    {
+        let mut store = MemoryStore::open(&root, scope(), MemoryStoreLimits::default()).unwrap();
+        store
+            .apply(MemoryOperation::Remember {
+                observation: original.clone(),
+            })
+            .unwrap();
+        let result = store
+            .apply(MemoryOperation::Forget {
+                target: original.observation_id.clone(),
+                occurred_at_millis: 20,
+            })
+            .unwrap();
+        assert_eq!(result.status, forge_core::MemoryOperationStatus::Forgotten);
+        assert_eq!(result.active_count, 0);
+        assert_eq!(result.recovery_count, 1);
+        let forgotten = store.inspect(true);
+        assert!(forgotten.active.is_empty());
+        assert_eq!(forgotten.recovery[0].observation, original);
+        assert!(forgotten.recovery[0].replacement_observation_id.is_none());
+    }
+
+    let mut reopened = MemoryStore::open(&root, scope(), MemoryStoreLimits::default()).unwrap();
+    let restored = reopened
+        .apply(MemoryOperation::Restore {
+            target: original.observation_id.clone(),
+            occurred_at_millis: 30,
+        })
+        .unwrap();
+    assert_eq!(restored.status, forge_core::MemoryOperationStatus::Restored);
+    let inspection = reopened.inspect(true);
+    assert_eq!(inspection.active[0].observation, original);
+    assert!(inspection.recovery.is_empty());
+    drop(reopened);
+    cleanup(&root);
+}
+
+#[test]
+fn corrected_lineage_can_be_forgotten_rebuilt_and_restored_from_an_older_version() {
+    let root = test_root("correct-forget-restore");
+    let original = decision(
+        "Original memory version.",
+        10,
+        MemoryObservationRelation::Supports,
+        PreferenceAdmission::ExplicitRemember,
+    )
+    .unwrap();
+    let middle = decision(
+        "Middle memory version.",
+        20,
+        MemoryObservationRelation::Corrects {
+            observation_id: original.observation_id.clone(),
+        },
+        PreferenceAdmission::ReviewedAcceptance,
+    )
+    .unwrap();
+    let current = decision(
+        "Current memory version.",
+        30,
+        MemoryObservationRelation::Corrects {
+            observation_id: middle.observation_id.clone(),
+        },
+        PreferenceAdmission::ReviewedAcceptance,
+    )
+    .unwrap();
+    let unrelated = decision(
+        "Unrelated active memory.",
+        50,
+        MemoryObservationRelation::Supports,
+        PreferenceAdmission::ExplicitRemember,
+    )
+    .unwrap();
+    let unrelated_replacement = decision(
+        "Unrelated replacement memory.",
+        60,
+        MemoryObservationRelation::Corrects {
+            observation_id: unrelated.observation_id.clone(),
+        },
+        PreferenceAdmission::ReviewedAcceptance,
+    )
+    .unwrap();
+    {
+        let mut store = MemoryStore::open(&root, scope(), MemoryStoreLimits::default()).unwrap();
+        store
+            .apply(MemoryOperation::Remember {
+                observation: original.clone(),
+            })
+            .unwrap();
+        store
+            .apply(MemoryOperation::Correct {
+                target: original.observation_id.clone(),
+                replacement: middle.clone(),
+                disposition: MemoryCorrectionDisposition::KeepBounded,
+                occurred_at_millis: 20,
+            })
+            .unwrap();
+        store
+            .apply(MemoryOperation::Correct {
+                target: middle.observation_id,
+                replacement: current.clone(),
+                disposition: MemoryCorrectionDisposition::KeepBounded,
+                occurred_at_millis: 30,
+            })
+            .unwrap();
+        store
+            .apply(MemoryOperation::Forget {
+                target: current.observation_id,
+                occurred_at_millis: 40,
+            })
+            .unwrap();
+        store
+            .apply(MemoryOperation::Remember {
+                observation: unrelated.clone(),
+            })
+            .unwrap();
+        let rewrite = store
+            .apply(MemoryOperation::Correct {
+                target: unrelated.observation_id,
+                replacement: unrelated_replacement.clone(),
+                disposition: MemoryCorrectionDisposition::ErasePrevious,
+                occurred_at_millis: 60,
+            })
+            .unwrap();
+        assert!(rewrite.compacted);
+    }
+    let mut reopened = MemoryStore::open(&root, scope(), MemoryStoreLimits::default()).unwrap();
+    assert_eq!(reopened.inspect(true).recovery_count, 3);
+    reopened
+        .apply(MemoryOperation::Restore {
+            target: original.observation_id.clone(),
+            occurred_at_millis: 50,
+        })
+        .unwrap();
+    let restored = reopened.inspect(true);
+    assert!(
+        restored
+            .active
+            .iter()
+            .any(|entry| entry.observation == original)
+    );
+    assert!(
+        restored
+            .active
+            .iter()
+            .any(|entry| entry.observation == unrelated_replacement)
+    );
+    assert_eq!(restored.recovery_count, 2);
+    drop(reopened);
+    let rebuilt = MemoryStore::open(&root, scope(), MemoryStoreLimits::default()).unwrap();
+    assert_eq!(rebuilt.inspect(true), restored);
+    drop(rebuilt);
+    cleanup(&root);
+}
+
+#[test]
 fn golden_lifecycle_ledger_rebuilds_to_one_active_and_one_recovery_record() {
     let root = test_root("lifecycle-golden");
     let golden_scope = MemoryScope::Repository {

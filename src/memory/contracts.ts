@@ -53,7 +53,7 @@ export interface RecoveryMemory {
   readonly lineageId: string;
   readonly observation: MemoryObservation;
   readonly replacedAtMillis: number;
-  readonly replacementObservationId: string;
+  readonly replacementObservationId?: string;
   readonly updatedSequence: number;
 }
 
@@ -69,7 +69,22 @@ export interface MemoryInspection {
 }
 
 export type MemoryOperationStatus = 'admitted' | 'corrected' | 'restored' | 'unchanged'
+  | 'forgotten' | 'purged' | 'recovery_history_cleared'
   | 'capture_mode_changed' | 'grant_revoked' | 'auto_capture_undone';
+
+export type MemoryReceiptReason = 'correction_history_erased' | 'recovery_compacted'
+  | 'auto_capture_undone' | 'memory_purged' | 'recovery_history_cleared';
+
+export interface MemoryNonContentReceipt {
+  readonly schemaVersion: 1;
+  readonly operationId: string;
+  readonly performedAtMillis: number;
+  readonly actorId?: string;
+  readonly purgedAtMillis?: number;
+  readonly scopeKind: MemoryScope['kind'];
+  readonly reasonCode: MemoryReceiptReason;
+  readonly removedRecordCount: number;
+}
 
 export interface MemoryOperationResult {
   readonly schemaVersion: 1;
@@ -77,6 +92,7 @@ export interface MemoryOperationResult {
   readonly scope: MemoryScope;
   readonly activeObservation?: MemoryObservation;
   readonly grant?: MemoryStandingGrant;
+  readonly receipt?: MemoryNonContentReceipt;
   readonly activeCount: number;
   readonly recoveryCount: number;
   readonly ledgerHeadSha256: string;
@@ -99,6 +115,9 @@ export interface MemoryRuntime {
     occurredAtMillis?: number,
   ): Promise<MemoryOperationResult>;
   restore(targetObservationId: string, occurredAtMillis?: number): Promise<MemoryOperationResult>;
+  forget(targetObservationId: string, occurredAtMillis?: number): Promise<MemoryOperationResult>;
+  purge(targetObservationId: string, purgedAtMillis?: number): Promise<MemoryOperationResult>;
+  clearRecoveryHistory(clearedAtMillis?: number): Promise<MemoryOperationResult>;
 }
 
 export interface MemoryCaptureRuntime extends MemoryRuntime {
