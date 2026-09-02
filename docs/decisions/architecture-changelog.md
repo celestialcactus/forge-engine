@@ -1,6 +1,26 @@
+# 2026-09-02 - CLI8A Slice 4 privacy lifecycle is explicitly authorized
+
+- The reviewer approved the existing Product, Architecture, Program Design, and
+  Vertical Slice boundary for Slice 4 after Slice 3 merged and passed the
+  post-merge `develop` gate.
+- The authorized user proof is limited to forgetting and restoring a memory,
+  purging selected active/recovery content, and clearing recovery history while
+  retaining active memories. Ordinary forget remains recoverable; explicit purge
+  and history clear use the Rust-authoritative atomic rewrite path.
+- Purge and clear must survive restart and failure injection, return only
+  content-free receipts without reversible fingerprints, and state truthfully
+  that independently retained runs, artifacts, conversations, backups, and media
+  are outside the memory-store operation.
+- TypeScript owns orchestration and accessible human/JSON UX; Rust continues to
+  own lifecycle validity, exact scope, durable locking, rewrite atomicity,
+  projection rebuild, retention, and final acknowledgement.
+- This authorization does not accept an implementation and does not authorize
+  Slice 5 context preview, planner/provider retrieval, CLI8B evaluation, CLI8C
+  skills, developer-profile grants, or team/organization memory.
+
 # 2026-09-01 - CLI8A Slice 3 passes the hosted and real VS Code gate
 
-- PR #33 implementation candidate `26f011e` is accepted for merge through
+- PR #33 implementation candidate `26f011e` is accepted through
   [Checkpoint 93](checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md).
 - The accepted boundary is deliberately narrow: current-repository `off|ask|auto`,
   exact developer-ledger standing grants, bounded direct-preference eligibility,

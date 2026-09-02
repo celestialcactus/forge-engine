@@ -2,9 +2,9 @@
 
 **Status:** Slices 0–2 accepted through PR #32 and
 [Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md);
-Slice 3 accepted for merge through PR #33 implementation candidate `26f011e` and
+Slice 3 accepted through PR #33 implementation candidate `26f011e` and
 [Checkpoint 93](../decisions/checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md);
-Slices 4–5 remain unapproved
+Slice 4 explicitly authorized on 2026-09-02; Slice 5 remains unapproved
 **Date:** 2026-08-29
 **Delivery path:** full
 **Active task:** [Slice CLI8](SLICE-CLI8-differentiated-learning-loop.md)
@@ -14,16 +14,16 @@ Slices 4–5 remain unapproved
 
 This packet presented Product, Architecture, Program Design, and Vertical Slices
 together for review. The approval ledger below is now authoritative: Slice 0 and
-implementation Slices 1–3 are authorized, while Slices 4–5 remain gated.
+implementation Slices 1–4 are authorized, while Slice 5 remains gated.
 
 ## Approval ledger
 
 | Gate | Status | Material | Approval |
 | --- | --- | --- | --- |
 | Product | approved | Gate 1 below | Approved 2026-08-29, including the outcome and explicit non-claims. |
-| Architecture | approved for Slice 0–3 | Gate 2 below plus ADR-0034/0038/0039 | Rust remains authoritative; TypeScript owns orchestration, capture-candidate construction, UX, and replaceable retrieval machinery. |
-| Program Design | approved for Slice 0–3 | Gate 3 below | Frozen standing-grant, bridge, eligibility, notification, and undo contracts apply. |
-| Vertical Slices | partially approved | Gate 4 below | Contract prerequisite Slice 0 and implementation Slices 1–3 are authorized. Slice 3 was explicitly approved in the main implementation task on 2026-08-31; Slices 4–5 remain gated. |
+| Architecture | approved for Slice 0–4 | Gate 2 below plus ADR-0034/0038/0039 | Rust remains authoritative; TypeScript owns orchestration, capture-candidate construction, UX, and replaceable retrieval machinery. Slice 4 reuses the frozen ledger, lifecycle, recovery, and atomic rewrite boundary. |
+| Program Design | approved for Slice 0–4 | Gate 3 below | Frozen forget/restore, purge, history-clear, error, atomicity, retention, and test contracts apply to Slice 4. |
+| Vertical Slices | partially approved | Gate 4 below | Contract prerequisite Slice 0 and implementation Slices 1–4 are authorized. Slice 3 was explicitly approved on 2026-08-31 and Slice 4 on 2026-09-02; Slice 5 remains gated. |
 
 ## Gate 1: Product
 
@@ -584,7 +584,8 @@ content from all Forge memory-state files, emitted empty stderr, performed no
 planner/provider/retrieval/discovery/network work, and reported retrieval inactive.
 Temporary validation state was removed. Slice 3 was later authorized on 2026-08-31
 and is implemented at `afa6e67`, with final implementation candidate `26f011e`
-accepted for merge by Checkpoint 93. Slices 4–5 remain open.
+accepted by Checkpoint 93. Slice 4 was subsequently authorized on 2026-09-02;
+Slice 5 remains open.
 
 The authoritative worktree follow-up also passed `npm run check:product` under the
 supported MSVC environment (191 Rust tests passed with 16 explicit ignored helper/
@@ -695,11 +696,15 @@ product fixture, RustSec audit, clean-install ask/auto/off lifecycle, native pac
 and the benchmark assertion. Cross-platform runs `33449198939` and `33449198943`
 pass all nine declared jobs, and a live VS Code integrated-terminal pilot at exact
 `26f011e` confirms Backspace, `/help`, and `/exit`. Checkpoint 93 accepts Slice 3
-for merge; this evidence does not authorize Slice 4 or 5.
+for merge. That checkpoint did not authorize later slices; the reviewer separately
+authorized Slice 4 on 2026-09-02. Slice 5 remains unauthorized.
 
 May develop in parallel with Slice 2 after the shared contract freeze.
 
 ### Slice 4: Forget, restore, purge, and history clear
+
+**Authorization:** Explicitly approved on 2026-09-02 against the Product,
+Architecture, Program Design, and Vertical Slice boundaries in this packet.
 
 **User proof:** Forget and restore a memory, purge it, and separately clear recovery
 history while retaining active memories.
@@ -744,9 +749,10 @@ Slice 2 recovery     Slice 3 autosave
         Slice 5 preview + hosted gate
 ```
 
-The authorized packet is **Slice 0 through Slice 3**. Slice 0 is the required
+The authorized packet is **Slice 0 through Slice 4**. Slice 0 is the required
 contract freeze, Slice 1 proves the tracer seam, Slice 2 proves recovery, and Slice
-3 proves standing-grant autosave plus undo. Slices 4–5 remain unapproved.
+3 proves standing-grant autosave plus undo. Slice 4 proves the privacy lifecycle.
+Slice 5 remains unapproved.
 
 ## Decisions requested from the reviewer
 
@@ -764,6 +770,7 @@ Approval of this packet means all of the following:
 8. authorize implementation of prerequisite Slice 0 and implementation Slices 1–2
    initially; later slice authorization remains explicit.
 
-The reviewer approved decisions 1–8 on 2026-08-29 for Slice 0–2 and explicitly
-approved Slice 3 on 2026-08-31 after restatement of its Product, Architecture,
-Program Design, and Vertical Slice boundary. Slices 4–5 and CLI8B/C remain gated.
+The reviewer approved decisions 1–8 on 2026-08-29 for Slice 0–2, explicitly
+approved Slice 3 on 2026-08-31, and explicitly authorized Slice 4 on 2026-09-02
+against the same Product, Architecture, Program Design, and Vertical Slice packet.
+Slice 5 and CLI8B/C remain gated.

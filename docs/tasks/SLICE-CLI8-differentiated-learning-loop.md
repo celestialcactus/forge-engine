@@ -2,9 +2,9 @@
 
 **State:** Slices 0–2 accepted through PR #32 and
 [Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md);
-Slice 3 accepted for merge through PR #33 implementation candidate `26f011e` and
+Slice 3 accepted through PR #33 implementation candidate `26f011e` and
 [Checkpoint 93](../decisions/checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md);
-Slices 4–5 gated
+Slice 4 explicitly authorized on 2026-09-02; Slice 5 gated
 **Authority:**
 [ADR-0034](../decisions/ADRs/ADR-0034-commodity-sandbox-and-differentiated-learning-lane.md),
 [ADR-0038](../decisions/ADRs/ADR-0038-cli8a-memory-identity-admission-and-retention.md),
@@ -20,22 +20,23 @@ assumptions, or bypassing the canonical runtime.
 This lane began before the
 [four-gate delivery workflow](../development/four-gate-delivery-workflow.md) was
 adopted. Package 1 is preserved as completed candidate work. Package 2 and later
-were superseded by the approved vertical packet. Only prerequisite Slice 0 and
-implementation Slices 1–3 are currently authorized.
+were superseded by the approved vertical packet. Prerequisite Slice 0 and
+implementation Slices 1–4 are currently authorized.
 
 | Gate | Status | Revision/material | Approval note |
 | --- | --- | --- | --- |
 | Product | approved | [Combined CLI8A review packet](CLI8A-MEMORY-FOUR-GATE-REVIEW.md), Gate 1 | Outcome and explicit non-claims approved 2026-08-29. |
-| Architecture | approved for Slice 0–3 | ADR-0034, ADR-0038, [ADR-0039](../decisions/ADRs/ADR-0039-cli8a-hybrid-memory-capture-and-recovery.md), review packet Gate 2 | Rust authority with TypeScript orchestration, UX, and replaceable retrieval machinery accepted. |
-| Program Design | approved for Slice 0–3 | Review packet Gate 3 | Standing grants, eligibility, non-blocking attribution, and narrow rewrite-style undo reuse the frozen bridge/store authority. |
-| Vertical Slices | partially approved | Review packet Gate 4 | Prerequisite Slice 0 and implementation Slices 1–3 authorized; Slices 4–5 remain gated. Slice 3 was explicitly approved in the main implementation task on 2026-08-31. |
+| Architecture | approved for Slice 0–4 | ADR-0034, ADR-0038, [ADR-0039](../decisions/ADRs/ADR-0039-cli8a-hybrid-memory-capture-and-recovery.md), review packet Gate 2 | Rust authority with TypeScript orchestration, UX, and replaceable retrieval machinery accepted. Slice 4 reuses the frozen ledger, lifecycle, recovery, and atomic rewrite boundary. |
+| Program Design | approved for Slice 0–4 | Review packet Gate 3 | The existing forget/restore, purge, history-clear, error, atomicity, retention, and test contracts are approved for Slice 4. |
+| Vertical Slices | partially approved | Review packet Gate 4 | Prerequisite Slice 0 and implementation Slices 1–4 authorized; Slice 5 remains gated. Slice 3 was approved on 2026-08-31 and Slice 4 on 2026-09-02. |
 
 Slice 0 and implementation Slices 1–2 are accepted through PR #32. Exact MSVC,
 separate VS Code product-lifecycle, focused Rust, Node, hybrid, package, benchmark,
 and hosted target validation pass through exact implementation candidate `e9e8cd9`.
-Slice 3 autosave is accepted for merge through PR #33 candidate `26f011e` after
-exact local, hosted, real PTY, and live VS Code gates. Slice 4 privacy lifecycle,
-Slice 5 context preview, retrieval, and skills remain gated.
+Slice 3 autosave is accepted through PR #33 candidate `26f011e` after exact local,
+hosted, real PTY, and live VS Code gates. Slice 4 privacy lifecycle is the
+authorized active implementation lane. Slice 5 context preview, retrieval, and
+skills remain gated.
 
 Current local evidence:
 
@@ -151,8 +152,10 @@ Current package status:
 - [x] authorized Slice 1 append/rebuild plus explicit remember/find/show/explain;
 - [x] authorized Slice 2 correction, bounded recovery, restoration, and
       erase-previous rewrite;
-- [x] authorized Slice 3 accepted for merge through PR #33 and Checkpoint 93;
-- [ ] unapproved Slice 4–5 forget/purge/history-clear and preview;
+- [x] authorized Slice 3 accepted through PR #33 and Checkpoint 93;
+- [ ] authorized Slice 4 forget/restore/purge/history-clear implementation and
+      exact-candidate acceptance;
+- [ ] unapproved Slice 5 context preview and complete CLI8A acceptance;
 - [x] exact-candidate local MSVC and separate VS Code product-lifecycle gate;
 - [x] exact-candidate hosted acceptance through PRs #32–33 and Checkpoints 92–93.
 
@@ -168,7 +171,8 @@ locked policy choices unresolved.
 - [x] equivalent observations have deterministic claim and observation identities;
 - [x] corrected and superseded observations remain inspectable in explicit recovery;
 - [x] exact scope is bound into identity, storage path, bridge validation, and tests;
-- [x] authorized correction/recovery survives restart; forget/tombstone remains Slice 4;
+- [x] authorized correction/recovery survives restart; forget/tombstone is now the
+      bounded Slice 4 implementation lane;
 - [x] malicious repository text cannot silently become developer-level instruction;
 - [x] each implemented projected record rebuilds from the hash-linked NDJSON ledger.
 
