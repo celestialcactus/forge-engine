@@ -2,7 +2,8 @@
 
 **Status:** operational ground truth for active ForgeEngine delivery
 **As of:** 2026-09-02
-**Accepted implementation baseline:** PR #33 (implementation candidate `26f011e`)
+**Accepted implementation baseline:** PR #33 (implementation candidate `26f011e`);
+PR #34 Slice 4 candidate `20b9bac` is accepted for merge but not yet baseline
 **Documentation baseline:** the commit containing this file
 
 This file answers what is active now. The
@@ -18,8 +19,8 @@ Product, Architecture, Program Design, and the authorized Vertical Slice packet
 must be explicitly approved before implementation. Small local changes use the
 documented proportional fast or compact path. Existing CLI8A Package 1 predates
 this policy; the combined CLI8A packet is the first full-path application and now
-authorizes prerequisite Slice 0 plus implementation Slices 1–4. Slice 4 was
-explicitly authorized on 2026-09-02; Slice 5 remains unapproved.
+authorizes prerequisite Slice 0 plus implementation Slices 1–4. Slice 4 is accepted
+for merge through candidate `20b9bac` and Checkpoint 94; Slice 5 remains unapproved.
 
 ## Document authority
 
@@ -58,7 +59,11 @@ Slice 3 is accepted through PR #33 candidate `26f011e` and
 current-repository standing grants, ask/auto/off UX, bounded direct-preference
 capture, find/explain across restart, content-removing immediate undo, and real TTY
 editing pass the local, VS Code, and hosted gates. These slices activate no
-planner/provider retrieval. Public
+planner/provider retrieval. Slice 4 candidate `20b9bac` and
+[Checkpoint 94](../decisions/checkpoints/2026-09-02-94-cli8a-memory-slice-4-hosted-gate.md)
+now pass the exact local, package, benchmark, and hosted privacy gates for
+recoverable forget/restore, selected-lineage purge, and recovery-history clear.
+PR #34 is accepted for merge but is not product baseline until merged. Public
 distribution still requires contributor-rights attestation and artifact
 signing/provenance. Trusted execution has no
 Forge-enforced OS containment. Native restricted providers continue independently
@@ -76,11 +81,12 @@ claims permitted at each delivery stage.
 | Trusted-alpha release | `CLI7-ALPHA` | Private distribution/onboarding foundation accepted through PR #27 (`6cc90c1`) and Checkpoint 90; PR #28 (`2882550`) corrects reported blockers | Preserve the accepted private tester boundary. Rights attestation and artifact signing/provenance remain separate public-distribution gates; no public artifact has shipped. |
 | Effective configuration | `CLI7-ALPHA-CONFIG` | Accepted through PR #31 candidate `e7ba284` and Checkpoint 91 | Preserve the fixed files, immutable compiler, source attribution, secret-safe projection, atomic route, monotonic ceilings, and no-fallback behavior. Do not add an organization provider-policy subsystem. |
 | Sandbox provider lifecycle | `SBX-PROVIDER-LIFECYCLE` | Independent and unaccepted for production; local managed-Windows/AppContainer conformance exists | Complete disposable-Windows-VM install/upgrade/uninstall/reboot/residue plus macOS/adversarial evidence. Do not advertise `restrictedReady` or promote a provider until the exact gate passes. |
-| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Slices 0–2 accepted through PR #32 / Checkpoint 92; Slice 3 accepted through PR #33 candidate `26f011e` / Checkpoint 93; Slice 4 authorized on 2026-09-02 | Implement only forget, restore, purge, and recovery-history clear through the frozen Rust ledger/rewrite authority and TypeScript UX. Preserve inactive retrieval; Slice 5 and CLI8B/C remain gated. |
+| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Slices 0–3 accepted through PRs #32–33 / Checkpoints 92–93; Slice 4 candidate `20b9bac` accepted for merge through Checkpoint 94 | Merge PR #34 without widening the proven privacy boundary. Preserve inactive retrieval; Slice 5 and CLI8B/C remain gated pending explicit authorization. |
 
 The stale-base CLI7 candidate was successfully replayed without importing its old
-ancestry. The stale CLI8A candidate `b5effea` remains reference material only; the
-accepted implementation is the ADR-0038/0039-conformant PR #32–33 lineage.
+ancestry. The stale CLI8A candidate `b5effea` remains reference material only. The
+merged baseline is the ADR-0038/0039-conformant PR #32–33 lineage; PR #34 candidate
+`20b9bac` is its accepted-for-merge Slice 4 extension.
 
 ## Merge order and shared-boundary rule
 
@@ -100,8 +106,10 @@ accepted implementation is the ADR-0038/0039-conformant PR #32–33 lineage.
    `26f011e` closes the real Windows TTY Backspace defect while preserving queued
    pipe input. PR #33 and Checkpoint 93 accept the exact local, live VS Code, and
    hosted evidence. Slice 4 privacy lifecycle was explicitly authorized on
-   2026-09-02 against the existing four-gate packet. Runtime retrieval remains
-   gated by CLI8B; Slice 5 requires new explicit authorization.
+   2026-09-02 against the existing four-gate packet. Candidate `20b9bac` and
+   Checkpoint 94 accept its exact local and hosted privacy evidence for merge in
+   PR #34. Runtime retrieval remains gated by CLI8B; Slice 5 requires new explicit
+   authorization.
 5. Merge `SBX-PROVIDER-LIFECYCLE` only after its independent VM/provider gate; its
    timing does not redefine the trusted-alpha claim.
 
@@ -124,10 +132,9 @@ rebased and reconciled before merge rather than resolved by taking an entire sid
 
 ## Next three gates
 
-1. Implement and gate only the authorized Slice 4 privacy lifecycle: forget,
-   restore, purge, and recovery-history clear. Preserve the frozen no-retrieval
-   boundary and independent run/artifact retention truth.
-2. After Slice 4 acceptance, separately review Slice 5 context
+1. Merge PR #34 at the accepted Slice 4 boundary after its exact documentation-head
+   checks pass; do not widen its memory-store erasure claim.
+2. After the merge, separately review and explicitly authorize Slice 5 context
    preview; it retains its own authorization gate.
 3. After complete CLI8A acceptance and later CLI8B authorization, run paired
    no-memory/retrieved-memory evaluation; automatic retrieval remains disabled until

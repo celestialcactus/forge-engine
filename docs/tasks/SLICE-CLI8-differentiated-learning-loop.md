@@ -4,7 +4,9 @@
 [Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md);
 Slice 3 accepted through PR #33 implementation candidate `26f011e` and
 [Checkpoint 93](../decisions/checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md);
-Slice 4 explicitly authorized on 2026-09-02; Slice 5 gated
+Slice 4 candidate `20b9bac` accepted for merge through
+[Checkpoint 94](../decisions/checkpoints/2026-09-02-94-cli8a-memory-slice-4-hosted-gate.md);
+Slice 5 gated
 **Authority:**
 [ADR-0034](../decisions/ADRs/ADR-0034-commodity-sandbox-and-differentiated-learning-lane.md),
 [ADR-0038](../decisions/ADRs/ADR-0038-cli8a-memory-identity-admission-and-retention.md),
@@ -34,9 +36,10 @@ Slice 0 and implementation Slices 1–2 are accepted through PR #32. Exact MSVC,
 separate VS Code product-lifecycle, focused Rust, Node, hybrid, package, benchmark,
 and hosted target validation pass through exact implementation candidate `e9e8cd9`.
 Slice 3 autosave is accepted through PR #33 candidate `26f011e` after exact local,
-hosted, real PTY, and live VS Code gates. Slice 4 privacy lifecycle is the
-authorized active implementation lane. Slice 5 context preview, retrieval, and
-skills remain gated.
+hosted, real PTY, and live VS Code gates. Slice 4 candidate `20b9bac` passes the
+exact local, clean-install, benchmark, and hosted privacy gates and is accepted for
+merge through Checkpoint 94. Slice 5 context preview, retrieval, and skills remain
+gated.
 
 Current local evidence:
 
@@ -76,6 +79,14 @@ Current local evidence:
   `33449198943` pass all nine declared hosted jobs. A real VS Code integrated-terminal
   pilot on exact `26f011e` confirms Backspace editing, `/help`, and `/exit`.
   Checkpoint 93 accepts this boundary for merge without authorizing Slice 4 or 5.
+- Slice 4 candidate `20b9bac` adds recoverable forget/restore, selected-lineage
+  purge, recovery-history clear, minimized receipts, exact confirmation UX, and
+  Rust-authoritative atomic rewrite/failure behavior. Local gates pass 200 Rust
+  tests (16 explicit ignores), 165 Node tests, 61/68 hybrid scenarios (seven
+  explicit skips), RustSec, clean-install package lifecycle, native packing, and
+  the 20-sample benchmark. Hosted runs `33644567336` and `33644567346` pass every
+  declared Windows x64, macOS ARM64/x64, and Ubuntu x64 job. Checkpoint 94 accepts
+  this boundary for merge without authorizing Slice 5.
 
 ## Boundary
 
@@ -153,11 +164,11 @@ Current package status:
 - [x] authorized Slice 2 correction, bounded recovery, restoration, and
       erase-previous rewrite;
 - [x] authorized Slice 3 accepted through PR #33 and Checkpoint 93;
-- [ ] authorized Slice 4 forget/restore/purge/history-clear implementation and
-      exact-candidate acceptance;
+- [x] authorized Slice 4 forget/restore/purge/history-clear accepted for merge on
+      candidate `20b9bac` through Checkpoint 94;
 - [ ] unapproved Slice 5 context preview and complete CLI8A acceptance;
 - [x] exact-candidate local MSVC and separate VS Code product-lifecycle gate;
-- [x] exact-candidate hosted acceptance through PRs #32–33 and Checkpoints 92–93.
+- [x] exact-candidate hosted acceptance through PRs #32–34 and Checkpoints 92–94.
 
 The stale-base candidate `b5effea` may be used as a reference for bounded limits,
 append/rebuild mechanics, and adversarial tests. It must not be cherry-picked or
@@ -171,8 +182,8 @@ locked policy choices unresolved.
 - [x] equivalent observations have deterministic claim and observation identities;
 - [x] corrected and superseded observations remain inspectable in explicit recovery;
 - [x] exact scope is bound into identity, storage path, bridge validation, and tests;
-- [x] authorized correction/recovery survives restart; forget/tombstone is now the
-      bounded Slice 4 implementation lane;
+- [x] authorized correction/recovery, forget/restore, purge, and recovery-history
+      clear survive restart through the Rust-authoritative lifecycle;
 - [x] malicious repository text cannot silently become developer-level instruction;
 - [x] each implemented projected record rebuilds from the hash-linked NDJSON ledger.
 

@@ -4,7 +4,9 @@
 [Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md);
 Slice 3 accepted through PR #33 implementation candidate `26f011e` and
 [Checkpoint 93](../decisions/checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md);
-Slice 4 explicitly authorized on 2026-09-02; Slice 5 remains unapproved
+Slice 4 candidate `20b9bac` accepted for merge through
+[Checkpoint 94](../decisions/checkpoints/2026-09-02-94-cli8a-memory-slice-4-hosted-gate.md);
+Slice 5 remains unapproved
 **Date:** 2026-08-29
 **Delivery path:** full
 **Active task:** [Slice CLI8](SLICE-CLI8-differentiated-learning-loop.md)
@@ -584,8 +586,8 @@ content from all Forge memory-state files, emitted empty stderr, performed no
 planner/provider/retrieval/discovery/network work, and reported retrieval inactive.
 Temporary validation state was removed. Slice 3 was later authorized on 2026-08-31
 and is implemented at `afa6e67`, with final implementation candidate `26f011e`
-accepted by Checkpoint 93. Slice 4 was subsequently authorized on 2026-09-02;
-Slice 5 remains open.
+accepted by Checkpoint 93. Slice 4 was subsequently authorized on 2026-09-02 and
+candidate `20b9bac` is accepted for merge by Checkpoint 94; Slice 5 remains open.
 
 The authoritative worktree follow-up also passed `npm run check:product` under the
 supported MSVC environment (191 Rust tests passed with 16 explicit ignored helper/
@@ -697,7 +699,9 @@ and the benchmark assertion. Cross-platform runs `33449198939` and `33449198943`
 pass all nine declared jobs, and a live VS Code integrated-terminal pilot at exact
 `26f011e` confirms Backspace, `/help`, and `/exit`. Checkpoint 93 accepts Slice 3
 for merge. That checkpoint did not authorize later slices; the reviewer separately
-authorized Slice 4 on 2026-09-02. Slice 5 remains unauthorized.
+authorized Slice 4 on 2026-09-02. Candidate `20b9bac` passes its local, package,
+benchmark, and hosted privacy gates and is accepted for merge by Checkpoint 94.
+Slice 5 remains unauthorized.
 
 May develop in parallel with Slice 2 after the shared contract freeze.
 
@@ -713,6 +717,16 @@ history while retaining active memories.
 rewrite survives restart and failure injection; receipts contain no content,
 identifiers, or reversible fingerprints; output names independent run/artifact
 retention.
+
+**Accepted implementation candidate:** `20b9bac54e785b6817838cb9972c586d0de04ae4`.
+The implementation adds Rust-authoritative lineage validation, recoverable
+forget/restore, selected-lineage purge, recovery-history clear, content-minimized
+receipts, and TypeScript confirmation UX. Local validation passes 200 Rust tests,
+165 Node tests, 61/68 hybrid scenarios with seven explicit environment skips,
+RustSec, clean-install package lifecycle, native packing, and the 20-sample
+benchmark. Hosted runs `33644567336` and `33644567346` pass the complete Windows
+x64, macOS ARM64/x64, and Ubuntu x64 matrix. Checkpoint 94 records the exact
+evidence and the multi-version lineage correction found during the gate.
 
 Depends on Slice 2 recovery and compaction behavior.
 
@@ -749,9 +763,11 @@ Slice 2 recovery     Slice 3 autosave
         Slice 5 preview + hosted gate
 ```
 
-The authorized packet is **Slice 0 through Slice 4**. Slice 0 is the required
-contract freeze, Slice 1 proves the tracer seam, Slice 2 proves recovery, and Slice
-3 proves standing-grant autosave plus undo. Slice 4 proves the privacy lifecycle.
+The authorized packet is **Slice 0 through Slice 4**, and those slices now have
+accepted-for-merge implementation evidence through Checkpoints 92–94. Slice 0 is
+the required contract freeze, Slice 1 proves the tracer seam, Slice 2 proves
+recovery, and Slice 3 proves standing-grant autosave plus undo. Slice 4 proves the
+privacy lifecycle.
 Slice 5 remains unapproved.
 
 ## Decisions requested from the reviewer
@@ -773,4 +789,5 @@ Approval of this packet means all of the following:
 The reviewer approved decisions 1–8 on 2026-08-29 for Slice 0–2, explicitly
 approved Slice 3 on 2026-08-31, and explicitly authorized Slice 4 on 2026-09-02
 against the same Product, Architecture, Program Design, and Vertical Slice packet.
-Slice 5 and CLI8B/C remain gated.
+Candidate `20b9bac` is accepted for merge by Checkpoint 94. Slice 5 and CLI8B/C
+remain gated.

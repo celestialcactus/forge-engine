@@ -1,3 +1,25 @@
+# 2026-09-02 - CLI8A Slice 4 passes the local and hosted privacy gate
+
+- PR #34 implementation candidate `20b9bac` is accepted for merge through
+  [Checkpoint 94](checkpoints/2026-09-02-94-cli8a-memory-slice-4-hosted-gate.md).
+- The accepted boundary adds recoverable forget/restore, selected-lineage purge,
+  recovery-history clear, content-minimized receipts, exact destructive
+  confirmation, and truthful output about independently retained runs, artifacts,
+  conversations, backups, and media.
+- Rust remains authoritative for exact actor/scope and lineage validity, durable
+  locking, rebuild, recovery, and atomic rewrite before acknowledgement; TypeScript
+  owns orchestration and human/JSON UX.
+- The exact gate includes 200 Rust tests, 165 Node tests, 61/68 hybrid scenarios
+  with seven explicit skips, RustSec, clean-install privacy lifecycle, native
+  packing, benchmark assertion, and both full hosted workflows on Windows x64,
+  macOS ARM64/x64, and Ubuntu x64.
+- Review found and corrected a multi-version lineage defect across correction,
+  forget, compaction, restart, and restoration of an older version. The final
+  candidate has a deterministic regression for that sequence.
+- Slice 5 context preview, planner/provider retrieval, CLI8B evaluation, CLI8C
+  skills, wider grants/scopes, and erasure outside Forge memory remain unclaimed
+  and unauthorized.
+
 # 2026-09-02 - CLI8A Slice 4 privacy lifecycle is explicitly authorized
 
 - The reviewer approved the existing Product, Architecture, Program Design, and
