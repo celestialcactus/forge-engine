@@ -67,8 +67,8 @@ process.stdin.on('end', () => {
       reason: 'budget_exceeded',
     }],
     scopeHeads: [
-      { scope: request.scope, ledgerHeadSha256: 'e'.repeat(64), activeCount: 1, recoveryCount: 1 },
-      { scope: developerScope, ledgerHeadSha256: null, activeCount: 1, recoveryCount: 0 },
+      { scope: request.scope, activeCount: 1, recoveryCount: 1 },
+      { scope: developerScope, activeCount: 1, recoveryCount: 0 },
     ],
     forgottenExcludedCount: 1,
     supersededRecoveryExcludedCount: 0,
@@ -157,6 +157,17 @@ test('rejects a preview that claims provider work was performed', async () => {
   await assert.rejects(
     previewRuntime(previewKernel(true)).preview(65_536),
     /invalid memory context preview/u,
+  );
+});
+
+test('rejects a preview scope fingerprint derived from hidden ledger history', async () => {
+  const leakingKernel = previewKernel().replace(
+    '{ scope: request.scope, activeCount: 1',
+    "{ scope: request.scope, ledgerHeadSha256: 'e'.repeat(64), activeCount: 1",
+  );
+  await assert.rejects(
+    previewRuntime(leakingKernel).preview(65_536),
+    /invalid memory preview scope head/u,
   );
 });
 

@@ -99,7 +99,6 @@ export interface MemoryContextPreviewOmission {
 
 export interface MemoryContextPreviewScopeHead {
   readonly scope: MemoryScope;
-  readonly ledgerHeadSha256: string | null;
   readonly activeCount: number;
   readonly recoveryCount: number;
 }

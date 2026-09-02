@@ -55,7 +55,6 @@ pub struct MemoryContextOmission {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MemoryContextScopeHead {
     pub scope: MemoryScope,
-    pub ledger_head_sha256: Option<String>,
     pub active_count: u32,
     pub recovery_count: u32,
 }
@@ -133,7 +132,6 @@ pub fn compile_memory_context_preview(
         .iter()
         .map(|inspection| MemoryContextScopeHead {
             scope: inspection.scope.clone(),
-            ledger_head_sha256: inspection.ledger_head_sha256.clone(),
             active_count: inspection.active_count,
             recovery_count: inspection.recovery_count,
         })

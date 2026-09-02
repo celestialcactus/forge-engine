@@ -120,7 +120,6 @@ class FakeRuntime implements MemoryPreviewRuntime {
       }],
       scopeHeads: [{
         scope,
-        ledgerHeadSha256: 'e'.repeat(64),
         activeCount: 2,
         recoveryCount: 1,
       }],

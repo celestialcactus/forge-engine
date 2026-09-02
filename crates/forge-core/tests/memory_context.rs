@@ -372,6 +372,57 @@ fn validity_boundary_is_inclusive_and_budgeting_uses_canonical_entry_bytes() {
 }
 
 #[test]
+fn first_fit_skips_an_oversized_entry_and_admits_a_later_smaller_entry() {
+    let oversized = projected(
+        reviewed_decision(
+            "a oversized",
+            &"x".repeat(1_024),
+            MemoryObservationRelation::Supports,
+            MemoryFreshness::PersistentUntilReviewed,
+            100,
+        ),
+        1,
+    );
+    let smaller = projected(
+        reviewed_decision(
+            "z smaller",
+            "A later compact decision remains eligible.",
+            MemoryObservationRelation::Supports,
+            MemoryFreshness::PersistentUntilReviewed,
+            100,
+        ),
+        2,
+    );
+    let smaller_id = smaller.observation.observation_id.clone();
+    let oversized_id = oversized.observation.observation_id.clone();
+    let inspections = [
+        inspection(repository_scope(), vec![oversized, smaller], Vec::new()),
+        empty_developer_inspection(),
+    ];
+    let complete =
+        compile_memory_context_preview(&inspections, 100, MAXIMUM_MEMORY_CONTEXT_PREVIEW_BYTES)
+            .unwrap();
+    let oversized_bytes = complete.selected[0].context_bytes;
+    let smaller_bytes = complete.selected[1].context_bytes;
+    assert!(oversized_bytes > smaller_bytes);
+
+    let bounded = compile_memory_context_preview(&inspections, 100, smaller_bytes).unwrap();
+
+    assert_eq!(bounded.selected.len(), 1);
+    assert_eq!(
+        bounded.selected[0].entry.observation.observation_id,
+        smaller_id
+    );
+    assert_eq!(bounded.selected_bytes, smaller_bytes);
+    assert_eq!(bounded.omitted.len(), 1);
+    assert_eq!(bounded.omitted[0].observation_id, oversized_id);
+    assert_eq!(
+        bounded.omitted[0].reason,
+        MemoryContextOmissionReason::BudgetExceeded
+    );
+}
+
+#[test]
 fn omits_an_observation_whose_time_has_not_arrived() {
     let future = projected(
         reviewed_decision(
@@ -457,8 +508,62 @@ fn recovery_content_is_counted_without_becoming_a_preview_candidate() {
     assert_eq!(preview.candidate_count, 1);
     assert_eq!(preview.forgotten_excluded_count, 1);
     assert_eq!(preview.superseded_recovery_excluded_count, 1);
+    assert!(!encoded.contains("ledgerHeadSha256"));
     assert!(!encoded.contains("Forgotten secret preview marker"));
     assert!(!encoded.contains("Superseded secret preview marker"));
+}
+
+#[test]
+fn hidden_recovery_content_cannot_change_preview_output_or_identity() {
+    let left_observation = reviewed_decision(
+        "left hidden recovery",
+        "First hidden recovery marker.",
+        MemoryObservationRelation::Supports,
+        MemoryFreshness::PersistentUntilReviewed,
+        100,
+    );
+    let right_observation = reviewed_decision(
+        "right hidden recovery",
+        "Second hidden recovery marker.",
+        MemoryObservationRelation::Supports,
+        MemoryFreshness::PersistentUntilReviewed,
+        100,
+    );
+    let recovery = |observation: MemoryObservation| RecoveryMemory {
+        lineage_id: MemoryLineageId(observation.observation_id.0.clone()),
+        observation,
+        replaced_at_millis: 200,
+        replacement_observation_id: None,
+        updated_sequence: 2,
+    };
+    let mut left_repository = inspection(
+        repository_scope(),
+        Vec::new(),
+        vec![recovery(left_observation)],
+    );
+    left_repository.ledger_head_sha256 = Some(digest('a'));
+    let mut right_repository = inspection(
+        repository_scope(),
+        Vec::new(),
+        vec![recovery(right_observation)],
+    );
+    right_repository.ledger_head_sha256 = Some(digest('b'));
+
+    let left = compile_memory_context_preview(
+        &[left_repository, empty_developer_inspection()],
+        200,
+        MAXIMUM_MEMORY_CONTEXT_PREVIEW_BYTES,
+    )
+    .unwrap();
+    let right = compile_memory_context_preview(
+        &[right_repository, empty_developer_inspection()],
+        200,
+        MAXIMUM_MEMORY_CONTEXT_PREVIEW_BYTES,
+    )
+    .unwrap();
+
+    assert_eq!(left, right);
+    assert_eq!(left.forgotten_excluded_count, 1);
 }
 
 #[test]

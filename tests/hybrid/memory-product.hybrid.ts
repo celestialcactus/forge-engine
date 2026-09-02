@@ -169,6 +169,7 @@ test('source CLI preview is exact-scope, deterministic, bounded, and provider-fr
     assert.equal(preview.retrievalActive, false);
     assert.equal(preview.plannerInjection, false);
     assert.equal(preview.providerWorkPerformed, false);
+    assert.equal(serialized.includes('ledgerHeadSha256'), false);
     assert.equal(serialized.includes(forgotten), false);
     assert.equal(serialized.includes(crossRepository), false);
 

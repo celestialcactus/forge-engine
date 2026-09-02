@@ -246,9 +246,8 @@ const validatePreviewScopeHead = (
   actorId: string,
 ): MemoryContextPreviewScopeHead => {
   const value = object(candidate);
-  if (!allowedPreviewScope(value?.scope, requestedScope, actorId)
-    || (value.ledgerHeadSha256 !== null
-      && (typeof value.ledgerHeadSha256 !== 'string' || !digestPattern.test(value.ledgerHeadSha256)))
+  if (Object.keys(value ?? {}).length !== 3
+    || !allowedPreviewScope(value?.scope, requestedScope, actorId)
     || !Number.isSafeInteger(value.activeCount)
     || Number(value.activeCount) < 0
     || !Number.isSafeInteger(value.recoveryCount)
