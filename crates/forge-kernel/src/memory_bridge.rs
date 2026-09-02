@@ -56,6 +56,19 @@ enum MemoryAction {
         target_observation_id: MemoryObservationId,
         occurred_at_millis: i64,
     },
+    Forget {
+        target_observation_id: MemoryObservationId,
+        occurred_at_millis: i64,
+    },
+    Purge {
+        target_observation_id: MemoryObservationId,
+        actor_id: String,
+        purged_at_millis: i64,
+    },
+    ClearRecoveryHistory {
+        actor_id: String,
+        cleared_at_millis: i64,
+    },
     SetCaptureMode {
         mode: MemoryCaptureMode,
         actor_id: String,
@@ -249,6 +262,50 @@ pub fn execute(
                 .apply(MemoryOperation::Restore {
                     target: target_observation_id,
                     occurred_at_millis,
+                })
+                .map_err(|error| store_failure(&start.request_id, error))?;
+            MemoryOutcome::Operation {
+                result: Box::new(result),
+            }
+        }
+        MemoryAction::Forget {
+            target_observation_id,
+            occurred_at_millis,
+        } => {
+            let result = store
+                .apply(MemoryOperation::Forget {
+                    target: target_observation_id,
+                    occurred_at_millis,
+                })
+                .map_err(|error| store_failure(&start.request_id, error))?;
+            MemoryOutcome::Operation {
+                result: Box::new(result),
+            }
+        }
+        MemoryAction::Purge {
+            target_observation_id,
+            actor_id,
+            purged_at_millis,
+        } => {
+            let result = store
+                .apply(MemoryOperation::Purge {
+                    target: target_observation_id,
+                    actor_id,
+                    purged_at_millis,
+                })
+                .map_err(|error| store_failure(&start.request_id, error))?;
+            MemoryOutcome::Operation {
+                result: Box::new(result),
+            }
+        }
+        MemoryAction::ClearRecoveryHistory {
+            actor_id,
+            cleared_at_millis,
+        } => {
+            let result = store
+                .apply(MemoryOperation::ClearRecoveryHistory {
+                    actor_id,
+                    cleared_at_millis,
                 })
                 .map_err(|error| store_failure(&start.request_id, error))?;
             MemoryOutcome::Operation {

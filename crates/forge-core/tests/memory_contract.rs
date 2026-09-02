@@ -103,7 +103,7 @@ fn lifecycle_control_and_adversarial_manifests_freeze_slice_zero() {
     assert_eq!(control["protocolVersion"], "forge.kernel.memory.v1");
     assert_eq!(control["maximumRequestBytes"], 256 * 1024);
     assert_eq!(control["transactionEncoding"], "canonical_ndjson");
-    assert_eq!(control["operations"].as_array().unwrap().len(), 9);
+    assert_eq!(control["operations"].as_array().unwrap().len(), 12);
     assert_eq!(control["limits"]["maximumTextBytes"], 8 * 1024);
     assert_eq!(control["limits"]["maximumFrameBytes"], 64 * 1024);
     assert_eq!(

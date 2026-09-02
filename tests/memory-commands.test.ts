@@ -16,7 +16,11 @@ import type {
   RecoveryMemory,
   RepositoryMemoryScope,
 } from '../src/memory/contracts.js';
-import { renderMemoryExplanation } from '../src/memory/presentation.js';
+import {
+  memoryPrivacyBoundary,
+  renderMemoryExplanation,
+  renderMemoryPrivacyOperation,
+} from '../src/memory/presentation.js';
 
 const scope: RepositoryMemoryScope = {
   kind: 'repository',
@@ -70,6 +74,9 @@ class FakeRuntime implements MemoryRuntime {
     readonly disposition: MemoryCorrectionDisposition;
   };
   restored?: string;
+  forgotten?: string;
+  purged?: string;
+  historyCleared = false;
 
   async remember(statement: string): Promise<MemoryOperationResult> {
     return this.result('admitted', observation('d', statement));
@@ -101,6 +108,21 @@ class FakeRuntime implements MemoryRuntime {
     return this.result('restored', this.recovery[0]!.observation);
   }
 
+  async forget(id: string): Promise<MemoryOperationResult> {
+    this.forgotten = id;
+    return this.resultWithoutContent('forgotten');
+  }
+
+  async purge(id: string): Promise<MemoryOperationResult> {
+    this.purged = id;
+    return this.resultWithoutContent('purged');
+  }
+
+  async clearRecoveryHistory(): Promise<MemoryOperationResult> {
+    this.historyCleared = true;
+    return this.resultWithoutContent('recovery_history_cleared');
+  }
+
   private result(
     status: MemoryOperationResult['status'],
     activeObservation: MemoryObservation,
@@ -114,6 +136,18 @@ class FakeRuntime implements MemoryRuntime {
       recoveryCount: this.recovery.length,
       ledgerHeadSha256: 'e'.repeat(64),
       compacted: false,
+    };
+  }
+
+  private resultWithoutContent(status: MemoryOperationResult['status']): MemoryOperationResult {
+    return {
+      schemaVersion: 1,
+      status,
+      scope,
+      activeCount: this.active.length,
+      recoveryCount: this.recovery.length,
+      ledgerHeadSha256: 'e'.repeat(64),
+      compacted: status !== 'forgotten',
     };
   }
 }
@@ -145,6 +179,63 @@ test('command orchestration resolves exact targets before correction and restore
   });
   await commands.restore('old orchestration');
   assert.equal(runtime.restored, runtime.recovery[0]!.observation.observationId);
+});
+
+test('privacy orchestration resolves natural selectors and authorizes before irreversible mutation', async () => {
+  const runtime = new FakeRuntime();
+  const commands = new MemoryCommands(runtime);
+  await commands.forget('lifecycle authority');
+  assert.equal(runtime.forgotten, runtime.active[0]!.observation.observationId);
+
+  let confirmation = '';
+  await commands.purge('old orchestration', async (entry) => {
+    confirmation = entry.observation.statement;
+  });
+  assert.equal(confirmation, 'The old orchestration rule.');
+  assert.equal(runtime.purged, runtime.recovery[0]!.observation.observationId);
+
+  const results = await commands.clearRecoveryHistory();
+  assert.equal(results.length, 1);
+  assert.equal(runtime.historyCleared, true);
+});
+
+test('declined purge cannot reach the runtime mutation', async () => {
+  const runtime = new FakeRuntime();
+  const commands = new MemoryCommands(runtime);
+  await assert.rejects(
+    commands.purge('lifecycle authority', async () => {
+      throw new Error('cancelled');
+    }),
+    /cancelled/u,
+  );
+  assert.equal(runtime.purged, undefined);
+});
+
+test('privacy presentation states the memory-only erasure boundary', () => {
+  const runtime = new FakeRuntime();
+  const result = {
+    schemaVersion: 1,
+    status: 'purged',
+    scope,
+    activeCount: 0,
+    recoveryCount: 0,
+    ledgerHeadSha256: 'e'.repeat(64),
+    compacted: true,
+    receipt: {
+      schemaVersion: 1,
+      operationId: `memory_operation:v1:sha256:${'f'.repeat(64)}`,
+      performedAtMillis: 200,
+      actorId: 'developer:fixture',
+      purgedAtMillis: 200,
+      scopeKind: 'repository',
+      reasonCode: 'memory_purged',
+      removedRecordCount: 2,
+    },
+  } as const satisfies MemoryOperationResult;
+  const lines = renderMemoryPrivacyOperation(result);
+  assert.ok(lines.includes(memoryPrivacyBoundary));
+  assert.ok(lines.some((line) => line.includes('runs, artifacts, conversations, backups, and media')));
+  assert.equal(runtime.purged, undefined);
 });
 
 test('memory explanation exposes provenance and the no-retrieval boundary', () => {

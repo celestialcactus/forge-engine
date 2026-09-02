@@ -51,6 +51,20 @@ const runMemory = async (
   return JSON.parse(stdout) as Record<string, unknown>;
 };
 
+const runMemoryFailure = async (
+  engineRoot: string,
+  args: readonly string[],
+): Promise<Record<string, unknown>> => {
+  try {
+    await runMemory(engineRoot, args);
+    assert.fail('memory command unexpectedly succeeded');
+  } catch (error) {
+    const failure = error as { readonly stderr?: string };
+    assert.ok(typeof failure.stderr === 'string' && failure.stderr.length > 0);
+    return JSON.parse(failure.stderr) as Record<string, unknown>;
+  }
+};
+
 test('source CLI remembers across restart, corrects, restores, and erases prior versions', async () => {
   const engineRoot = await mkdtemp(join(tmpdir(), 'forge-memory-product-'));
   const alpha = 'Tracer alpha: Rust is authoritative and TypeScript orchestrates.';
@@ -174,6 +188,84 @@ test('CLI autosave grant drives the same Rust-backed conversational capture and 
 
     const disabled = await runMemory(engineRoot, ['autosave', 'off']);
     assert.equal(disabled.mode, 'off');
+  } finally {
+    await rm(engineRoot, { recursive: true, force: true });
+  }
+});
+
+test('source CLI forgets reversibly, purges a lineage, and clears only recovery history', async () => {
+  const engineRoot = await mkdtemp(join(tmpdir(), 'forge-memory-privacy-'));
+  const alpha = 'Privacy tracer alpha should leave active memory when forgotten.';
+  const beta = 'Privacy tracer beta should disappear with its lineage.';
+  const gamma = 'Privacy tracer gamma should leave recovery when history is cleared.';
+  const delta = 'Privacy tracer delta must remain active after history is cleared.';
+  try {
+    await runMemory(engineRoot, ['remember', alpha]);
+    const unconfirmed = await runMemoryFailure(engineRoot, ['purge', 'Privacy tracer alpha']);
+    assert.equal(((unconfirmed.error as { readonly code: string }).code), 'memory_command_failed');
+    assert.match(
+      ((unconfirmed.error as { readonly message: string }).message),
+      /Re-run with --yes/u,
+    );
+    const unchanged = await runMemory(engineRoot, ['find', 'Privacy tracer alpha']);
+    assert.equal((unchanged.matches as readonly unknown[]).length, 1);
+    const forgotten = await runMemory(engineRoot, ['forget', 'Privacy tracer alpha']);
+    assert.equal((forgotten.result as { readonly status: string }).status, 'forgotten');
+    assert.equal((forgotten.result as { readonly activeCount: number }).activeCount, 0);
+    assert.equal((forgotten.result as { readonly recoveryCount: number }).recoveryCount, 1);
+
+    const inactive = await runMemory(engineRoot, ['find', 'Privacy tracer alpha']);
+    assert.deepEqual(inactive.matches, []);
+    const recoverable = await runMemory(engineRoot, ['history', 'Privacy tracer alpha']);
+    assert.equal((recoverable.matches as readonly unknown[]).length, 1);
+
+    await runMemory(engineRoot, ['restore', 'Privacy tracer alpha']);
+    await runMemory(engineRoot, [
+      'correct',
+      'Privacy tracer alpha',
+      '--replacement',
+      beta,
+    ]);
+    const purged = await runMemory(engineRoot, ['purge', 'Privacy tracer beta', '--yes']);
+    const purgeResult = purged.result as {
+      readonly status: string;
+      readonly activeCount: number;
+      readonly recoveryCount: number;
+      readonly receipt: Readonly<Record<string, unknown>>;
+    };
+    assert.equal(purgeResult.status, 'purged');
+    assert.equal(purgeResult.activeCount, 0);
+    assert.equal(purgeResult.recoveryCount, 0);
+    assert.equal(purgeResult.receipt.reasonCode, 'memory_purged');
+    assert.equal(purgeResult.receipt.removedRecordCount, 2);
+    for (const forbidden of [
+      'claimId', 'observationId', 'targetId', 'contentSha256', 'statement', 'subject',
+    ]) {
+      assert.equal(Object.hasOwn(purgeResult.receipt, forbidden), false);
+    }
+    let state = await readTree(engineRoot);
+    assert.ok(!state.includes(alpha));
+    assert.ok(!state.includes(beta));
+
+    await runMemory(engineRoot, ['remember', gamma]);
+    await runMemory(engineRoot, [
+      'correct',
+      'Privacy tracer gamma',
+      '--replacement',
+      delta,
+    ]);
+    const cleared = await runMemory(engineRoot, ['history', 'clear', '--yes']);
+    assert.equal(cleared.operation, 'history_clear');
+    assert.equal(cleared.clearedRecordCount, 1);
+    assert.equal((cleared.results as readonly unknown[]).length, 1);
+    const active = await runMemory(engineRoot, ['find', 'Privacy tracer delta']);
+    assert.equal((active.matches as readonly unknown[]).length, 1);
+    const history = await runMemory(engineRoot, ['history']);
+    assert.deepEqual(history.matches, []);
+    state = await readTree(engineRoot);
+    assert.ok(!state.includes(gamma));
+    assert.ok(state.includes(delta));
+    assert.match(String(cleared.disclosure), /runs, artifacts, conversations, backups, and media/u);
   } finally {
     await rm(engineRoot, { recursive: true, force: true });
   }

@@ -109,6 +109,18 @@ class FakeCaptureRuntime implements MemoryCaptureRuntime {
     return this.result('restored', preference('I prefer restored output.'));
   }
 
+  async forget(): Promise<MemoryOperationResult> {
+    return this.result('forgotten');
+  }
+
+  async purge(): Promise<MemoryOperationResult> {
+    return this.result('purged');
+  }
+
+  async clearRecoveryHistory(): Promise<MemoryOperationResult> {
+    return this.result('recovery_history_cleared');
+  }
+
   private result(
     status: MemoryOperationResult['status'],
     activeObservation?: MemoryObservation,

@@ -1,10 +1,11 @@
 //! CLI8A attributable memory contracts.
 //!
 //! This module defines validated observation material, deterministic identities,
-//! and the bounded explicit-control lifecycle used by CLI8A Slices 1–3. It is not
+//! and the bounded explicit-control lifecycle used by CLI8A Slices 1–4. It is not
 //! connected to the run coordinator, planner, context compiler, MCP, or provider
-//! retrieval loop. Slice 3 standing-grant capture is explicit and local; retrieval
-//! and prompt injection remain inactive.
+//! retrieval loop. Standing-grant capture is explicit and local; Slice 4 forget,
+//! purge, and recovery-history clearing remain exact-scope memory operations.
+//! Retrieval and prompt injection remain inactive.
 
 mod grants;
 mod lifecycle;

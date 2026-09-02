@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parseArgs } from 'node:util';
+import { createInterface } from 'node:readline/promises';
 import type { ApprovalFacts, CapabilityCall, ExecutionBudget, RunArtifact } from './slice0/contracts.js';
 import { developerEvidenceTools, developerGovernedChangeTools } from './inference/developer-tools.js';
 import { ProviderTaskPlanner } from './inference/planner.js';
@@ -57,6 +58,8 @@ import {
   renderMemoryExplanation,
   renderMemoryList,
   renderMemoryOperation,
+  memoryPrivacyBoundary,
+  renderMemoryPrivacyOperation,
 } from './memory/presentation.js';
 import { MemoryRuntimeError, RustMemoryRuntime } from './memory/runtime.js';
 
@@ -92,6 +95,7 @@ const parseCliArguments = () => {
     'retry-evidence': { type: 'boolean', default: false },
     replacement: { type: 'string' },
     'erase-previous': { type: 'boolean', default: false },
+    yes: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
       } as const,
     });
@@ -184,6 +188,20 @@ const memoryCommands = async (): Promise<MemoryCommands> => {
 };
 
 const memoryActorId = 'developer:local';
+const confirmMemoryDeletion = async (message: string): Promise<void> => {
+  if (values.yes) return;
+  if (!process.stdin.isTTY || !process.stdout.isTTY || values.json) {
+    throw new Error(`${message} Re-run with --yes to confirm without an interactive prompt.`);
+  }
+  const prompt = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+  try {
+    const answer = (await prompt.question(`${message} Type “yes” to continue: `)).trim().toLocaleLowerCase();
+    if (answer !== 'yes') throw new Error('Memory deletion cancelled; nothing was changed.');
+  } finally {
+    prompt.close();
+  }
+};
+
 const memoryAutoSave = async (): Promise<MemoryAutoSaveController> => {
   const grantScope = await repositoryMemoryScope(workspaceRoot);
   return new MemoryAutoSaveController(
@@ -731,13 +749,51 @@ try {
         if (values.json) printJsonArtifact({ ok: true, operation: action, result });
         else for (const line of renderMemoryOperation(result)) console.log(line);
       } else if (action === 'history') {
-        const history = await memory.history(positionals.slice(2).join(' '));
-        if (values.json) printJsonArtifact({ ok: true, operation: action, ...history });
-        else for (const line of renderMemoryList(history.matches, 'No recoverable memory history matches.')) console.log(line);
+        if (positionals[2] === 'clear') {
+          const results = await memory.clearRecoveryHistory(async (recordCount, scopeCount) => {
+            if (recordCount === 0) return;
+            await confirmMemoryDeletion(
+              `Permanently clear ${String(recordCount)} recoverable memory record(s) across ${String(scopeCount)} exact scope(s)? Active memory stays available.`,
+            );
+          });
+          if (values.json) {
+            printJsonArtifact({
+              ok: true,
+              operation: 'history_clear',
+              clearedRecordCount: results.reduce((sum, result) => sum + (result.receipt?.removedRecordCount ?? 0), 0),
+              results,
+              disclosure: memoryPrivacyBoundary,
+            });
+          } else if (results.length === 0) {
+            console.log('Recovery history is already empty; nothing changed.');
+            console.log(memoryPrivacyBoundary);
+          } else {
+            for (const result of results) {
+              for (const line of renderMemoryPrivacyOperation(result)) console.log(line);
+            }
+          }
+        } else {
+          const history = await memory.history(positionals.slice(2).join(' '));
+          if (values.json) printJsonArtifact({ ok: true, operation: action, ...history });
+          else for (const line of renderMemoryList(history.matches, 'No recoverable memory history matches.')) console.log(line);
+        }
       } else if (action === 'restore') {
         const result = await memory.restore(positionals.slice(2).join(' '));
         if (values.json) printJsonArtifact({ ok: true, operation: action, result });
         else for (const line of renderMemoryOperation(result)) console.log(line);
+      } else if (action === 'forget') {
+        const result = await memory.forget(positionals.slice(2).join(' '));
+        if (values.json) printJsonArtifact({ ok: true, operation: action, result, disclosure: memoryPrivacyBoundary });
+        else for (const line of renderMemoryPrivacyOperation(result)) console.log(line);
+      } else if (action === 'purge') {
+        const selection = positionals.slice(2).join(' ');
+        const result = await memory.purge(selection, async (entry) => {
+          await confirmMemoryDeletion(
+            `Permanently purge the selected memory lineage (“${entry.observation.statement}”) from active and recovery memory?`,
+          );
+        });
+        if (values.json) printJsonArtifact({ ok: true, operation: action, result, disclosure: memoryPrivacyBoundary });
+        else for (const line of renderMemoryPrivacyOperation(result)) console.log(line);
       } else if (action === 'status') {
         const statuses = await memory.statuses();
         const report = {
@@ -754,7 +810,7 @@ try {
           console.log('Retrieval: inactive until CLI8B evaluation.');
         }
       } else {
-        throw new Error('Usage: forge memory <remember|find|show|explain|correct|history|restore|autosave|status> ...');
+        throw new Error('Usage: forge memory <remember|find|show|explain|correct|forget|history|restore|purge|autosave|status> ...');
       }
     }
   } else if (command === 'runs') {
@@ -1073,7 +1129,10 @@ try {
       '  forge memory explain <words from memory> [--json]',
       '  forge memory correct <words from memory> --replacement <text> [--erase-previous] [--json]',
       '  forge memory history [query] [--json]',
+      '  forge memory history clear [--yes] [--json]',
       '  forge memory restore <words from history> [--json]',
+      '  forge memory forget <words from memory> [--json]',
+      '  forge memory purge <words from active or history> [--yes] [--json]',
       '  forge memory autosave [off|ask|auto|status] [--json]',
       '  forge memory status [--json]',
       '  forge config path [workspace|user] [--json]',
@@ -1129,11 +1188,15 @@ try {
       console.error(`Path: ${error.path}`);
       console.error(`Next: ${error.hint}`);
     }
-  } else if (values.json && command === 'memory'
-    && (error instanceof MemorySelectionError || error instanceof MemoryRuntimeError)) {
+  } else if (values.json && command === 'memory') {
     console.error(JSON.stringify({
       ok: false,
-      error: { code: error.code, message: error.message },
+      error: {
+        code: error instanceof MemorySelectionError || error instanceof MemoryRuntimeError
+          ? error.code
+          : 'memory_command_failed',
+        message: error instanceof Error ? error.message : String(error),
+      },
     }));
   } else if (values.json && command === 'config') {
     const message = error instanceof Error ? error.message : String(error);

@@ -30,9 +30,13 @@ The current implementation provides; acceptance status is recorded by the linked
 - authenticated, replay-resistant host-managed execution grants for embedding in a
   boundary supplied by another host;
 - attributable repository decisions and developer preferences through `forge memory
-  remember`, `find`, `show`, `explain`, `correct`, `history`, `restore`, `autosave`,
-  and `status`, with Rust-authoritative identity, provenance, standing grants,
-  correction, bounded recovery, and erasure rewrite. Autosave defaults to `ask`;
+  remember`, `find`, `show`, `explain`, `correct`, `forget`, `history`, `restore`,
+  `purge`, `autosave`, and `status`, with Rust-authoritative identity, provenance,
+  standing grants, correction, bounded recovery, and erasure rewrite. Forget is
+  reversible through bounded history; purge removes the selected lineage from Forge
+  memory, and `memory history clear` removes recovery while retaining active memory.
+  Neither operation claims to erase separate runs, artifacts, conversations,
+  backups, or media. Autosave defaults to `ask`;
   only a local `forge memory autosave off|ask|auto` action can change it for the
   current repository. A narrow safe preference grammar can save without pausing in
   `auto`, with `/memory explain` and immediate `/memory undo`. Memory is still not

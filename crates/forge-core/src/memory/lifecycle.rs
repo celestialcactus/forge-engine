@@ -39,6 +39,19 @@ pub enum MemoryOperation {
         target: MemoryObservationId,
         occurred_at_millis: i64,
     },
+    Forget {
+        target: MemoryObservationId,
+        occurred_at_millis: i64,
+    },
+    Purge {
+        target: MemoryObservationId,
+        actor_id: String,
+        purged_at_millis: i64,
+    },
+    ClearRecoveryHistory {
+        actor_id: String,
+        cleared_at_millis: i64,
+    },
     SetCaptureMode {
         grant: MemoryStandingGrant,
     },
@@ -66,6 +79,8 @@ pub enum MemoryReceiptReason {
     CorrectionHistoryErased,
     RecoveryCompacted,
     AutoCaptureUndone,
+    MemoryPurged,
+    RecoveryHistoryCleared,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,6 +89,10 @@ pub struct MemoryNonContentReceipt {
     pub schema_version: u8,
     pub operation_id: String,
     pub performed_at_millis: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actor_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purged_at_millis: Option<i64>,
     pub scope_kind: super::MemoryScopeKind,
     pub reason_code: MemoryReceiptReason,
     pub removed_record_count: u32,
@@ -99,6 +118,19 @@ pub enum MemoryEvent {
     ObservationRestored {
         target: MemoryObservationId,
         occurred_at_millis: i64,
+    },
+    ObservationForgotten {
+        target: MemoryObservationId,
+        occurred_at_millis: i64,
+    },
+    ObservationPurged {
+        target: MemoryObservationId,
+        actor_id: String,
+        purged_at_millis: i64,
+    },
+    RecoveryHistoryCleared {
+        actor_id: String,
+        cleared_at_millis: i64,
     },
     GrantChanged {
         grant: MemoryStandingGrant,
@@ -153,6 +185,9 @@ pub enum MemoryOperationStatus {
     Admitted,
     Corrected,
     Restored,
+    Forgotten,
+    Purged,
+    RecoveryHistoryCleared,
     Unchanged,
     CaptureModeChanged,
     GrantRevoked,
@@ -169,6 +204,8 @@ pub struct MemoryOperationResult {
     pub active_observation: Option<MemoryObservation>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grant: Option<MemoryStandingGrant>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<MemoryNonContentReceipt>,
     pub active_count: u32,
     pub recovery_count: u32,
     pub ledger_head_sha256: String,

@@ -90,7 +90,7 @@ fields, and partial routes fail with a location, message, and next-action hint.
 contains its fixed reference and presence, never credential bytes. These commands
 do not require Rust, construct a provider, or probe a network endpoint.
 
-## Memory capture experience
+## Memory control experience
 
 Repository decisions remain explicit through `forge memory remember`. Slice 3 adds
 a separate local capture control for direct developer preferences:
@@ -102,6 +102,11 @@ forge memory autosave ask
 forge memory autosave auto
 forge memory find "concise test output"
 forge memory explain "concise test output"
+forge memory forget "concise test output"
+forge memory history "concise test output"
+forge memory restore "concise test output"
+forge memory purge "concise test output"
+forge memory history clear
 ```
 
 `ask` is the default. These commands are not workspace configuration: checked-in
@@ -111,6 +116,14 @@ actor. In interactive Forge, a narrow safe statement such as `I prefer concise
 test output.` saves without pausing in `auto` and prints `Remembered · /memory undo
 · /memory explain`. Other preference-like statements ask; ordinary prompts are
 ignored by capture; secret-like or authority-changing content is ineligible.
+
+`forget` removes a selected memory from normal results but keeps it in bounded
+recovery for `restore`. `purge` irreversibly removes the selected lineage from
+active and recovery memory; `history clear` irreversibly removes all recoverable
+content while retaining active memory. The two irreversible commands confirm in a
+terminal and require `--yes` in noninteractive or JSON automation. Their receipts
+contain operation metadata but no claim text, observation/claim/target ID, content
+digest, or reversible content fingerprint.
 
 Immediate `/memory undo` removes the just-admitted content from Forge memory state
 without a recovery copy. It does not erase independently retained run artifacts,

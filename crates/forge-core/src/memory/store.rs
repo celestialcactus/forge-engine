@@ -61,6 +61,8 @@ pub struct MemoryStore {
     limits: MemoryStoreLimits,
     frames: Vec<MemoryLedgerFrame>,
     projection: MemoryProjection,
+    #[cfg(test)]
+    fail_before_rewrite_publish: bool,
     _lock: MemoryStoreLock,
 }
 
@@ -185,6 +187,8 @@ impl MemoryStore {
             limits,
             frames,
             projection,
+            #[cfg(test)]
+            fail_before_rewrite_publish: false,
             _lock: MemoryStoreLock(lock_file),
         })
     }
@@ -237,6 +241,50 @@ impl MemoryStore {
                 occurred_at_millis,
                 false,
             ),
+            MemoryOperation::Forget {
+                target,
+                occurred_at_millis,
+            } => (
+                MemoryEvent::ObservationForgotten {
+                    target,
+                    occurred_at_millis,
+                },
+                MemoryOperationStatus::Forgotten,
+                occurred_at_millis,
+                false,
+            ),
+            MemoryOperation::Purge {
+                target,
+                actor_id,
+                purged_at_millis,
+            } => {
+                self.ensure_operation_actor(&actor_id)?;
+                (
+                    MemoryEvent::ObservationPurged {
+                        target,
+                        actor_id,
+                        purged_at_millis,
+                    },
+                    MemoryOperationStatus::Purged,
+                    purged_at_millis,
+                    true,
+                )
+            }
+            MemoryOperation::ClearRecoveryHistory {
+                actor_id,
+                cleared_at_millis,
+            } => {
+                self.ensure_operation_actor(&actor_id)?;
+                (
+                    MemoryEvent::RecoveryHistoryCleared {
+                        actor_id,
+                        cleared_at_millis,
+                    },
+                    MemoryOperationStatus::RecoveryHistoryCleared,
+                    cleared_at_millis,
+                    true,
+                )
+            }
             MemoryOperation::SetCaptureMode { grant } => {
                 self.ensure_grant_actor(&grant)?;
                 let occurred_at_millis = grant.created_at_millis;
@@ -317,6 +365,7 @@ impl MemoryStore {
                 MemoryOperationStatus::Unchanged,
                 active,
                 change.grant,
+                None,
                 false,
             );
         }
@@ -324,13 +373,28 @@ impl MemoryStore {
         let pruned = prospective
             .enforce_recovery_limits(as_of_millis, &self.limits)
             .map_err(|error| MemoryStoreError::new(error.code, error.message))?;
+        prospective
+            .validate_lineage_integrity()
+            .map_err(|error| MemoryStoreError::new(error.code, error.message))?;
         let removed = change.erased_records.saturating_add(pruned);
-        if removed > 0 {
-            prospective.receipts.push(non_content_receipt(
+        let privacy_receipt = match &event {
+            MemoryEvent::ObservationPurged { actor_id, .. } => {
+                Some((actor_id.as_str(), MemoryReceiptReason::MemoryPurged))
+            }
+            MemoryEvent::RecoveryHistoryCleared { actor_id, .. } => Some((
+                actor_id.as_str(),
+                MemoryReceiptReason::RecoveryHistoryCleared,
+            )),
+            _ => None,
+        };
+        let receipt = if removed > 0 || privacy_receipt.is_some() {
+            let receipt = non_content_receipt(
                 prospective_sequence,
                 as_of_millis,
                 &self.scope,
-                if matches!(status, MemoryOperationStatus::AutoCaptureUndone) {
+                if let Some((_, reason)) = &privacy_receipt {
+                    reason.clone()
+                } else if matches!(status, MemoryOperationStatus::AutoCaptureUndone) {
                     MemoryReceiptReason::AutoCaptureUndone
                 } else if force_rewrite {
                     MemoryReceiptReason::CorrectionHistoryErased
@@ -338,13 +402,24 @@ impl MemoryStore {
                     MemoryReceiptReason::RecoveryCompacted
                 },
                 removed,
-            )?);
-        }
+                privacy_receipt.map(|(actor_id, _)| actor_id),
+            )?;
+            prospective.receipts.push(receipt.clone());
+            Some(receipt)
+        } else {
+            None
+        };
         let active = change.active_observation;
         let grant = change.grant;
         if active.is_none()
             && grant.is_none()
             && !matches!(status, MemoryOperationStatus::AutoCaptureUndone)
+            && !matches!(
+                status,
+                MemoryOperationStatus::Forgotten
+                    | MemoryOperationStatus::Purged
+                    | MemoryOperationStatus::RecoveryHistoryCleared
+            )
         {
             return Err(MemoryStoreError::new(
                 "memory_integrity_result_missing",
@@ -366,6 +441,13 @@ impl MemoryStore {
                 >= self.limits.compaction_trigger_bytes;
 
         if should_rewrite {
+            #[cfg(test)]
+            if self.fail_before_rewrite_publish {
+                return Err(MemoryStoreError::new(
+                    "memory_store_test_rewrite_failure",
+                    "injected failure before memory rewrite publication",
+                ));
+            }
             let frames = compacted_frames(&prospective, as_of_millis, &self.limits)?;
             rewrite_ledger(&self.ledger_path, &frames, &self.limits)?;
             self.frames = frames;
@@ -386,7 +468,7 @@ impl MemoryStore {
         }
         write_projection(&self.projection_path, &prospective, &self.limits)?;
         self.projection = prospective;
-        self.operation_result(status, active, grant, should_rewrite)
+        self.operation_result(status, active, grant, receipt, should_rewrite)
     }
 
     pub fn inspect(&self, include_recovery: bool) -> MemoryInspection {
@@ -420,6 +502,7 @@ impl MemoryStore {
             &self.scope,
             MemoryReceiptReason::RecoveryCompacted,
             removed,
+            None,
         )?);
         let frames = compacted_frames(&prospective, as_of_millis, &self.limits)?;
         rewrite_ledger(&self.ledger_path, &frames, &self.limits)?;
@@ -453,6 +536,7 @@ impl MemoryStore {
         status: MemoryOperationStatus,
         active_observation: Option<MemoryObservation>,
         grant: Option<MemoryStandingGrant>,
+        receipt: Option<MemoryNonContentReceipt>,
         compacted: bool,
     ) -> Result<MemoryOperationResult, MemoryStoreError> {
         let ledger_head_sha256 = self
@@ -472,6 +556,7 @@ impl MemoryStore {
             scope: self.scope.clone(),
             active_observation,
             grant,
+            receipt,
             active_count: self.projection.active.len().try_into().unwrap_or(u32::MAX),
             recovery_count: self
                 .projection
@@ -511,6 +596,26 @@ impl MemoryStore {
                 "memory standing grants must be stored in their exact developer scope",
             )),
         }
+    }
+
+    fn ensure_operation_actor(&self, actor_id: &str) -> Result<(), MemoryStoreError> {
+        if actor_id.trim().is_empty()
+            || actor_id.len() > 512
+            || actor_id.chars().any(char::is_control)
+        {
+            return Err(MemoryStoreError::new(
+                "memory_admission_actor_invalid",
+                "memory actor identity is invalid",
+            ));
+        }
+        if matches!(&self.scope, MemoryScope::Developer { actor_id: scope_actor } if scope_actor != actor_id)
+        {
+            return Err(MemoryStoreError::new(
+                "memory_admission_actor_mismatch",
+                "memory operation actor does not match the exact developer scope",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -679,6 +784,9 @@ fn rebuild_projection(
             MemoryEvent::ObservationAdmitted { .. }
             | MemoryEvent::ObservationCorrected { .. }
             | MemoryEvent::ObservationRestored { .. }
+            | MemoryEvent::ObservationForgotten { .. }
+            | MemoryEvent::ObservationPurged { .. }
+            | MemoryEvent::RecoveryHistoryCleared { .. }
             | MemoryEvent::ObservationAutoCaptured { .. }
             | MemoryEvent::AutoCaptureUndone { .. }
             | MemoryEvent::GrantChanged { .. }
@@ -690,6 +798,9 @@ fn rebuild_projection(
             .map_err(|error| MemoryStoreError::new(error.code, error.message))?;
         projection.ledger_head_sha256 = Some(frame.frame_sha256.clone());
     }
+    projection
+        .validate_lineage_integrity()
+        .map_err(|error| MemoryStoreError::new(error.code, error.message))?;
     if projection
         .active
         .iter()
@@ -1017,6 +1128,7 @@ fn non_content_receipt(
     scope: &MemoryScope,
     reason_code: MemoryReceiptReason,
     removed_record_count: u32,
+    actor_id: Option<&str>,
 ) -> Result<MemoryNonContentReceipt, MemoryStoreError> {
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
@@ -1027,6 +1139,7 @@ fn non_content_receipt(
         scope_kind: super::MemoryScopeKind,
         reason_code: &'a MemoryReceiptReason,
         removed_record_count: u32,
+        actor_id: Option<&'a str>,
     }
     let material = ReceiptIdentity {
         schema_version: 1,
@@ -1035,11 +1148,14 @@ fn non_content_receipt(
         scope_kind: scope.kind(),
         reason_code: &reason_code,
         removed_record_count,
+        actor_id,
     };
     Ok(MemoryNonContentReceipt {
         schema_version: 1,
         operation_id: format!("memory_operation:v1:sha256:{}", digest_json(&material)?),
         performed_at_millis,
+        actor_id: actor_id.map(str::to_owned),
+        purged_at_millis: actor_id.map(|_| performed_at_millis),
         scope_kind: scope.kind(),
         reason_code,
         removed_record_count,
@@ -1195,5 +1311,73 @@ fn path_is_within(candidate: &Path, root: &Path) -> bool {
     #[cfg(not(windows))]
     {
         candidate == root || candidate.starts_with(root)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        MemoryFreshness, MemoryObservationInput, MemoryObservationRelation, MemoryProvenance,
+        MemoryStatementKind, MemorySubjectKind, PreferenceAdmission,
+    };
+
+    #[test]
+    fn injected_privacy_rewrite_failure_leaves_authoritative_state_restart_safe() {
+        let root = std::env::temp_dir().join(format!(
+            "forge-memory-rewrite-failure-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let scope = MemoryScope::Repository {
+            workspace_id: "workspace:test".to_owned(),
+            repository_id: "repository:test".to_owned(),
+        };
+        let observation = MemoryObservation::new(MemoryObservationInput {
+            subject_kind: MemorySubjectKind::RepositoryConvention,
+            statement_kind: MemoryStatementKind::ReviewedDecision,
+            subject: "privacy boundary".to_owned(),
+            statement: "Preserve this memory when rewrite publication fails.".to_owned(),
+            scope: scope.clone(),
+            provenance: MemoryProvenance::DeveloperStatement {
+                run_id: "run:test".to_owned(),
+                actor_id: "developer:test".to_owned(),
+                source_id: "input:test".to_owned(),
+                input_sha256: "a".repeat(64),
+                admission: Some(PreferenceAdmission::ExplicitRemember),
+            },
+            relation: MemoryObservationRelation::Supports,
+            confidence: 100,
+            observed_at_millis: 10,
+            freshness: MemoryFreshness::PersistentUntilReviewed,
+        })
+        .unwrap();
+        let mut store =
+            MemoryStore::open(&root, scope.clone(), MemoryStoreLimits::default()).unwrap();
+        store
+            .apply(MemoryOperation::Remember {
+                observation: observation.clone(),
+            })
+            .unwrap();
+        let before = store.inspect(true);
+        store.fail_before_rewrite_publish = true;
+        let error = store
+            .apply(MemoryOperation::Purge {
+                target: observation.observation_id,
+                actor_id: "developer:test".to_owned(),
+                purged_at_millis: 20,
+            })
+            .unwrap_err();
+        assert_eq!(error.code(), "memory_store_test_rewrite_failure");
+        assert_eq!(store.inspect(true), before);
+        drop(store);
+        let reopened = MemoryStore::open(&root, scope, MemoryStoreLimits::default()).unwrap();
+        assert_eq!(reopened.inspect(true), before);
+        drop(reopened);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
