@@ -1,10 +1,45 @@
 import type {
   MemoryInspection,
+  MemoryContextPreview,
+  MemoryContextPreviewOmissionReason,
   MemoryObservation,
   MemoryOperationResult,
   ProjectedMemory,
   RecoveryMemory,
 } from './contracts.js';
+
+const previewOmissionLabels: Readonly<Record<MemoryContextPreviewOmissionReason, string>> = {
+  observation_not_yet_effective: 'its observation time has not arrived yet',
+  declared_contradiction: 'declared contradiction',
+  inferred_hypothesis: 'inferred hypothesis',
+  source_not_eligible: 'source is not eligible',
+  explicit_validity_expired: 'explicit validity expired',
+  evidence_currentness_unavailable: 'current evidence could not be verified',
+  run_context_unavailable: 'its originating run is not active',
+  budget_exceeded: 'outside this preview’s byte budget',
+};
+
+const maximumHumanPreviewBytes = 160;
+const bidiFormattingCharacters = /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu;
+const terminalControlCharacters = /\p{Cc}/gu;
+
+const terminalMemoryExcerpt = (value: string): string => {
+  const singleLine = value
+    .replace(/\r\n?|\n/gu, ' ')
+    .replace(terminalControlCharacters, '�')
+    .replace(bidiFormattingCharacters, '�')
+    .split(/\s+/u)
+    .filter((part) => part.length > 0)
+    .join(' ');
+  if (Buffer.byteLength(singleLine, 'utf8') <= maximumHumanPreviewBytes) return singleLine;
+  const ellipsisBytes = Buffer.byteLength('…', 'utf8');
+  let excerpt = '';
+  for (const character of singleLine) {
+    if (Buffer.byteLength(excerpt + character, 'utf8') > maximumHumanPreviewBytes - ellipsisBytes) break;
+    excerpt += character;
+  }
+  return `${excerpt}…`;
+};
 
 export const memorySummary = (entry: ProjectedMemory | RecoveryMemory): string =>
   entry.observation.statement;
@@ -70,6 +105,41 @@ export const renderMemoryExplanation = (entry: ProjectedMemory): readonly string
     `Source: ${sourceKind} from ${actor}; observed=${new Date(observation.observedAtMillis).toISOString()}.`,
     'Retrieval: not injected into a planner or provider in CLI8A.',
   ];
+};
+
+export const renderMemoryContextPreview = (preview: MemoryContextPreview): readonly string[] => {
+  const lines = [
+    'Memory context preview — nothing was sent to a model.',
+    `Currently, ${String(preview.selected.length)} of ${String(preview.candidateCount)} active memories would qualify `
+      + `using ${String(preview.selectedBytes)} of ${String(preview.budgetBytes)} bytes.`,
+  ];
+  if (preview.selected.length === 0) {
+    lines.push('No active memory would currently qualify.');
+  } else {
+    lines.push('Would qualify:');
+    preview.selected.forEach((selected, index) => {
+      lines.push(`${String(index + 1)}. ${terminalMemoryExcerpt(selected.entry.observation.statement)} `
+        + '— active, fresh, and belongs to this repository or your local preferences.');
+    });
+  }
+  if (preview.omitted.length > 0) {
+    lines.push('Not included:');
+    preview.omitted.forEach((omitted, index) => {
+      lines.push(`${String(index + 1)}. ${terminalMemoryExcerpt(omitted.statementPreview)} `
+        + `— ${previewOmissionLabels[omitted.reason]}.`);
+    });
+  }
+  const excludedRecovery = preview.forgottenExcludedCount + preview.supersededRecoveryExcludedCount;
+  if (excludedRecovery > 0) {
+    lines.push(
+      `Excluded inactive history: ${String(preview.forgottenExcludedCount)} forgotten; `
+        + `${String(preview.supersededRecoveryExcludedCount)} superseded recoverable record(s).`,
+    );
+  }
+  lines.push('Terminal excerpts are shortened for safety; use --json for exact selected content.');
+  lines.push('This preview did not change saved memories or insert them into planner or provider context.');
+  lines.push('Choose memories by ordinary words in other memory commands; internal IDs are not required.');
+  return lines;
 };
 
 export const memoryStatusReport = (inspection: MemoryInspection): Readonly<Record<string, unknown>> => ({

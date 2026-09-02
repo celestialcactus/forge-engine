@@ -4,9 +4,10 @@
 [Checkpoint 92](../decisions/checkpoints/2026-08-31-92-cli8a-memory-slice-0-2-hosted-gate.md);
 Slice 3 accepted through PR #33 implementation candidate `26f011e` and
 [Checkpoint 93](../decisions/checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md);
-Slice 4 candidate `20b9bac` accepted for merge through
+Slice 4 merged through PR #34 at `9bba75e` after candidate `20b9bac` was accepted by
 [Checkpoint 94](../decisions/checkpoints/2026-09-02-94-cli8a-memory-slice-4-hosted-gate.md);
-Slice 5 remains unapproved
+Slice 5 bounded eligibility-preview contract approved for implementation on
+2026-09-02
 **Date:** 2026-08-29
 **Delivery path:** full
 **Active task:** [Slice CLI8](SLICE-CLI8-differentiated-learning-loop.md)
@@ -16,16 +17,18 @@ Slice 5 remains unapproved
 
 This packet presented Product, Architecture, Program Design, and Vertical Slices
 together for review. The approval ledger below is now authoritative: Slice 0 and
-implementation Slices 1–4 are authorized, while Slice 5 remains gated.
+implementation Slices 1–5 are authorized. Slice 5 remains an inactive preview: it
+does not authorize planner/provider retrieval or memory insertion into their prompt
+context. This is not a claim of general prompt-injection resistance.
 
 ## Approval ledger
 
 | Gate | Status | Material | Approval |
 | --- | --- | --- | --- |
 | Product | approved | Gate 1 below | Approved 2026-08-29, including the outcome and explicit non-claims. |
-| Architecture | approved for Slice 0–4 | Gate 2 below plus ADR-0034/0038/0039 | Rust remains authoritative; TypeScript owns orchestration, capture-candidate construction, UX, and replaceable retrieval machinery. Slice 4 reuses the frozen ledger, lifecycle, recovery, and atomic rewrite boundary. |
-| Program Design | approved for Slice 0–4 | Gate 3 below | Frozen forget/restore, purge, history-clear, error, atomicity, retention, and test contracts apply to Slice 4. |
-| Vertical Slices | partially approved | Gate 4 below | Contract prerequisite Slice 0 and implementation Slices 1–4 are authorized. Slice 3 was explicitly approved on 2026-08-31 and Slice 4 on 2026-09-02; Slice 5 remains gated. |
+| Architecture | approved for Slice 0–5 | Gate 2 below plus ADR-0034/0038/0039 | Rust remains authoritative for final context admission and reasons; TypeScript owns orchestration and presentation. Slice 5 cannot activate planner/provider retrieval or mutate run truth. |
+| Program Design | approved for Slice 0–5 | Gate 3 and the Slice 5 amendment below | The eligibility-only preview schema, exact two-scope boundary, freshness omissions, deterministic byte budget, errors, ownership, and tests are frozen. |
+| Vertical Slices | approved through Slice 5 | Gate 4 below | Contract prerequisite Slice 0 and implementation Slices 1–5 are authorized. Slice 3 was approved on 2026-08-31, Slice 4 on 2026-09-02, and the bounded Slice 5 preview on 2026-09-02. CLI8B/C remain gated. |
 
 ## Gate 1: Product
 
@@ -587,7 +590,8 @@ planner/provider/retrieval/discovery/network work, and reported retrieval inacti
 Temporary validation state was removed. Slice 3 was later authorized on 2026-08-31
 and is implemented at `afa6e67`, with final implementation candidate `26f011e`
 accepted by Checkpoint 93. Slice 4 was subsequently authorized on 2026-09-02 and
-candidate `20b9bac` is accepted for merge by Checkpoint 94; Slice 5 remains open.
+candidate `20b9bac` is accepted by Checkpoint 94 and merged through PR #34 at
+`9bba75e`; Slice 5 is now authorized at the bounded eligibility-preview contract.
 
 The authoritative worktree follow-up also passed `npm run check:product` under the
 supported MSVC environment (191 Rust tests passed with 16 explicit ignored helper/
@@ -700,8 +704,9 @@ pass all nine declared jobs, and a live VS Code integrated-terminal pilot at exa
 `26f011e` confirms Backspace, `/help`, and `/exit`. Checkpoint 93 accepts Slice 3
 for merge. That checkpoint did not authorize later slices; the reviewer separately
 authorized Slice 4 on 2026-09-02. Candidate `20b9bac` passes its local, package,
-benchmark, and hosted privacy gates and is accepted for merge by Checkpoint 94.
-Slice 5 remains unauthorized.
+benchmark, and hosted privacy gates, is accepted by Checkpoint 94, and is merged
+through PR #34 at `9bba75e`. Slice 5 was subsequently authorized on 2026-09-02 at
+the bounded eligibility-preview contract below.
 
 May develop in parallel with Slice 2 after the shared contract freeze.
 
@@ -732,12 +737,66 @@ Depends on Slice 2 recovery and compaction behavior.
 
 ### Slice 5: Bounded context preview and CLI8A acceptance
 
+**Authorization:** Explicitly approved on 2026-09-02 after the Product,
+Architecture, Program Design, and parallel-conflict review. This authorization is
+limited to a baseline eligibility preview. It does not authorize task relevance,
+ranking, provider work, memory insertion into planner/provider prompt context, or
+retrieval activation.
+
 **User proof:** Preview the exact memory context that would be eligible for a task
 and see inclusion/omission reasons without sending it to a model.
 
 **Gate:** bounded deterministic output contains active, fresh, exact-scope records
 only; recovery, forgotten, stale, conflicting, cross-scope, hypothesis, and purged
 content are absent or explicitly reported as omitted; no provider/network work.
+
+**Frozen command and budget:**
+
+```text
+forge memory preview [--max-bytes <1..262144>] [--json]
+```
+
+The default budget is 65,536 UTF-8 bytes and the hard maximum is 262,144 bytes.
+The charge is the byte length of each canonical serialized context fragment, not
+only its statement. Human output says that nothing was sent to a model and does
+not require internal identifiers. JSON reports `retrievalActive=false`,
+`plannerInjection=false`, and `providerWorkPerformed=false`.
+
+**Frozen authority and scope:** Rust derives and opens only the exact current
+repository scope supplied by the trusted CLI boundary and the exact local
+developer scope for the requesting actor. An arbitrary scope list is not accepted;
+duplicates, a non-repository primary scope, or an entry/scope mismatch fail closed.
+Other repositories, workspaces, and actors are never enumerated. TypeScript invokes,
+validates, and renders one Rust-owned result; it does not combine independently
+admitted previews.
+
+**Frozen eligibility policy:** Candidates are active projections only. Explicitly
+declared `contradicts` relations, inferred hypotheses, model-output or
+repository-text provenance, expired explicit validity, evidence-bound entries
+without authoritative currentness, and run-bound entries without an active run are
+omitted with stable reason codes. An observation dated after the injected preview
+time is omitted as `observation_not_yet_effective`. Persistent-until-reviewed and
+unexpired explicit-validity entries are eligible only once their observation time
+has arrived. Slice 5 does not infer semantic conflict: only an explicit
+`contradicts` relation is a conflict at this boundary.
+
+Ordering is canonical by scope kind/material, subject kind, normalized subject,
+claim ID, observation time, and observation ID. First-fit budgeting may omit an
+oversized entry and admit a later smaller entry. Time is injected; identical state,
+time, and budget produce an identical preview identity and byte sequence. Preview
+identity hashes recursively key-sorted UTF-8 JSON so the Rust producer and strict
+TypeScript consumer can independently verify the same material.
+Forgotten and recovery records never enter the candidate list. Only aggregate
+forgotten/superseded-recovery counts may be reported; their content and purged
+identities remain absent. Preview does not run retention compaction or change saved
+memory records.
+
+The additive private-alpha bridge action remains under `forge.kernel.memory.v1`.
+That is accepted only with the current exact CLI/native pairing; it does not claim
+independent old-kernel forward compatibility. Stable new errors are
+`memory_context_budget_invalid`, `memory_context_time_invalid`,
+`memory_context_scope_invalid`, `memory_context_scope_duplicate`,
+`memory_context_entry_mismatch`, and `memory_context_encoding_failed`.
 
 Run the complete local and hosted matrix, update the checkpoint/build plan/current
 index, and retain the no-retrieval/no-skill claims. CLI8B begins only after this
@@ -763,12 +822,13 @@ Slice 2 recovery     Slice 3 autosave
         Slice 5 preview + hosted gate
 ```
 
-The authorized packet is **Slice 0 through Slice 4**, and those slices now have
+The authorized packet is **Slice 0 through Slice 5**. Slices 0–4 have
 accepted-for-merge implementation evidence through Checkpoints 92–94. Slice 0 is
 the required contract freeze, Slice 1 proves the tracer seam, Slice 2 proves
 recovery, and Slice 3 proves standing-grant autosave plus undo. Slice 4 proves the
 privacy lifecycle.
-Slice 5 remains unapproved.
+Slice 5 is authorized only at the frozen eligibility-preview boundary above and
+must pass its own exact local, package, hosted, and CLI8A acceptance gate.
 
 ## Decisions requested from the reviewer
 
@@ -787,7 +847,7 @@ Approval of this packet means all of the following:
    initially; later slice authorization remains explicit.
 
 The reviewer approved decisions 1–8 on 2026-08-29 for Slice 0–2, explicitly
-approved Slice 3 on 2026-08-31, and explicitly authorized Slice 4 on 2026-09-02
-against the same Product, Architecture, Program Design, and Vertical Slice packet.
-Candidate `20b9bac` is accepted for merge by Checkpoint 94. Slice 5 and CLI8B/C
-remain gated.
+approved Slice 3 on 2026-08-31, explicitly authorized Slice 4 on 2026-09-02, and
+approved the bounded Slice 5 eligibility-preview amendment on 2026-09-02. PR #34
+merged the accepted Slice 4 candidate through baseline `9bba75e`. CLI8B/C remain
+gated.

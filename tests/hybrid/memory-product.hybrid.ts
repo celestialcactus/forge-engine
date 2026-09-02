@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -19,11 +20,33 @@ const kernelPath = join(
   process.platform === 'win32' ? 'forge-kernel.exe' : 'forge-kernel',
 );
 
+const coveredEnvironmentVariables = [
+  'FORGE_DEFAULT_PROVIDER',
+  'FORGE_DEFAULT_MODEL',
+  'FORGE_ENGINE_ROOT',
+  'FORGE_OLLAMA_URL',
+  'FORGE_OLLAMA_CONTEXT_TOKENS',
+  'FORGE_OPENAI_BASE_URL',
+  'FORGE_APPROVAL_PROFILE',
+  'FORGE_MAX_TURNS',
+  'FORGE_MAX_CAPABILITY_CALLS',
+  'FORGE_MAX_INPUT_TOKENS',
+  'FORGE_MAX_OUTPUT_TOKENS',
+  'FORGE_TIMEOUT_MS',
+  'OPENAI_API_KEY',
+] as const;
+
 const runMemory = async (
   engineRoot: string,
   args: readonly string[],
+  workspaceRoot = repositoryRoot,
+  additions: Readonly<Record<string, string>> = {},
 ): Promise<Record<string, unknown>> => {
   const environment: NodeJS.ProcessEnv = { ...process.env, FORGE_KERNEL_BINARY: kernelPath };
+  for (const variable of coveredEnvironmentVariables) delete environment[variable];
+  environment.HOME = join(engineRoot, 'isolated-home');
+  environment.USERPROFILE = environment.HOME;
+  Object.assign(environment, additions);
   delete environment.FORGE_DEBUG;
   const { stdout, stderr } = await execute(
     process.execPath,
@@ -34,7 +57,7 @@ const runMemory = async (
       'memory',
       ...args,
       '--workspace',
-      repositoryRoot,
+      workspaceRoot,
       '--engine-root',
       engineRoot,
       '--json',
@@ -54,9 +77,11 @@ const runMemory = async (
 const runMemoryFailure = async (
   engineRoot: string,
   args: readonly string[],
+  workspaceRoot = repositoryRoot,
+  additions: Readonly<Record<string, string>> = {},
 ): Promise<Record<string, unknown>> => {
   try {
-    await runMemory(engineRoot, args);
+    await runMemory(engineRoot, args, workspaceRoot, additions);
     assert.fail('memory command unexpectedly succeeded');
   } catch (error) {
     const failure = error as { readonly stderr?: string };
@@ -64,6 +89,127 @@ const runMemoryFailure = async (
     return JSON.parse(failure.stderr) as Record<string, unknown>;
   }
 };
+
+test('source CLI preview is exact-scope, deterministic, bounded, and provider-free', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'forge-memory-preview-'));
+  const engineRoot = join(root, 'engine');
+  const firstRepository = join(root, 'repository-a');
+  const secondRepository = join(root, 'repository-b');
+  const repositoryDecision = 'Preview tracer: Rust owns final memory admission.';
+  const developerPreference = 'I prefer concise explanations.';
+  const forgotten = 'Preview forgotten content must stay out of context.';
+  const crossRepository = 'Preview cross-repository content must stay isolated.';
+  let providerRequests = 0;
+  const provider = createServer((_request, response) => {
+    providerRequests += 1;
+    response.writeHead(500).end();
+  });
+  try {
+    await mkdir(firstRepository, { recursive: true });
+    await mkdir(secondRepository, { recursive: true });
+    await new Promise<void>((resolveListen, rejectListen) => {
+      provider.once('error', rejectListen);
+      provider.listen(0, '127.0.0.1', () => resolveListen());
+    });
+    const address = provider.address();
+    if (address === null || typeof address === 'string') throw new Error('Preview provider fixture did not bind TCP.');
+    const routeEnvironment = {
+      FORGE_DEFAULT_PROVIDER: 'ollama',
+      FORGE_DEFAULT_MODEL: 'must-not-run',
+      FORGE_OLLAMA_URL: `http://127.0.0.1:${String(address.port)}`,
+    };
+
+    await runMemory(engineRoot, ['remember', repositoryDecision], firstRepository, routeEnvironment);
+    await runMemory(engineRoot, ['remember', forgotten], firstRepository, routeEnvironment);
+    await runMemory(engineRoot, ['forget', 'Preview forgotten content'], firstRepository, routeEnvironment);
+    await runMemory(engineRoot, ['remember', crossRepository], secondRepository, routeEnvironment);
+
+    const firstScope = await repositoryMemoryScope(firstRepository);
+    const developerRuntime = new RustMemoryRuntime({
+      kernelPath,
+      engineRoot,
+      workspaceRoot: firstRepository,
+      scope: { kind: 'developer', actorId: 'developer:local' },
+      actorId: 'developer:local',
+    });
+    const autosave = new MemoryAutoSaveController(developerRuntime, firstScope);
+    await autosave.setMode('auto');
+    const capture = await autosave.captureDirectInput(developerPreference, async () => false);
+    assert.equal(capture.kind, 'remembered');
+
+    const first = await runMemory(engineRoot, ['preview'], firstRepository, routeEnvironment);
+    const second = await runMemory(engineRoot, ['preview'], firstRepository, routeEnvironment);
+    const preview = first.preview as {
+      readonly previewId: string;
+      readonly candidateCount: number;
+      readonly selected: readonly { readonly entry: { readonly observation: { readonly statement: string } } }[];
+      readonly scopeHeads: readonly { readonly scope: { readonly kind: string } }[];
+      readonly forgottenExcludedCount: number;
+      readonly retrievalActive: boolean;
+      readonly plannerInjection: boolean;
+      readonly providerWorkPerformed: boolean;
+    };
+    const serialized = JSON.stringify(first);
+    assert.equal(first.operation, 'preview');
+    const secondPreview = second.preview as {
+      readonly selected: readonly unknown[];
+      readonly omitted: readonly unknown[];
+      readonly scopeHeads: readonly unknown[];
+    };
+    assert.deepEqual(secondPreview.selected, preview.selected);
+    assert.deepEqual(secondPreview.omitted, (first.preview as { readonly omitted: readonly unknown[] }).omitted);
+    assert.deepEqual(secondPreview.scopeHeads, preview.scopeHeads);
+    assert.deepEqual(
+      preview.selected.map((entry) => entry.entry.observation.statement),
+      [repositoryDecision, developerPreference],
+    );
+    assert.equal(preview.candidateCount, 2);
+    assert.deepEqual(preview.scopeHeads.map((head) => head.scope.kind).sort(), ['developer', 'repository']);
+    assert.equal(preview.forgottenExcludedCount, 1);
+    assert.equal(preview.retrievalActive, false);
+    assert.equal(preview.plannerInjection, false);
+    assert.equal(preview.providerWorkPerformed, false);
+    assert.equal(serialized.includes(forgotten), false);
+    assert.equal(serialized.includes(crossRepository), false);
+
+    const tiny = await runMemory(engineRoot, ['preview', '--max-bytes', '1'], firstRepository, routeEnvironment);
+    const tinyPreview = tiny.preview as {
+      readonly selected: readonly unknown[];
+      readonly omitted: readonly { readonly reason: string }[];
+    };
+    assert.deepEqual(tinyPreview.selected, []);
+    assert.deepEqual(tinyPreview.omitted.map((entry) => entry.reason), ['budget_exceeded', 'budget_exceeded']);
+
+    for (const invalidArguments of [
+      ['preview', '--replacement', 'ignored'],
+      ['preview', '--erase-previous'],
+      ['preview', '--yes'],
+      ['preview', '--max-turns', '2'],
+      ['preview', '--max-bytes', '1e3'],
+      ['preview', '--max-bytes', '0x100'],
+      ['preview', '--max-bytes', '1', '--max-bytes', '2'],
+    ] as const) {
+      const failure = await runMemoryFailure(engineRoot, invalidArguments);
+      assert.equal((failure.error as { readonly code: string }).code, 'memory_command_failed');
+    }
+    const missingKernelGrammarFailure = await runMemoryFailure(
+      engineRoot,
+      ['preview', '--max-bytes', '1e3'],
+      firstRepository,
+      { FORGE_KERNEL_BINARY: join(root, 'kernel-must-not-be-probed') },
+    );
+    assert.match(
+      (missingKernelGrammarFailure.error as { readonly message: string }).message,
+      /base-10 integer/u,
+    );
+    assert.equal(providerRequests, 0);
+  } finally {
+    await new Promise<void>((resolveClose, rejectClose) => {
+      provider.close((error) => error === undefined ? resolveClose() : rejectClose(error));
+    });
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test('source CLI remembers across restart, corrects, restores, and erases prior versions', async () => {
   const engineRoot = await mkdtemp(join(tmpdir(), 'forge-memory-product-'));

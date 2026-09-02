@@ -1,3 +1,24 @@
+# 2026-09-02 - CLI8A Slice 4 merges and bounded Slice 5 preview is authorized
+
+- PR #34 merged the Checkpoint 94 Slice 4 privacy lifecycle into `develop` at
+  `9bba75e`; recoverable forget/restore, selected-lineage purge, and
+  recovery-history clear are now accepted baseline behavior.
+- The reviewer approved CLI8A Slice 5 only as a deterministic baseline eligibility
+  preview over the exact current repository and requesting developer scopes.
+- Rust owns selection, omission reasons, scope validation, ordering, preview
+  identity, and byte accounting. TypeScript owns invocation and human/JSON
+  presentation without recomputing admission.
+- The default preview budget is 65,536 UTF-8 bytes and the maximum is 262,144.
+  Unresolved evidence-bound and run-bound freshness fails closed; only explicitly
+  declared contradictions count as conflicts in this slice.
+- Slice 5 does not authorize a task query, semantic ranking, planner/provider or
+  network work, memory insertion into planner/provider prompt context,
+  recovery-content disclosure, CLI8B retrieval, or CLI8C skills. This is not a
+  claim of general prompt-injection resistance.
+- A separate terminal observable-activity lane passed its Product Gate on the same
+  date. Its architecture/program design and implementation remain separately gated;
+  shared CLI, smoke, and documentation integration must be serialized.
+
 # 2026-09-02 - CLI8A Slice 4 passes the local and hosted privacy gate
 
 - PR #34 implementation candidate `20b9bac` is accepted for merge through

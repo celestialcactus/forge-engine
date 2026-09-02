@@ -83,7 +83,8 @@ graph edge is never authority by itself.
 
 ADR-0038 also freezes exact tagged scopes. ADR-0039 assigns canonical identity,
 storage, lifecycle, and provenance authority to Rust while TypeScript orchestrates
-the product UX and future replaceable retrieval machinery. The Slice 1–2 candidate
-activates only explicit remember/find/show/explain/correct/history/restore. Automatic
-capture, forget/purge/history-clear, prompt injection, and retrieval remain gated;
-automatic retrieval still requires the paired CLI8B evaluation gate.
+the product UX and future replaceable retrieval machinery. Slices 0–4 are accepted
+through PRs #32–34; the active Slice 5 candidate adds only a read-only eligibility
+preview. Forge still does not insert memory into planner/provider prompt context or
+activate retrieval. Automatic retrieval still requires the paired CLI8B evaluation
+gate; this non-activation is not a claim of general prompt-injection resistance.

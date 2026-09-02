@@ -2,13 +2,19 @@ import { createHash } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import type {
   MemoryCorrectionDisposition,
+  MemoryContextPreview,
   MemoryInspection,
   MemoryObservation,
   MemoryOperationResult,
+  MemoryPreviewRuntime,
   MemoryRuntime,
   ProjectedMemory,
   RecoveryMemory,
   RepositoryMemoryScope,
+} from './contracts.js';
+import {
+  defaultMemoryContextPreviewBudgetBytes,
+  maximumMemoryContextPreviewBudgetBytes,
 } from './contracts.js';
 
 export class MemorySelectionError extends Error {
@@ -39,10 +45,10 @@ export interface MemoryFindResult {
 }
 
 export class MemoryCommands {
-  readonly #runtime: MemoryRuntime;
+  readonly #runtime: MemoryPreviewRuntime;
   readonly #runtimes: readonly MemoryRuntime[];
 
-  constructor(runtime: MemoryRuntime, additionalRuntimes: readonly MemoryRuntime[] = []) {
+  constructor(runtime: MemoryPreviewRuntime, additionalRuntimes: readonly MemoryRuntime[] = []) {
     this.#runtime = runtime;
     this.#runtimes = [runtime, ...additionalRuntimes];
   }
@@ -66,6 +72,17 @@ export class MemoryCommands {
 
   explain(selection: string): Promise<ProjectedMemory> {
     return this.show(selection);
+  }
+
+  preview(budgetBytes = defaultMemoryContextPreviewBudgetBytes): Promise<MemoryContextPreview> {
+    if (!Number.isSafeInteger(budgetBytes)
+      || budgetBytes < 1
+      || budgetBytes > maximumMemoryContextPreviewBudgetBytes) {
+      throw new Error(
+        `Memory context preview budget must be an integer from 1 to ${maximumMemoryContextPreviewBudgetBytes}.`,
+      );
+    }
+    return this.#runtime.preview(budgetBytes);
   }
 
   async correct(

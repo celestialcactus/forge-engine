@@ -1,12 +1,14 @@
 use std::fs;
-use std::io::BufWriter;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use forge_core::{
-    MemoryCaptureMode, MemoryCorrectionDisposition, MemoryFreshness, MemoryGrantId,
-    MemoryGrantScope, MemoryObservation, MemoryObservationId, MemoryObservationInput,
-    MemoryObservationRelation, MemoryOperation, MemoryProvenance, MemoryScope, MemoryStandingGrant,
-    MemoryStatementKind, MemoryStore, MemoryStoreLimits, MemorySubjectKind, PreferenceAdmission,
+    MAXIMUM_MEMORY_CONTEXT_PREVIEW_BYTES, MemoryCaptureMode, MemoryContextPreview,
+    MemoryCorrectionDisposition, MemoryFreshness, MemoryGrantId, MemoryGrantScope,
+    MemoryObservation, MemoryObservationId, MemoryObservationInput, MemoryObservationRelation,
+    MemoryOperation, MemoryProvenance, MemoryScope, MemoryStandingGrant, MemoryStatementKind,
+    MemoryStore, MemoryStoreLimits, MemorySubjectKind, PreferenceAdmission,
+    compile_memory_context_preview,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -35,6 +37,11 @@ struct MemoryStart {
     deny_unknown_fields
 )]
 enum MemoryAction {
+    Preview {
+        actor_id: String,
+        as_of_millis: i64,
+        budget_bytes: u64,
+    },
     Remember {
         statement: String,
         actor_id: String,
@@ -113,6 +120,9 @@ enum MemoryOutcome {
     Inspection {
         inspection: forge_core::MemoryInspection,
     },
+    ContextPreview {
+        preview: Box<MemoryContextPreview>,
+    },
 }
 
 #[derive(Debug)]
@@ -122,10 +132,7 @@ pub struct MemoryBridgeFailure {
     pub message: String,
 }
 
-pub fn execute(
-    frame: &[u8],
-    writer: &mut BufWriter<std::io::Stdout>,
-) -> Result<(), MemoryBridgeFailure> {
+pub fn execute<W: Write>(frame: &[u8], writer: &mut W) -> Result<(), MemoryBridgeFailure> {
     let start: MemoryStart = serde_json::from_slice(frame).map_err(|_| MemoryBridgeFailure {
         request_id: None,
         code: "invalid_memory_request".to_owned(),
@@ -149,6 +156,45 @@ pub fn execute(
             message,
         }
     })?;
+    if let MemoryAction::Preview {
+        actor_id,
+        as_of_millis,
+        budget_bytes,
+    } = &start.action
+    {
+        if !bounded_identifier(actor_id) {
+            return Err(MemoryBridgeFailure {
+                request_id: Some(start.request_id.clone()),
+                code: "memory_admission_actor_invalid".to_owned(),
+                message: "Memory actor identity is invalid.".to_owned(),
+            });
+        }
+        if !matches!(start.scope, MemoryScope::Repository { .. }) {
+            return Err(MemoryBridgeFailure {
+                request_id: Some(start.request_id.clone()),
+                code: "memory_context_scope_invalid".to_owned(),
+                message: "Memory context preview requires the exact current repository scope."
+                    .to_owned(),
+            });
+        }
+        if *as_of_millis < 0 {
+            return Err(MemoryBridgeFailure {
+                request_id: Some(start.request_id.clone()),
+                code: "memory_context_time_invalid".to_owned(),
+                message: "Memory context preview time must be non-negative.".to_owned(),
+            });
+        }
+        if !(1..=MAXIMUM_MEMORY_CONTEXT_PREVIEW_BYTES).contains(budget_bytes) {
+            return Err(MemoryBridgeFailure {
+                request_id: Some(start.request_id.clone()),
+                code: "memory_context_budget_invalid".to_owned(),
+                message: format!(
+                    "Memory context preview budget must be from 1 to {MAXIMUM_MEMORY_CONTEXT_PREVIEW_BYTES} bytes."
+                ),
+            });
+        }
+    }
+
     let mut store = MemoryStore::open(
         &start.engine_root,
         start.scope.clone(),
@@ -161,6 +207,34 @@ pub fn execute(
     })?;
 
     let outcome = match start.action {
+        MemoryAction::Preview {
+            actor_id,
+            as_of_millis,
+            budget_bytes,
+        } => {
+            let repository_inspection = store.inspect(true);
+            let developer_scope = MemoryScope::Developer { actor_id };
+            let developer_store = MemoryStore::open(
+                &start.engine_root,
+                developer_scope,
+                MemoryStoreLimits::default(),
+            )
+            .map_err(|error| store_failure(&start.request_id, error))?;
+            let developer_inspection = developer_store.inspect(true);
+            let preview = compile_memory_context_preview(
+                &[repository_inspection, developer_inspection],
+                as_of_millis,
+                budget_bytes,
+            )
+            .map_err(|error| MemoryBridgeFailure {
+                request_id: Some(start.request_id.clone()),
+                code: error.code().to_owned(),
+                message: error.to_string(),
+            })?;
+            MemoryOutcome::ContextPreview {
+                preview: Box::new(preview),
+            }
+        }
         MemoryAction::Remember {
             statement,
             actor_id,
@@ -590,5 +664,209 @@ fn path_is_within(candidate: &Path, root: &Path) -> bool {
     #[cfg(not(windows))]
     {
         candidate == root || candidate.starts_with(root)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use serde_json::{Value, json};
+
+    use super::execute;
+
+    struct Fixture {
+        root: std::path::PathBuf,
+        workspace: std::path::PathBuf,
+        engine: std::path::PathBuf,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos();
+            let root = std::env::temp_dir().join(format!(
+                "forge-memory-context-bridge-{}-{nonce}",
+                std::process::id()
+            ));
+            let workspace = root.join("workspace");
+            let engine = root.join("engine");
+            std::fs::create_dir_all(&workspace).expect("workspace");
+            std::fs::create_dir_all(&engine).expect("engine");
+            Self {
+                root,
+                workspace,
+                engine,
+            }
+        }
+
+        fn request(&self, request_id: &str, scope: Value, action: Value) -> Value {
+            json!({
+                "type": "memory.execute",
+                "protocolVersion": "forge.kernel.memory.v1",
+                "requestId": request_id,
+                "engineRoot": self.engine,
+                "workspaceRoot": self.workspace,
+                "scope": scope,
+                "action": action,
+            })
+        }
+
+        fn execute(&self, request: Value) -> Result<Value, super::MemoryBridgeFailure> {
+            let frame = serde_json::to_vec(&request).expect("request");
+            let mut output = Vec::new();
+            execute(&frame, &mut output)?;
+            serde_json::from_slice(&output).map_err(|error| super::MemoryBridgeFailure {
+                request_id: None,
+                code: "test_output_invalid".to_owned(),
+                message: error.to_string(),
+            })
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn repository_scope() -> Value {
+        json!({
+            "kind": "repository",
+            "workspaceId": "workspace:fixture",
+            "repositoryId": "repository:fixture",
+        })
+    }
+
+    fn developer_scope() -> Value {
+        json!({
+            "kind": "developer",
+            "actorId": "developer:fixture",
+        })
+    }
+
+    fn state_snapshot(root: &std::path::Path) -> Vec<(String, Vec<u8>)> {
+        fn visit(
+            root: &std::path::Path,
+            directory: &std::path::Path,
+            entries: &mut Vec<(String, Vec<u8>)>,
+        ) {
+            let mut children = std::fs::read_dir(directory)
+                .expect("read state directory")
+                .map(|entry| entry.expect("state entry").path())
+                .collect::<Vec<_>>();
+            children.sort();
+            for path in children {
+                if path.is_dir() {
+                    visit(root, &path, entries);
+                } else {
+                    entries.push((
+                        path.strip_prefix(root)
+                            .expect("relative state path")
+                            .to_string_lossy()
+                            .replace('\\', "/"),
+                        std::fs::read(path).expect("read state file"),
+                    ));
+                }
+            }
+        }
+
+        let mut entries = Vec::new();
+        visit(root, root, &mut entries);
+        entries
+    }
+
+    #[test]
+    fn preview_opens_the_exact_repository_and_derived_developer_scopes() {
+        let fixture = Fixture::new();
+        fixture
+            .execute(fixture.request(
+                "memory:bridge:repository",
+                repository_scope(),
+                json!({
+                    "operation": "remember",
+                    "statement": "Rust owns context admission.",
+                    "actorId": "developer:fixture",
+                    "observedAtMillis": 100,
+                }),
+            ))
+            .expect("remember repository");
+        fixture
+            .execute(fixture.request(
+                "memory:bridge:developer",
+                developer_scope(),
+                json!({
+                    "operation": "remember_preference",
+                    "statement": "Prefer concise context previews.",
+                    "actorId": "developer:fixture",
+                    "observedAtMillis": 101,
+                }),
+            ))
+            .expect("remember preference");
+        let state_before_preview = state_snapshot(&fixture.engine);
+
+        let result = fixture
+            .execute(fixture.request(
+                "memory:bridge:preview",
+                repository_scope(),
+                json!({
+                    "operation": "preview",
+                    "actorId": "developer:fixture",
+                    "asOfMillis": 200,
+                    "budgetBytes": 65536,
+                }),
+            ))
+            .expect("preview");
+        let preview = &result["outcome"]["preview"];
+        assert_eq!(result["outcome"]["kind"], "context_preview");
+        assert_eq!(preview["candidateCount"], 2);
+        assert_eq!(preview["selected"].as_array().unwrap().len(), 2);
+        assert_eq!(preview["scopeHeads"].as_array().unwrap().len(), 2);
+        assert_eq!(preview["scopeHeads"][0]["scope"], repository_scope());
+        assert_eq!(preview["scopeHeads"][1]["scope"], developer_scope());
+        assert_eq!(preview["retrievalActive"], false);
+        assert_eq!(preview["plannerInjection"], false);
+        assert_eq!(preview["providerWorkPerformed"], false);
+        assert_eq!(state_snapshot(&fixture.engine), state_before_preview);
+    }
+
+    #[test]
+    fn preview_rejects_non_repository_scope_and_invalid_budget_before_opening_a_store() {
+        let fixture = Fixture::new();
+        let invalid_scope = fixture
+            .execute(fixture.request(
+                "memory:bridge:invalid-scope",
+                developer_scope(),
+                json!({
+                    "operation": "preview",
+                    "actorId": "developer:fixture",
+                    "asOfMillis": 200,
+                    "budgetBytes": 65536,
+                }),
+            ))
+            .unwrap_err();
+        assert_eq!(invalid_scope.code, "memory_context_scope_invalid");
+
+        let invalid_budget = fixture
+            .execute(fixture.request(
+                "memory:bridge:invalid-budget",
+                repository_scope(),
+                json!({
+                    "operation": "preview",
+                    "actorId": "developer:fixture",
+                    "asOfMillis": 200,
+                    "budgetBytes": 0,
+                }),
+            ))
+            .unwrap_err();
+        assert_eq!(invalid_budget.code, "memory_context_budget_invalid");
+        assert!(
+            std::fs::read_dir(&fixture.engine)
+                .expect("engine directory")
+                .next()
+                .is_none()
+        );
     }
 }
