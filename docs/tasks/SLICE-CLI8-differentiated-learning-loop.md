@@ -6,7 +6,8 @@ Slice 3 accepted through PR #33 implementation candidate `26f011e` and
 [Checkpoint 93](../decisions/checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md);
 Slice 4 merged through PR #34 at `9bba75e` after acceptance through
 [Checkpoint 94](../decisions/checkpoints/2026-09-02-94-cli8a-memory-slice-4-hosted-gate.md);
-Slice 5 bounded eligibility preview authorized and active
+Slice 5 candidate `0c08a06` accepted for merge through PR #35 and
+[Checkpoint 95](../decisions/checkpoints/2026-09-04-95-cli8a-memory-slice-5-hosted-gate.md)
 **Authority:**
 [ADR-0034](../decisions/ADRs/ADR-0034-commodity-sandbox-and-differentiated-learning-lane.md),
 [ADR-0038](../decisions/ADRs/ADR-0038-cli8a-memory-identity-admission-and-retention.md),
@@ -38,9 +39,11 @@ and hosted target validation pass through exact implementation candidate `e9e8cd
 Slice 3 autosave is accepted through PR #33 candidate `26f011e` after exact local,
 hosted, real PTY, and live VS Code gates. Slice 4 candidate `20b9bac` passes the
 exact local, clean-install, benchmark, and hosted privacy gates and is merged
-through PR #34 and Checkpoint 94. Slice 5 is active only as the frozen provider-free
-eligibility preview. Future-dated observations fail closed, and preview does not
-compact or change saved memory records. Retrieval and skills remain gated.
+through PR #34 and Checkpoint 94. Slice 5 candidate `0c08a06` passes exact local,
+package, benchmark, privacy, and hosted gates and is accepted for merge through PR
+#35 and Checkpoint 95. It remains only the frozen provider-free eligibility preview.
+Future-dated observations fail closed, and preview does not compact or change saved
+memory records. Retrieval and skills remain gated.
 
 Current local evidence:
 
@@ -89,6 +92,14 @@ Current local evidence:
   declared Windows x64, macOS ARM64/x64, and Ubuntu x64 job. Checkpoint 94 accepts
   this boundary, which merged through PR #34 at `9bba75e`. The reviewer separately
   authorized the bounded Slice 5 eligibility preview on 2026-09-02.
+- Slice 5 candidate `0c08a06` adds the Rust-authoritative, exact repository and
+  developer-scope eligibility preview. Local gates pass 205 Rust tests (16 explicit
+  ignores), 173 Node tests, 62/69 hybrid scenarios (seven explicit skips), RustSec,
+  clean-install package lifecycle, native packing, and the 20-sample benchmark.
+  Hosted runs `33925597815` and `33925597769` pass all declared Windows x64, macOS
+  ARM64/x64, and Ubuntu x64 jobs. Independent review removed a hidden-recovery
+  ledger fingerprint and added direct invariance and first-fit regressions before
+  Checkpoint 95 accepted the candidate for merge through PR #35.
 
 ## Boundary
 
@@ -168,9 +179,10 @@ Current package status:
 - [x] authorized Slice 3 accepted through PR #33 and Checkpoint 93;
 - [x] authorized Slice 4 forget/restore/purge/history-clear accepted and merged
       through PR #34 / Checkpoint 94;
-- [ ] authorized Slice 5 bounded eligibility preview and complete CLI8A acceptance;
+- [x] authorized Slice 5 bounded eligibility preview accepted for merge through PR
+      #35 / Checkpoint 95;
 - [x] exact-candidate local MSVC and separate VS Code product-lifecycle gate;
-- [x] exact-candidate hosted acceptance through PRs #32–34 and Checkpoints 92–94.
+- [x] exact-candidate hosted acceptance through PRs #32–35 and Checkpoints 92–95.
 
 The stale-base candidate `b5effea` may be used as a reference for bounded limits,
 append/rebuild mechanics, and adversarial tests. It must not be cherry-picked or

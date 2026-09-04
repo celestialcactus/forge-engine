@@ -12,9 +12,9 @@ slice by slice from the contracts in `docs/architecture/`.
 
 The current implementation provides; acceptance status is recorded by the linked checkpoints:
 
-PR #34 merge `9bba75e` is the accepted Slice 4 baseline. `memory preview` is the
-active, unaccepted Slice 5 candidate until its exact local, package, hosted, and
-merge gates complete.
+PR #34 merge `9bba75e` is the accepted Slice 4 baseline. Slice 5 implementation
+candidate `0c08a06` and PR #35 are accepted for merge by Checkpoint 95 after exact
+local, package, privacy, and hosted gates. Merge remains pending.
 
 - a Rust-owned run, approval, event, artifact, transaction, and recovery authority;
 - a bridge-v10 Rust outer-run ledger accepted through the private hosted regression:

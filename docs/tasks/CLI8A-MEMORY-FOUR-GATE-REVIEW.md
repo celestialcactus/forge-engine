@@ -6,8 +6,8 @@ Slice 3 accepted through PR #33 implementation candidate `26f011e` and
 [Checkpoint 93](../decisions/checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md);
 Slice 4 merged through PR #34 at `9bba75e` after candidate `20b9bac` was accepted by
 [Checkpoint 94](../decisions/checkpoints/2026-09-02-94-cli8a-memory-slice-4-hosted-gate.md);
-Slice 5 bounded eligibility-preview contract approved for implementation on
-2026-09-02
+Slice 5 candidate `0c08a06` accepted for merge through PR #35 and
+[Checkpoint 95](../decisions/checkpoints/2026-09-04-95-cli8a-memory-slice-5-hosted-gate.md)
 **Date:** 2026-08-29
 **Delivery path:** full
 **Active task:** [Slice CLI8](SLICE-CLI8-differentiated-learning-loop.md)
@@ -17,7 +17,7 @@ Slice 5 bounded eligibility-preview contract approved for implementation on
 
 This packet presented Product, Architecture, Program Design, and Vertical Slices
 together for review. The approval ledger below is now authoritative: Slice 0 and
-implementation Slices 1–5 are authorized. Slice 5 remains an inactive preview: it
+implementation Slices 1–5 are accepted for merge. Slice 5 remains an inactive preview: it
 does not authorize planner/provider retrieval or memory insertion into their prompt
 context. This is not a claim of general prompt-injection resistance.
 
@@ -798,9 +798,10 @@ independent old-kernel forward compatibility. Stable new errors are
 `memory_context_scope_invalid`, `memory_context_scope_duplicate`,
 `memory_context_entry_mismatch`, and `memory_context_encoding_failed`.
 
-Run the complete local and hosted matrix, update the checkpoint/build plan/current
-index, and retain the no-retrieval/no-skill claims. CLI8B begins only after this
-exact candidate is accepted.
+The complete local and hosted matrix passed on exact implementation candidate
+`0c08a06`; Checkpoint 95 records the accepted evidence and the correction that
+removed hidden-ledger fingerprints. Retain the no-retrieval/no-skill claims. CLI8B
+still requires separate authorization and evaluation after PR #35 merges.
 
 ### Parallelization graph
 
@@ -822,13 +823,13 @@ Slice 2 recovery     Slice 3 autosave
         Slice 5 preview + hosted gate
 ```
 
-The authorized packet is **Slice 0 through Slice 5**. Slices 0–4 have
-accepted-for-merge implementation evidence through Checkpoints 92–94. Slice 0 is
+The authorized packet is **Slice 0 through Slice 5**. Slices 0–5 have
+accepted-for-merge implementation evidence through Checkpoints 92–95. Slice 0 is
 the required contract freeze, Slice 1 proves the tracer seam, Slice 2 proves
 recovery, and Slice 3 proves standing-grant autosave plus undo. Slice 4 proves the
-privacy lifecycle.
-Slice 5 is authorized only at the frozen eligibility-preview boundary above and
-must pass its own exact local, package, hosted, and CLI8A acceptance gate.
+privacy lifecycle. Slice 5 proves the frozen eligibility-preview boundary above;
+candidate `0c08a06` passed its exact local, package, hosted, and CLI8A acceptance
+gate. PR #35 merge remains pending.
 
 ## Decisions requested from the reviewer
 
@@ -849,5 +850,5 @@ Approval of this packet means all of the following:
 The reviewer approved decisions 1–8 on 2026-08-29 for Slice 0–2, explicitly
 approved Slice 3 on 2026-08-31, explicitly authorized Slice 4 on 2026-09-02, and
 approved the bounded Slice 5 eligibility-preview amendment on 2026-09-02. PR #34
-merged the accepted Slice 4 candidate through baseline `9bba75e`. CLI8B/C remain
-gated.
+merged the accepted Slice 4 candidate through baseline `9bba75e`; candidate
+`0c08a06` and PR #35 are accepted for merge by Checkpoint 95. CLI8B/C remain gated.

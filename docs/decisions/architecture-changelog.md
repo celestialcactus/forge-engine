@@ -1,3 +1,21 @@
+# 2026-09-04 - CLI8A Slice 5 eligibility preview accepted for merge
+
+- Candidate `0c08a0600696f95122126e0e329664b7515e49a1` and PR #35 pass the exact
+  local, RustSec, clean-install package, native archive, benchmark, and hosted
+  Windows x64, macOS ARM64/x64, and Ubuntu x64 gates.
+- [Checkpoint 95](checkpoints/2026-09-04-95-cli8a-memory-slice-5-hosted-gate.md)
+  accepts the bounded provider-free preview for merge. PR #35 remains unmerged.
+- Independent review found that initial candidate `882e00c` exposed a ledger-head
+  fingerprint derived from hidden recovery history. Final candidate `0c08a06`
+  removes it from output and identity, rejects reintroduction in TypeScript, and
+  proves hidden-recovery invariance plus first-fit admission in focused regressions.
+- Runtime retrieval, task ranking, planner/provider prompt insertion, provider and
+  network work, CLI8B evaluation, CLI8C skills, and terminal observable-activity
+  work remain separate and inactive.
+- The current npm advisory feed reports inherited transitive `fast-uri` and `qs`
+  findings through the unchanged MCP SDK dependency graph. They were not introduced
+  by PR #35 and remain an explicit dependency/public-release risk.
+
 # 2026-09-02 - CLI8A Slice 4 merges and bounded Slice 5 preview is authorized
 
 - PR #34 merged the Checkpoint 94 Slice 4 privacy lifecycle into `develop` at

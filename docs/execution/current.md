@@ -1,9 +1,10 @@
 # ForgeEngine current execution index
 
 **Status:** operational ground truth for active ForgeEngine delivery
-**As of:** 2026-09-02
+**As of:** 2026-09-04
 **Accepted implementation baseline:** PR #34 merge `9bba75e` (Slice 4 candidate
 `20b9bac`)
+**Accepted-for-merge candidate:** PR #35 head `0c08a06` (Slice 5); merge pending
 **Documentation baseline:** the commit containing this file
 
 This file answers what is active now. The
@@ -20,8 +21,8 @@ must be explicitly approved before implementation. Small local changes use the
 documented proportional fast or compact path. Existing CLI8A Package 1 predates
 this policy; the combined CLI8A packet is the first full-path application and now
 authorizes prerequisite Slice 0 plus implementation Slices 1–5. Slice 4 is merged
-through PR #34 and Checkpoint 94; the bounded Slice 5 eligibility preview was
-authorized on 2026-09-02.
+through PR #34 and Checkpoint 94; bounded Slice 5 candidate `0c08a06` passed its
+exact local and hosted gates and is accepted for merge by Checkpoint 95.
 
 ## Document authority
 
@@ -64,8 +65,9 @@ planner/provider retrieval. Slice 4 candidate `20b9bac` and
 [Checkpoint 94](../decisions/checkpoints/2026-09-02-94-cli8a-memory-slice-4-hosted-gate.md)
 now pass the exact local, package, benchmark, and hosted privacy gates for
 recoverable forget/restore, selected-lineage purge, and recovery-history clear.
-PR #34 merged this capability into baseline `9bba75e`. Slice 5 is now active only
-as a deterministic eligibility preview: it cannot rank task relevance, insert
+PR #34 merged this capability into baseline `9bba75e`. Slice 5 candidate `0c08a06`
+is accepted for merge through PR #35 and Checkpoint 95 as a deterministic
+eligibility preview: it cannot rank task relevance, insert
 memory into planner/provider prompt context, or invoke a planner, provider, or
 network. This is not a claim of general prompt-injection resistance. Public
 distribution still requires contributor-rights attestation and artifact
@@ -78,14 +80,14 @@ claims permitted at each delivery stage.
 
 ## Active lanes
 
-| Lane | Canonical ID | State on 2026-09-02 | Authority and next gate |
+| Lane | Canonical ID | State on 2026-09-04 | Authority and next gate |
 | --- | --- | --- | --- |
 | Documentation reconciliation | `DOC-GROUND-TRUTH` | Accepted at `5fff597` through PR #25 | Preserve Checkpoint 88 and the execution/release-profile authority during every lane replay. |
 | Authority and contract clarification | `ARCH-AUTHORITY` | Accepted through PR #26 (`70a3288`) | Preserve the repository guard, Apache-2.0 alignment, target/config/protocol decisions, memory primer, and system map. |
 | Trusted-alpha release | `CLI7-ALPHA` | Private distribution/onboarding foundation accepted through PR #27 (`6cc90c1`) and Checkpoint 90; PR #28 (`2882550`) corrects reported blockers | Preserve the accepted private tester boundary. Rights attestation and artifact signing/provenance remain separate public-distribution gates; no public artifact has shipped. |
 | Effective configuration | `CLI7-ALPHA-CONFIG` | Accepted through PR #31 candidate `e7ba284` and Checkpoint 91 | Preserve the fixed files, immutable compiler, source attribution, secret-safe projection, atomic route, monotonic ceilings, and no-fallback behavior. Do not add an organization provider-policy subsystem. |
 | Sandbox provider lifecycle | `SBX-PROVIDER-LIFECYCLE` | Independent and unaccepted for production; local managed-Windows/AppContainer conformance exists | Complete disposable-Windows-VM install/upgrade/uninstall/reboot/residue plus macOS/adversarial evidence. Do not advertise `restrictedReady` or promote a provider until the exact gate passes. |
-| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Slices 0–4 accepted through PRs #32–34 / Checkpoints 92–94; Slice 5 eligibility preview active on `codex/cli8a-memory-context-preview` | Implement and prove the frozen exact-scope, Rust-authoritative, provider-free preview. Preserve inactive retrieval; CLI8B/C remain gated. |
+| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Slices 0–5 accepted for merge through PRs #32–35 / Checkpoints 92–95; PR #35 merge pending | Merge the frozen exact-scope, Rust-authoritative, provider-free preview without widening it. Preserve inactive retrieval; CLI8B/C remain gated. |
 
 The stale-base CLI7 candidate was successfully replayed without importing its old
 ancestry. The stale CLI8A candidate `b5effea` remains reference material only. The
@@ -113,7 +115,9 @@ merged baseline is the ADR-0038/0039-conformant PR #32–34 lineage at `9bba75e`
    2026-09-02 against the existing four-gate packet. Candidate `20b9bac` and
    Checkpoint 94 accepted its exact local and hosted privacy evidence, and PR #34
    merged it at `9bba75e`. The reviewer explicitly authorized the bounded Slice 5
-   eligibility preview on 2026-09-02. Runtime retrieval remains gated by CLI8B.
+   eligibility preview on 2026-09-02; candidate `0c08a06` passed exact local and
+   hosted gates and is accepted for merge through PR #35 and Checkpoint 95. Runtime
+   retrieval remains gated by CLI8B.
 5. Merge `SBX-PROVIDER-LIFECYCLE` only after its independent VM/provider gate; its
    timing does not redefine the trusted-alpha claim.
 
@@ -136,8 +140,8 @@ rebased and reconciled before merge rather than resolved by taking an entire sid
 
 ## Next three gates
 
-1. Complete Slice 5 at the frozen eligibility-preview boundary and require its
-   exact local, package, hosted, privacy, and no-provider evidence.
+1. Merge PR #35 at the frozen Slice 5 eligibility-preview boundary without
+   widening the Checkpoint 95 claims.
 2. Complete the separate four-gate review for the terminal observable-activity
    stream before implementing it on its own branch; integrate shared CLI/docs only
    after both exclusive packages are stable.
