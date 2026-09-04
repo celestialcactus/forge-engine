@@ -12,6 +12,10 @@ slice by slice from the contracts in `docs/architecture/`.
 
 The current implementation provides; acceptance status is recorded by the linked checkpoints:
 
+PR #34 merge `9bba75e` is the accepted Slice 4 baseline. `memory preview` is the
+active, unaccepted Slice 5 candidate until its exact local, package, hosted, and
+merge gates complete.
+
 - a Rust-owned run, approval, event, artifact, transaction, and recovery authority;
 - a bridge-v10 Rust outer-run ledger accepted through the private hosted regression:
   request-before-run,
@@ -31,7 +35,7 @@ The current implementation provides; acceptance status is recorded by the linked
   boundary supplied by another host;
 - attributable repository decisions and developer preferences through `forge memory
   remember`, `find`, `show`, `explain`, `correct`, `forget`, `history`, `restore`,
-  `purge`, `autosave`, and `status`, with Rust-authoritative identity, provenance,
+  `purge`, `autosave`, `preview`, and `status`, with Rust-authoritative identity, provenance,
   standing grants, correction, bounded recovery, and erasure rewrite. Forget is
   reversible through bounded history; purge removes the selected lineage from Forge
   memory, and `memory history clear` removes recovery while retaining active memory.
@@ -39,8 +43,13 @@ The current implementation provides; acceptance status is recorded by the linked
   backups, or media. Autosave defaults to `ask`;
   only a local `forge memory autosave off|ask|auto` action can change it for the
   current repository. A narrow safe preference grammar can save without pausing in
-  `auto`, with `/memory explain` and immediate `/memory undo`. Memory is still not
-  retrieved or injected into a run.
+  `auto`, with `/memory explain` and immediate `/memory undo`. `forge memory
+  preview` shows the exact repository-plus-developer records eligible under the
+  baseline freshness policy, their deterministic byte budget, and omission reasons
+  without contacting a provider, compacting recovery, or changing saved memories.
+  Forge still does not insert memory into planner or provider prompt context. This
+  is an architectural non-activation statement, not a claim of general
+  prompt-injection resistance.
 
 The public CLI and MCP server require the Rust kernel. A source checkout discovers
 `target/release/forge-kernel` and then `target/debug/forge-kernel`; an exact

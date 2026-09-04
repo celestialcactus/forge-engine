@@ -8,16 +8,18 @@ import {
 } from '../src/memory/commands.js';
 import type {
   MemoryCorrectionDisposition,
+  MemoryContextPreview,
   MemoryInspection,
   MemoryObservation,
   MemoryOperationResult,
-  MemoryRuntime,
+  MemoryPreviewRuntime,
   ProjectedMemory,
   RecoveryMemory,
   RepositoryMemoryScope,
 } from '../src/memory/contracts.js';
 import {
   memoryPrivacyBoundary,
+  renderMemoryContextPreview,
   renderMemoryExplanation,
   renderMemoryPrivacyOperation,
 } from '../src/memory/presentation.js';
@@ -62,7 +64,7 @@ const recovered = (suffix: string, statement: string): RecoveryMemory => ({
   replacementObservationId: `memory_observation:v1:sha256:${'f'.repeat(64)}`,
 });
 
-class FakeRuntime implements MemoryRuntime {
+class FakeRuntime implements MemoryPreviewRuntime {
   active: ProjectedMemory[] = [
     projected('a', 'Rust owns lifecycle authority.'),
     projected('b', 'TypeScript orchestrates the memory UX.'),
@@ -77,6 +79,7 @@ class FakeRuntime implements MemoryRuntime {
   forgotten?: string;
   purged?: string;
   historyCleared = false;
+  previewBudget?: number;
 
   async remember(statement: string): Promise<MemoryOperationResult> {
     return this.result('admitted', observation('d', statement));
@@ -91,6 +94,40 @@ class FakeRuntime implements MemoryRuntime {
       ...(includeRecovery ? { recovery: this.recovery } : {}),
       activeCount: this.active.length,
       recoveryCount: this.recovery.length,
+    };
+  }
+
+  async preview(budgetBytes = 65_536): Promise<MemoryContextPreview> {
+    this.previewBudget = budgetBytes;
+    return {
+      schemaVersion: 1,
+      previewId: `memory_context_preview:v1:sha256:${'9'.repeat(64)}`,
+      asOfMillis: 300,
+      budgetBytes,
+      selectedBytes: 32,
+      candidateCount: 2,
+      selected: [{
+        entry: this.active[0]!,
+        contextBytes: 32,
+        reason: 'active_fresh_exact_scope',
+      }],
+      omitted: [{
+        observationId: this.active[1]!.observation.observationId,
+        scopeKind: 'repository',
+        statementPreview: this.active[1]!.observation.statement,
+        contextBytes: 39,
+        reason: 'budget_exceeded',
+      }],
+      scopeHeads: [{
+        scope,
+        activeCount: 2,
+        recoveryCount: 1,
+      }],
+      forgottenExcludedCount: 0,
+      supersededRecoveryExcludedCount: 1,
+      retrievalActive: false,
+      plannerInjection: false,
+      providerWorkPerformed: false,
     };
   }
 
@@ -181,6 +218,22 @@ test('command orchestration resolves exact targets before correction and restore
   assert.equal(runtime.restored, runtime.recovery[0]!.observation.observationId);
 });
 
+test('context preview uses a bounded default without a query or ranking step', async () => {
+  const runtime = new FakeRuntime();
+  const commands = new MemoryCommands(runtime);
+  const preview = await commands.preview();
+  assert.equal(runtime.previewBudget, 65_536);
+  assert.equal(preview.retrievalActive, false);
+  assert.equal(preview.plannerInjection, false);
+  assert.equal(preview.providerWorkPerformed, false);
+
+  await commands.preview(262_144);
+  assert.equal(runtime.previewBudget, 262_144);
+  assert.throws(() => commands.preview(0), /integer from 1 to 262144/u);
+  assert.throws(() => commands.preview(262_145), /integer from 1 to 262144/u);
+  assert.throws(() => commands.preview(1.5), /integer from 1 to 262144/u);
+});
+
 test('privacy orchestration resolves natural selectors and authorizes before irreversible mutation', async () => {
   const runtime = new FakeRuntime();
   const commands = new MemoryCommands(runtime);
@@ -243,4 +296,34 @@ test('memory explanation exposes provenance and the no-retrieval boundary', () =
   assert.ok(lines.some((line) => line.includes('developer statement')));
   assert.ok(lines.some((line) => line.includes('not injected into a planner or provider')));
   assert.ok(lines.every((line) => !line.includes('undefined')));
+});
+
+test('context preview presentation is friendly, model-inactive, and hides internal IDs', async () => {
+  const preview = await new FakeRuntime().preview();
+  const longMultiline = `First line\nsecond line \u009B\u202E${'x'.repeat(8 * 1024 - 31)}`;
+  const lines = renderMemoryContextPreview({
+    ...preview,
+    selected: [{
+      ...preview.selected[0]!,
+      entry: {
+        ...preview.selected[0]!.entry,
+        observation: {
+          ...preview.selected[0]!.entry.observation,
+          statement: longMultiline,
+        },
+      },
+    }],
+  });
+  const output = lines.join('\n');
+  assert.match(output, /nothing was sent to a model/u);
+  assert.match(output, /active, fresh, and belongs to this repository or your local preferences/u);
+  assert.match(output, /outside this preview’s byte budget/u);
+  assert.match(output, /did not change saved memories or insert them into planner or provider context/u);
+  assert.match(output, /use --json for exact selected content/u);
+  assert.match(output, /First line second line �+x/u);
+  assert.ok(lines.every((line) => !line.includes('\u202E')));
+  assert.ok(lines.every((line) => !line.includes('\u009B')));
+  assert.ok(lines.every((line) => Buffer.byteLength(line, 'utf8') < 300));
+  assert.match(output, /internal IDs are not required/u);
+  assert.doesNotMatch(output, /memory_(?:observation|context_preview):/u);
 });

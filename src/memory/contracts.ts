@@ -68,6 +68,58 @@ export interface MemoryInspection {
   readonly grants?: readonly MemoryStandingGrant[];
 }
 
+export const defaultMemoryContextPreviewBudgetBytes = 65_536;
+export const maximumMemoryContextPreviewBudgetBytes = 262_144;
+
+export type MemoryContextPreviewSelectionReason = 'active_fresh_exact_scope';
+
+export type MemoryContextPreviewOmissionReason =
+  | 'observation_not_yet_effective'
+  | 'declared_contradiction'
+  | 'inferred_hypothesis'
+  | 'source_not_eligible'
+  | 'explicit_validity_expired'
+  | 'evidence_currentness_unavailable'
+  | 'run_context_unavailable'
+  | 'budget_exceeded';
+
+export interface MemoryContextPreviewSelection {
+  readonly entry: ProjectedMemory;
+  readonly contextBytes: number;
+  readonly reason: MemoryContextPreviewSelectionReason;
+}
+
+export interface MemoryContextPreviewOmission {
+  readonly observationId: string;
+  readonly scopeKind: MemoryScope['kind'];
+  readonly statementPreview: string;
+  readonly contextBytes: number;
+  readonly reason: MemoryContextPreviewOmissionReason;
+}
+
+export interface MemoryContextPreviewScopeHead {
+  readonly scope: MemoryScope;
+  readonly activeCount: number;
+  readonly recoveryCount: number;
+}
+
+export interface MemoryContextPreview {
+  readonly schemaVersion: 1;
+  readonly previewId: string;
+  readonly asOfMillis: number;
+  readonly budgetBytes: number;
+  readonly selectedBytes: number;
+  readonly candidateCount: number;
+  readonly selected: readonly MemoryContextPreviewSelection[];
+  readonly omitted: readonly MemoryContextPreviewOmission[];
+  readonly scopeHeads: readonly MemoryContextPreviewScopeHead[];
+  readonly forgottenExcludedCount: number;
+  readonly supersededRecoveryExcludedCount: number;
+  readonly retrievalActive: false;
+  readonly plannerInjection: false;
+  readonly providerWorkPerformed: false;
+}
+
 export type MemoryOperationStatus = 'admitted' | 'corrected' | 'restored' | 'unchanged'
   | 'forgotten' | 'purged' | 'recovery_history_cleared'
   | 'capture_mode_changed' | 'grant_revoked' | 'auto_capture_undone';
@@ -103,7 +155,8 @@ export type MemoryCorrectionDisposition = 'keep_bounded' | 'erase_previous';
 
 export type MemoryRuntimeOutcome =
   | { readonly kind: 'operation'; readonly result: MemoryOperationResult }
-  | { readonly kind: 'inspection'; readonly inspection: MemoryInspection };
+  | { readonly kind: 'inspection'; readonly inspection: MemoryInspection }
+  | { readonly kind: 'context_preview'; readonly preview: MemoryContextPreview };
 
 export interface MemoryRuntime {
   remember(statement: string, observedAtMillis?: number): Promise<MemoryOperationResult>;
@@ -118,6 +171,10 @@ export interface MemoryRuntime {
   forget(targetObservationId: string, occurredAtMillis?: number): Promise<MemoryOperationResult>;
   purge(targetObservationId: string, purgedAtMillis?: number): Promise<MemoryOperationResult>;
   clearRecoveryHistory(clearedAtMillis?: number): Promise<MemoryOperationResult>;
+}
+
+export interface MemoryPreviewRuntime extends MemoryRuntime {
+  preview(budgetBytes?: number, asOfMillis?: number): Promise<MemoryContextPreview>;
 }
 
 export interface MemoryCaptureRuntime extends MemoryRuntime {

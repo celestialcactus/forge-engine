@@ -1,13 +1,19 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import type {
   MemoryCaptureMode,
   MemoryCaptureRuntime,
   MemoryCorrectionDisposition,
+  MemoryContextPreview,
+  MemoryContextPreviewOmission,
+  MemoryContextPreviewOmissionReason,
+  MemoryContextPreviewScopeHead,
+  MemoryContextPreviewSelection,
   MemoryGrantScope,
   MemoryInspection,
   MemoryObservation,
   MemoryOperationResult,
+  MemoryPreviewRuntime,
   MemoryNonContentReceipt,
   MemoryRuntimeOutcome,
   MemoryScope,
@@ -15,7 +21,11 @@ import type {
   ProjectedMemory,
   RecoveryMemory,
 } from './contracts.js';
-import { rustMemoryProtocolVersion } from './contracts.js';
+import {
+  defaultMemoryContextPreviewBudgetBytes,
+  maximumMemoryContextPreviewBudgetBytes,
+  rustMemoryProtocolVersion,
+} from './contracts.js';
 
 export interface RustMemoryRuntimeOptions {
   readonly kernelPath: string;
@@ -36,11 +46,35 @@ const digestPattern = /^[a-f0-9]{64}$/u;
 const claimIdPattern = /^memory_claim:v1:sha256:[a-f0-9]{64}$/u;
 const observationIdPattern = /^memory_observation:v1:sha256:[a-f0-9]{64}$/u;
 const grantIdPattern = /^memory_grant:v1:sha256:[a-f0-9]{64}$/u;
+const contextPreviewIdPattern = /^memory_context_preview:v1:sha256:[a-f0-9]{64}$/u;
+const contextPreviewOmissionReasons = new Set<MemoryContextPreviewOmissionReason>([
+  'observation_not_yet_effective',
+  'declared_contradiction',
+  'inferred_hypothesis',
+  'source_not_eligible',
+  'explicit_validity_expired',
+  'evidence_currentness_unavailable',
+  'run_context_unavailable',
+  'budget_exceeded',
+]);
+
+const containsForbiddenMemoryControl = (value: string): boolean =>
+  [...value].some((character) => character !== '\n' && /\p{Cc}/u.test(character));
 
 const object = (value: unknown): JsonObject | undefined =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
     ? value as JsonObject
     : undefined;
+
+const canonicalJson = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  const record = value as Readonly<Record<string, unknown>>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(',')}}`;
+};
 
 const sameScope = (candidate: unknown, expected: MemoryScope): candidate is MemoryScope => {
   const value = object(candidate);
@@ -51,6 +85,13 @@ const sameScope = (candidate: unknown, expected: MemoryScope): candidate is Memo
   }
   return value?.kind === 'developer' && value.actorId === expected.actorId;
 };
+
+const allowedPreviewScope = (
+  candidate: unknown,
+  requestedScope: MemoryScope,
+  actorId: string,
+): candidate is MemoryScope => sameScope(candidate, requestedScope)
+  || sameScope(candidate, { kind: 'developer', actorId });
 
 const validGrantScope = (candidate: unknown): candidate is MemoryGrantScope => {
   const value = object(candidate);
@@ -95,9 +136,11 @@ const validateObservation = (
     || typeof value.subject !== 'string'
     || value.subject.length === 0
     || Buffer.byteLength(value.subject, 'utf8') > 8 * 1024
+    || containsForbiddenMemoryControl(value.subject)
     || typeof value.statement !== 'string'
     || value.statement.length === 0
     || Buffer.byteLength(value.statement, 'utf8') > 8 * 1024
+    || containsForbiddenMemoryControl(value.statement)
     || !sameScope(value.scope, expectedScope)
     || object(value.provenance) === undefined
     || !Number.isSafeInteger(value.confidence)
@@ -197,6 +240,148 @@ const validateInspection = (
   return candidate as MemoryInspection;
 };
 
+const validatePreviewScopeHead = (
+  candidate: unknown,
+  requestedScope: MemoryScope,
+  actorId: string,
+): MemoryContextPreviewScopeHead => {
+  const value = object(candidate);
+  if (Object.keys(value ?? {}).length !== 3
+    || !allowedPreviewScope(value?.scope, requestedScope, actorId)
+    || !Number.isSafeInteger(value.activeCount)
+    || Number(value.activeCount) < 0
+    || !Number.isSafeInteger(value.recoveryCount)
+    || Number(value.recoveryCount) < 0
+  ) throw new Error('Rust kernel returned an invalid memory preview scope head.');
+  return candidate as MemoryContextPreviewScopeHead;
+};
+
+const validatePreviewSelection = (
+  candidate: unknown,
+  scopeHeads: readonly MemoryContextPreviewScopeHead[],
+): MemoryContextPreviewSelection => {
+  const value = object(candidate);
+  if (value?.reason !== 'active_fresh_exact_scope'
+    || !Number.isSafeInteger(value.contextBytes)
+    || Number(value.contextBytes) < 1
+  ) throw new Error('Rust kernel returned an invalid selected memory preview entry.');
+  const entry = object(value.entry);
+  const entryScope = object(object(entry?.observation)?.scope);
+  const head = scopeHeads.find((candidateHead) => sameScope(entryScope, candidateHead.scope));
+  if (head === undefined) throw new Error('Rust kernel selected memory outside its preview scope heads.');
+  validateProjected(value.entry, head.scope);
+  if (Number(value.contextBytes) !== Buffer.byteLength(JSON.stringify(value.entry), 'utf8')) {
+    throw new Error('Rust kernel returned a selected memory preview entry with invalid byte accounting.');
+  }
+  return candidate as MemoryContextPreviewSelection;
+};
+
+const validatePreviewOmission = (
+  candidate: unknown,
+  scopeHeads: readonly MemoryContextPreviewScopeHead[],
+): MemoryContextPreviewOmission => {
+  const value = object(candidate);
+  if (typeof value?.observationId !== 'string'
+    || !observationIdPattern.test(value.observationId)
+    || !['repository', 'developer'].includes(String(value.scopeKind))
+    || !scopeHeads.some((head) => head.scope.kind === value.scopeKind)
+    || typeof value.statementPreview !== 'string'
+    || value.statementPreview.length === 0
+    || Buffer.byteLength(value.statementPreview, 'utf8') > 120
+    || value.statementPreview.includes('\n')
+    || containsForbiddenMemoryControl(value.statementPreview)
+    || !Number.isSafeInteger(value.contextBytes)
+    || Number(value.contextBytes) < 1
+    || !contextPreviewOmissionReasons.has(value.reason as MemoryContextPreviewOmissionReason)
+  ) throw new Error('Rust kernel returned an invalid omitted memory preview entry.');
+  return candidate as MemoryContextPreviewOmission;
+};
+
+const validateContextPreview = (
+  candidate: unknown,
+  requestedScope: MemoryScope,
+  actorId: string,
+  expectedAsOfMillis: number,
+  expectedBudgetBytes: number,
+): MemoryContextPreview => {
+  const value = object(candidate);
+  if (value?.schemaVersion !== 1
+    || typeof value.previewId !== 'string'
+    || !contextPreviewIdPattern.test(value.previewId)
+    || !Number.isSafeInteger(value.asOfMillis)
+    || Number(value.asOfMillis) < 0
+    || Number(value.asOfMillis) !== expectedAsOfMillis
+    || !Number.isSafeInteger(value.budgetBytes)
+    || Number(value.budgetBytes) < 1
+    || Number(value.budgetBytes) > maximumMemoryContextPreviewBudgetBytes
+    || Number(value.budgetBytes) !== expectedBudgetBytes
+    || !Number.isSafeInteger(value.selectedBytes)
+    || Number(value.selectedBytes) < 0
+    || Number(value.selectedBytes) > Number(value.budgetBytes)
+    || !Number.isSafeInteger(value.candidateCount)
+    || Number(value.candidateCount) < 0
+    || !Array.isArray(value.selected)
+    || !Array.isArray(value.omitted)
+    || !Array.isArray(value.scopeHeads)
+    || value.scopeHeads.length !== 2
+    || !Number.isSafeInteger(value.forgottenExcludedCount)
+    || Number(value.forgottenExcludedCount) < 0
+    || !Number.isSafeInteger(value.supersededRecoveryExcludedCount)
+    || Number(value.supersededRecoveryExcludedCount) < 0
+    || value.retrievalActive !== false
+    || value.plannerInjection !== false
+    || value.providerWorkPerformed !== false
+  ) throw new Error('Rust kernel returned an invalid memory context preview.');
+
+  const scopeHeads = value.scopeHeads.map((head) =>
+    validatePreviewScopeHead(head, requestedScope, actorId));
+  const scopeKeys = new Set(scopeHeads.map((head) => JSON.stringify(head.scope)));
+  if (requestedScope.kind !== 'repository'
+    || scopeKeys.size !== scopeHeads.length
+    || scopeHeads.filter((head) => sameScope(head.scope, requestedScope)).length !== 1
+    || scopeHeads.filter((head) => sameScope(head.scope, { kind: 'developer', actorId })).length !== 1) {
+    throw new Error('Rust kernel returned duplicate or incomplete memory preview scope heads.');
+  }
+  const selected = value.selected.map((entry) => validatePreviewSelection(entry, scopeHeads));
+  const omitted = value.omitted.map((entry) => validatePreviewOmission(entry, scopeHeads));
+  const observationIds = [
+    ...selected.map((entry) => entry.entry.observation.observationId),
+    ...omitted.map((entry) => entry.observationId),
+  ];
+  const selectedBytes = selected.reduce((sum, entry) => sum + entry.contextBytes, 0);
+  const activeCount = scopeHeads.reduce((sum, head) => sum + head.activeCount, 0);
+  const recoveryCount = scopeHeads.reduce((sum, head) => sum + head.recoveryCount, 0);
+  if (new Set(observationIds).size !== observationIds.length
+    || Number(value.selectedBytes) !== selectedBytes
+    || Number(value.candidateCount) !== selected.length + omitted.length
+    || Number(value.candidateCount) !== activeCount
+    || Number(value.forgottenExcludedCount) + Number(value.supersededRecoveryExcludedCount) !== recoveryCount) {
+    throw new Error('Rust kernel returned internally inconsistent memory context preview counts.');
+  }
+  const identityMaterial = {
+    schemaVersion: 1,
+    asOfMillis: value.asOfMillis,
+    budgetBytes: value.budgetBytes,
+    selectedBytes: value.selectedBytes,
+    candidateCount: value.candidateCount,
+    selected,
+    omitted,
+    scopeHeads,
+    forgottenExcludedCount: value.forgottenExcludedCount,
+    supersededRecoveryExcludedCount: value.supersededRecoveryExcludedCount,
+    retrievalActive: false,
+    plannerInjection: false,
+    providerWorkPerformed: false,
+  };
+  const expectedPreviewId = `memory_context_preview:v1:sha256:${createHash('sha256')
+    .update(canonicalJson(identityMaterial), 'utf8')
+    .digest('hex')}`;
+  if (value.previewId !== expectedPreviewId) {
+    throw new Error('Rust kernel returned a memory context preview with an invalid identity digest.');
+  }
+  return candidate as MemoryContextPreview;
+};
+
 const validateOperation = (
   candidate: unknown,
   expectedScope: MemoryScope,
@@ -238,7 +423,7 @@ export class MemoryRuntimeError extends Error {
   }
 }
 
-export class RustMemoryRuntime implements MemoryCaptureRuntime {
+export class RustMemoryRuntime implements MemoryCaptureRuntime, MemoryPreviewRuntime {
   readonly #options: RustMemoryRuntimeOptions;
 
   constructor(options: RustMemoryRuntimeOptions) {
@@ -262,6 +447,23 @@ export class RustMemoryRuntime implements MemoryCaptureRuntime {
     return this.#execute({ operation: 'inspect', includeRecovery, asOfMillis: this.#now() }).then((outcome) => {
       if (outcome.kind !== 'inspection') throw new Error('Rust kernel returned an operation for memory inspection.');
       return outcome.inspection;
+    });
+  }
+
+  preview(
+    budgetBytes = defaultMemoryContextPreviewBudgetBytes,
+    asOfMillis = this.#now(),
+  ): Promise<MemoryContextPreview> {
+    return this.#execute({
+      operation: 'preview',
+      actorId: this.#options.actorId,
+      asOfMillis,
+      budgetBytes,
+    }).then((outcome) => {
+      if (outcome.kind !== 'context_preview') {
+        throw new Error('Rust kernel returned a non-preview outcome for memory context preview.');
+      }
+      return outcome.preview;
     });
   }
 
@@ -462,6 +664,24 @@ export class RustMemoryRuntime implements MemoryCaptureRuntime {
             finish(undefined, {
               kind: 'operation',
               result: validateOperation(outcome.result, this.#options.scope),
+            });
+            return;
+          }
+          if (outcome?.kind === 'context_preview') {
+            if (action.operation !== 'preview'
+              || !Number.isSafeInteger(action.asOfMillis)
+              || !Number.isSafeInteger(action.budgetBytes)) {
+              throw new Error('memory context preview result does not match its request action');
+            }
+            finish(undefined, {
+              kind: 'context_preview',
+              preview: validateContextPreview(
+                outcome.preview,
+                this.#options.scope,
+                this.#options.actorId,
+                Number(action.asOfMillis),
+                Number(action.budgetBytes),
+              ),
             });
             return;
           }

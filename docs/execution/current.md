@@ -2,8 +2,8 @@
 
 **Status:** operational ground truth for active ForgeEngine delivery
 **As of:** 2026-09-02
-**Accepted implementation baseline:** PR #33 (implementation candidate `26f011e`);
-PR #34 Slice 4 candidate `20b9bac` is accepted for merge but not yet baseline
+**Accepted implementation baseline:** PR #34 merge `9bba75e` (Slice 4 candidate
+`20b9bac`)
 **Documentation baseline:** the commit containing this file
 
 This file answers what is active now. The
@@ -19,8 +19,9 @@ Product, Architecture, Program Design, and the authorized Vertical Slice packet
 must be explicitly approved before implementation. Small local changes use the
 documented proportional fast or compact path. Existing CLI8A Package 1 predates
 this policy; the combined CLI8A packet is the first full-path application and now
-authorizes prerequisite Slice 0 plus implementation Slices 1–4. Slice 4 is accepted
-for merge through candidate `20b9bac` and Checkpoint 94; Slice 5 remains unapproved.
+authorizes prerequisite Slice 0 plus implementation Slices 1–5. Slice 4 is merged
+through PR #34 and Checkpoint 94; the bounded Slice 5 eligibility preview was
+authorized on 2026-09-02.
 
 ## Document authority
 
@@ -63,7 +64,10 @@ planner/provider retrieval. Slice 4 candidate `20b9bac` and
 [Checkpoint 94](../decisions/checkpoints/2026-09-02-94-cli8a-memory-slice-4-hosted-gate.md)
 now pass the exact local, package, benchmark, and hosted privacy gates for
 recoverable forget/restore, selected-lineage purge, and recovery-history clear.
-PR #34 is accepted for merge but is not product baseline until merged. Public
+PR #34 merged this capability into baseline `9bba75e`. Slice 5 is now active only
+as a deterministic eligibility preview: it cannot rank task relevance, insert
+memory into planner/provider prompt context, or invoke a planner, provider, or
+network. This is not a claim of general prompt-injection resistance. Public
 distribution still requires contributor-rights attestation and artifact
 signing/provenance. Trusted execution has no
 Forge-enforced OS containment. Native restricted providers continue independently
@@ -81,12 +85,12 @@ claims permitted at each delivery stage.
 | Trusted-alpha release | `CLI7-ALPHA` | Private distribution/onboarding foundation accepted through PR #27 (`6cc90c1`) and Checkpoint 90; PR #28 (`2882550`) corrects reported blockers | Preserve the accepted private tester boundary. Rights attestation and artifact signing/provenance remain separate public-distribution gates; no public artifact has shipped. |
 | Effective configuration | `CLI7-ALPHA-CONFIG` | Accepted through PR #31 candidate `e7ba284` and Checkpoint 91 | Preserve the fixed files, immutable compiler, source attribution, secret-safe projection, atomic route, monotonic ceilings, and no-fallback behavior. Do not add an organization provider-policy subsystem. |
 | Sandbox provider lifecycle | `SBX-PROVIDER-LIFECYCLE` | Independent and unaccepted for production; local managed-Windows/AppContainer conformance exists | Complete disposable-Windows-VM install/upgrade/uninstall/reboot/residue plus macOS/adversarial evidence. Do not advertise `restrictedReady` or promote a provider until the exact gate passes. |
-| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Slices 0–3 accepted through PRs #32–33 / Checkpoints 92–93; Slice 4 candidate `20b9bac` accepted for merge through Checkpoint 94 | Merge PR #34 without widening the proven privacy boundary. Preserve inactive retrieval; Slice 5 and CLI8B/C remain gated pending explicit authorization. |
+| Attributable learning foundation | `CLI8A-MEMORY-FOUNDATION` | Slices 0–4 accepted through PRs #32–34 / Checkpoints 92–94; Slice 5 eligibility preview active on `codex/cli8a-memory-context-preview` | Implement and prove the frozen exact-scope, Rust-authoritative, provider-free preview. Preserve inactive retrieval; CLI8B/C remain gated. |
 
 The stale-base CLI7 candidate was successfully replayed without importing its old
 ancestry. The stale CLI8A candidate `b5effea` remains reference material only. The
-merged baseline is the ADR-0038/0039-conformant PR #32–33 lineage; PR #34 candidate
-`20b9bac` is its accepted-for-merge Slice 4 extension.
+merged baseline is the ADR-0038/0039-conformant PR #32–34 lineage at `9bba75e`;
+`codex/cli8a-memory-context-preview` is its bounded Slice 5 extension.
 
 ## Merge order and shared-boundary rule
 
@@ -107,9 +111,9 @@ merged baseline is the ADR-0038/0039-conformant PR #32–33 lineage; PR #34 cand
    pipe input. PR #33 and Checkpoint 93 accept the exact local, live VS Code, and
    hosted evidence. Slice 4 privacy lifecycle was explicitly authorized on
    2026-09-02 against the existing four-gate packet. Candidate `20b9bac` and
-   Checkpoint 94 accept its exact local and hosted privacy evidence for merge in
-   PR #34. Runtime retrieval remains gated by CLI8B; Slice 5 requires new explicit
-   authorization.
+   Checkpoint 94 accepted its exact local and hosted privacy evidence, and PR #34
+   merged it at `9bba75e`. The reviewer explicitly authorized the bounded Slice 5
+   eligibility preview on 2026-09-02. Runtime retrieval remains gated by CLI8B.
 5. Merge `SBX-PROVIDER-LIFECYCLE` only after its independent VM/provider gate; its
    timing does not redefine the trusted-alpha claim.
 
@@ -132,10 +136,11 @@ rebased and reconciled before merge rather than resolved by taking an entire sid
 
 ## Next three gates
 
-1. Merge PR #34 at the accepted Slice 4 boundary after its exact documentation-head
-   checks pass; do not widen its memory-store erasure claim.
-2. After the merge, separately review and explicitly authorize Slice 5 context
-   preview; it retains its own authorization gate.
+1. Complete Slice 5 at the frozen eligibility-preview boundary and require its
+   exact local, package, hosted, privacy, and no-provider evidence.
+2. Complete the separate four-gate review for the terminal observable-activity
+   stream before implementing it on its own branch; integrate shared CLI/docs only
+   after both exclusive packages are stable.
 3. After complete CLI8A acceptance and later CLI8B authorization, run paired
    no-memory/retrieved-memory evaluation; automatic retrieval remains disabled until
    measurable quality and isolation gates pass. Reviewed skills remain a later

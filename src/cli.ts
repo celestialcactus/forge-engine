@@ -59,6 +59,7 @@ import {
   renderMemoryList,
   renderMemoryOperation,
   memoryPrivacyBoundary,
+  renderMemoryContextPreview,
   renderMemoryPrivacyOperation,
 } from './memory/presentation.js';
 import { MemoryRuntimeError, RustMemoryRuntime } from './memory/runtime.js';
@@ -67,6 +68,7 @@ const parseCliArguments = () => {
   try {
     return parseArgs({
       allowPositionals: true,
+      tokens: true,
       options: {
     json: { type: 'boolean', default: false },
     workspace: { type: 'string' },
@@ -113,7 +115,25 @@ const parseCliArguments = () => {
   }
 };
 
-const { positionals, values } = parseCliArguments();
+const { positionals, tokens, values } = parseCliArguments();
+
+const requireExactCommandOptions = (
+  allowedNames: readonly string[],
+  usage: string,
+): void => {
+  const allowed = new Set(allowedNames);
+  const seen = new Set<string>();
+  for (const token of tokens) {
+    if (token.kind !== 'option') continue;
+    if (!allowed.has(token.name)) {
+      throw new Error(`${token.rawName} is not available for this command. Usage: ${usage}`);
+    }
+    if (seen.has(token.name)) {
+      throw new Error(`${token.rawName} may be provided only once. Usage: ${usage}`);
+    }
+    seen.add(token.name);
+  }
+};
 
 const command = values.help ? 'help' : positionals[0] ?? 'interactive';
 const workspaceRoot = resolve(values.workspace ?? process.cwd());
@@ -297,8 +317,12 @@ const sovereignChangeRuntime = (
 
 const integerOption = (raw: string | undefined, fallback: number, name: string): number => {
   if (raw === undefined) return fallback;
-  const value = Number(raw);
-  if (!Number.isInteger(value)) throw new Error(`${name} must be an integer.`);
+  const normalized = raw.trim();
+  if (!/^[+-]?\d+$/u.test(normalized)) {
+    throw new Error(`${name} must be a base-10 integer.`);
+  }
+  const value = Number(normalized);
+  if (!Number.isSafeInteger(value)) throw new Error(`${name} must be a safe base-10 integer.`);
   return value;
 };
 
@@ -715,6 +739,16 @@ try {
         throw new Error('Usage: forge memory autosave [off|ask|auto|status] [--json]');
       }
     } else {
+      let previewBudget: number | undefined;
+      if (action === 'preview') {
+        const usage = 'forge memory preview [--max-bytes <1..262144>] [--json]';
+        requireExactCommandOptions(['engine-root', 'json', 'max-bytes', 'workspace'], usage);
+        if (positionals.length !== 2) throw new Error(`Usage: ${usage}`);
+        previewBudget = integerOption(values['max-bytes'], 65_536, '--max-bytes');
+        if (previewBudget < 1 || previewBudget > 262_144) {
+          throw new Error('--max-bytes must be a base-10 integer from 1 through 262144.');
+        }
+      }
       const memory = await memoryCommands();
       if (action === 'remember') {
         const statement = positionals.slice(2).join(' ').trim();
@@ -736,6 +770,10 @@ try {
         } else {
           for (const line of renderMemoryExplanation(entry)) console.log(line);
         }
+      } else if (action === 'preview') {
+        const preview = await memory.preview(previewBudget);
+        if (values.json) printJsonArtifact({ ok: true, operation: action, preview });
+        else for (const line of renderMemoryContextPreview(preview)) console.log(line);
       } else if (action === 'correct') {
         const selection = positionals.slice(2).join(' ').trim();
         if (values.replacement === undefined) {
@@ -810,7 +848,7 @@ try {
           console.log('Retrieval: inactive until CLI8B evaluation.');
         }
       } else {
-        throw new Error('Usage: forge memory <remember|find|show|explain|correct|forget|history|restore|purge|autosave|status> ...');
+        throw new Error('Usage: forge memory <remember|find|show|explain|preview|correct|forget|history|restore|purge|autosave|status> ...');
       }
     }
   } else if (command === 'runs') {
@@ -1127,6 +1165,7 @@ try {
       '  forge memory find [query] [--json]',
       '  forge memory show <words from memory> [--json]',
       '  forge memory explain <words from memory> [--json]',
+      '  forge memory preview [--max-bytes <1..262144>] [--json]',
       '  forge memory correct <words from memory> --replacement <text> [--erase-previous] [--json]',
       '  forge memory history [query] [--json]',
       '  forge memory history clear [--yes] [--json]',
