@@ -800,8 +800,10 @@ independent old-kernel forward compatibility. Stable new errors are
 
 The complete local and hosted matrix passed on exact implementation candidate
 `0c08a06`; Checkpoint 95 records the accepted evidence and the correction that
-removed hidden-ledger fingerprints. Retain the no-retrieval/no-skill claims. CLI8B
-still requires separate authorization and evaluation after PR #35 merges.
+removed hidden-ledger fingerprints. Pre-merge dependency-remediation candidate
+`0014ddb` also passes the complete local and hosted matrix with zero current
+npm-audit findings. Retain the no-retrieval/no-skill claims. CLI8B still requires
+separate authorization and evaluation after PR #35 merges.
 
 ### Parallelization graph
 

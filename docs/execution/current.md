@@ -1,10 +1,11 @@
 # ForgeEngine current execution index
 
 **Status:** operational ground truth for active ForgeEngine delivery
-**As of:** 2026-09-04
+**As of:** 2026-09-09
 **Accepted implementation baseline:** PR #34 merge `9bba75e` (Slice 4 candidate
 `20b9bac`)
-**Accepted-for-merge candidate:** PR #35 head `0c08a06` (Slice 5); merge pending
+**Accepted-for-merge candidate:** PR #35 implementation `0c08a06` plus exact
+dependency remediation `0014ddb`; merge pending
 **Documentation baseline:** the commit containing this file
 
 This file answers what is active now. The
@@ -22,7 +23,10 @@ documented proportional fast or compact path. Existing CLI8A Package 1 predates
 this policy; the combined CLI8A packet is the first full-path application and now
 authorizes prerequisite Slice 0 plus implementation Slices 1–5. Slice 4 is merged
 through PR #34 and Checkpoint 94; bounded Slice 5 candidate `0c08a06` passed its
-exact local and hosted gates and is accepted for merge by Checkpoint 95.
+exact local and hosted gates and is accepted for merge by Checkpoint 95. Exact
+dependency-remediation candidate `0014ddb` closes the inherited npm advisory
+caveat with a clean install, zero current npm-audit findings, and a repeated full
+local and hosted matrix.
 
 ## Document authority
 

@@ -1,3 +1,16 @@
+# 2026-09-09 - CLI8A Slice 5 dependency advisory caveat closed before merge
+
+- PR #35 dependency-remediation candidate
+  `0014ddba44fde46dcd0e13ef48b912d322cb2dff` updates only the transitive lockfile
+  resolutions: `fast-uri` 3.1.7, `qs` 6.16.0, and `hono` 4.13.7. The direct MCP
+  SDK version and application behavior are unchanged.
+- Clean installation and the current npm advisory feed report zero vulnerabilities.
+  The full local product, RustSec, release-smoke, native-package, and asserted
+  benchmark gates pass with the patched graph.
+- Hosted runs `34376523507` and `34376523494` pass all nine declared Windows x64,
+  macOS ARM64/x64, Ubuntu x64, and RustSec jobs on the exact remediation candidate.
+- PR #35 remains directly based on `develop` `9bba75e`, open, and unmerged.
+
 # 2026-09-04 - CLI8A Slice 5 eligibility preview accepted for merge
 
 - Candidate `0c08a0600696f95122126e0e329664b7515e49a1` and PR #35 pass the exact
@@ -12,9 +25,9 @@
 - Runtime retrieval, task ranking, planner/provider prompt insertion, provider and
   network work, CLI8B evaluation, CLI8C skills, and terminal observable-activity
   work remain separate and inactive.
-- The current npm advisory feed reports inherited transitive `fast-uri` and `qs`
-  findings through the unchanged MCP SDK dependency graph. They were not introduced
-  by PR #35 and remain an explicit dependency/public-release risk.
+- The advisory feed at this checkpoint reported inherited transitive `fast-uri`
+  and `qs` findings through the MCP SDK dependency graph. They were not introduced
+  by Slice 5 and were subsequently closed by the 2026-09-09 lockfile-only refresh.
 
 # 2026-09-02 - CLI8A Slice 4 merges and bounded Slice 5 preview is authorized
 

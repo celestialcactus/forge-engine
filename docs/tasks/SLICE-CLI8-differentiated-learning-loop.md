@@ -100,6 +100,10 @@ Current local evidence:
   ARM64/x64, and Ubuntu x64 jobs. Independent review removed a hidden-recovery
   ledger fingerprint and added direct invariance and first-fit regressions before
   Checkpoint 95 accepted the candidate for merge through PR #35.
+- Pre-merge dependency-remediation candidate `0014ddb` updates only the transitive
+  lockfile resolutions for `fast-uri`, `qs`, and `hono`. Clean installation reports
+  zero current npm-audit findings; the complete local gates and hosted runs
+  `34376523507` / `34376523494` pass again on the patched graph.
 
 ## Boundary
 

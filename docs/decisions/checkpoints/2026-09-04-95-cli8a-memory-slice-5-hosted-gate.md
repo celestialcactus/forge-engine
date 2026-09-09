@@ -2,9 +2,13 @@
 
 **Date:** 2026-09-04
 
+**Updated:** 2026-09-09 for the pre-merge dependency remediation
+
 **Decision:** accept `CLI8A-MEMORY-FOUNDATION` Slice 5 for merge
 
 **Implementation candidate:** `0c08a0600696f95122126e0e329664b7515e49a1`
+
+**Dependency-remediation candidate:** `0014ddba44fde46dcd0e13ef48b912d322cb2dff`
 
 **Pull request:** [#35](https://github.com/celestialcactus/forge-engine/pull/35)
 
@@ -67,12 +71,15 @@ The exact implementation candidate ran on Windows x64 with Node.js `22.19.0`, np
   kernel SHA-256 was
   `FD7F85C8538B0B46CF6C30BABAC5C7D381A1E59765F4E3FEC44AC88691E3FF7E`.
 
-The 2026-09-04 npm advisory feed additionally reported one high `fast-uri` finding
-and one moderate `qs` finding through the unchanged
-`@modelcontextprotocol/sdk@1.30.0` dependency graph. PR #35 does not modify
-`package-lock.json`; these advisories are inherited rather than Slice 5 changes.
-They remain a dependency-maintenance and public-distribution risk and are not
-represented as a clean npm-audit result by this checkpoint.
+The 2026-09-04 npm advisory feed initially reported inherited `fast-uri` and `qs`
+findings through `@modelcontextprotocol/sdk@1.30.0`; a newly published `hono`
+finding was also visible before merge on 2026-09-09. Dependency-remediation
+candidate `0014ddb` updates only `package-lock.json`: `fast-uri` 3.1.5 to 3.1.7,
+`qs` 6.15.3 to 6.16.0, and `hono` 4.13.0 to 4.13.7. The direct MCP SDK version and
+application code are unchanged. A clean `npm ci` followed by `npm audit --json`
+reported zero vulnerabilities in the current advisory feed. The complete product,
+release-smoke, native-package, RustSec, and asserted benchmark gates passed again
+with the patched installed graph.
 
 ## Hosted evidence
 
@@ -85,6 +92,14 @@ Both required workflows passed on exact implementation candidate `0c08a06`:
   RustSec plus Rust, native-package, hybrid, configured-product, clean-install
   package, and asserted benchmark gates passed on Windows x64, macOS ARM64, macOS
   x64, and Ubuntu x64.
+
+Both workflows passed again on exact dependency-remediation candidate `0014ddb`:
+
+- [Cross-platform run 34376523507](https://github.com/celestialcactus/forge-engine/actions/runs/34376523507)
+  passed Node/typecheck/build on all four declared targets.
+- [Hybrid run 34376523494](https://github.com/celestialcactus/forge-engine/actions/runs/34376523494)
+  passed RustSec plus the complete Rust, native-package, hybrid, clean-install,
+  product, and asserted benchmark matrix on all four declared targets.
 
 ## Correction found by independent review
 
@@ -114,7 +129,8 @@ This checkpoint does not claim:
 - erasure of canonical runs/artifacts, conversations, filesystem backups, media,
   storage-device remnants, journal copies, or state outside Forge's memory store;
 - public package publication, signing, provenance, contributor-rights clearance,
-  dependency-advisory remediation, or native restricted-containment promotion.
+  immunity from future dependency advisories, or native restricted-containment
+  promotion.
 
 ## Next lane
 
