@@ -14,8 +14,10 @@ Forge already streams validated assistant text in human mode and renders selecte
 canonical Rust `RunEvent` status after the event has been appended to the durable
 run ledger. Machine `--json` mode emits one terminal artifact. This is trustworthy
 but not yet a polished implementing-developer experience: the user sees sparse
-status lines, does not see provider-supplied reasoning summaries, and receives
-little useful narration around evidence, tools, approvals, and verification.
+status lines, does not see provider-supplied reasoning summaries, and does not
+distinguish intentional assistant commentary from final answers. It therefore
+receives little useful narration around evidence, tools, approvals, and
+verification.
 
 The accepted Product outcome is a terminal-only alpha experience that feels like
 sitting beside an implementing developer who explains what they are doing while
@@ -23,6 +25,7 @@ they work. The output must remain honest about the difference between:
 
 - a durable Rust-authoritative event;
 - a provider-reported, user-displayable reasoning summary or trace;
+- an intentional assistant commentary/preamble addressed to the user;
 - a deterministic sentence derived by the presentation layer; and
 - private or encrypted model reasoning that Forge must not expose or claim to
   possess.
@@ -65,22 +68,24 @@ This preserves authority but cannot provide the human working narration requeste
 for the alpha and cannot use an explicit provider reasoning-summary channel.
 Rejected as the complete product experience, retained as the authoritative spine.
 
-### Option C: Ask the model for additional narration calls
+### Option C: Ask the model for separate narration calls
 
 This increases cost and latency, can change model behavior, and gives providers
 without a summary channel a misleading imitation of hidden reasoning. Rejected for
-the first lane.
+the first lane. Brief commentary produced inside the existing task turn is not a
+separate narration call and remains available under Option D.
 
 ### Option D: Merge authority-labeled canonical and provisional activity
 
-The terminal presenter consumes durable run events plus a narrowly normalized,
-user-displayable provider reasoning channel. It labels their authority, never uses
-presentation output as runtime input, and preserves one terminal artifact in JSON
+The terminal presenter consumes durable run events, a narrowly normalized user-
+displayable provider reasoning channel, and explicit assistant commentary emitted
+inside the existing task turn. It labels their authority, never parses rendered
+presentation back into runtime input, and preserves one terminal artifact in JSON
 mode. Accepted for review.
 
 ## Decision
 
-### 1. Separate activity into three authority classes
+### 1. Separate activity into four source and authority classes
 
 Every rendered activity item has one of these sources:
 
@@ -89,20 +94,24 @@ Every rendered activity item has one of these sources:
 - `provider_reported`: a provider-native, explicitly user-displayable reasoning
   summary or trace delta, provisional until the associated inference completion
   is recorded;
+- `assistant_commentary`: an ordinary model-authored message intentionally
+  addressed to the user before or between tool calls, provisional and never proof
+  that the described action occurred;
 - `presentation_derived`: a deterministic label or grouping derived solely from
-  already available canonical or provider-reported input.
+  already available canonical, provider-reported, or assistant-commentary input.
 
 The process-local display order is not a durable event sequence. Where an item
 comes from a canonical run event, it carries the durable `runId` and `sequence`.
-Provider narration carries `requestId`, provider, and model. Nothing in the
-presentation contract can approve a capability, establish evidence, alter a run,
-or become memory.
+Provider reasoning and assistant commentary carry `requestId`, provider, and
+model. Nothing in the presentation contract can approve a capability, establish
+evidence, alter a run, or become memory.
 
 ```mermaid
 flowchart LR
     P["Provider stream"] --> N["Provider-neutral normalization"]
-    N -->|"displayable summary only"| A["Activity presenter"]
-    N -->|"tool intent and final response"| PL["Planner"]
+    N -->|"displayable summary or trace"| A["Activity presenter"]
+    N -->|"assistant commentary"| A
+    N -->|"commentary, tool intent, final response"| PL["Planner"]
     PL --> K["Rust kernel"]
     K --> L["Append and sync run event"]
     L -->|"canonical event"| A
@@ -115,15 +124,16 @@ flowchart LR
 
 Forge may render only:
 
-- a provider field documented as a user-displayable reasoning summary;
-- ordinary assistant response text; and
+- a provider field documented as a user-displayable reasoning summary or trace;
+- ordinary assistant text explicitly classified as commentary or final answer;
 - deterministic Forge activity descriptions.
 
 Forge must not render encrypted reasoning, private scratch state, hidden prompts,
 provider continuation tokens, or provider fields whose disclosure contract is
 unknown. Ordinary assistant text must not be relabeled as hidden reasoning.
-Providers without a supported summary channel receive deterministic Forge activity
-only; Forge does not synthesize fake internal thoughts.
+Providers without a supported reasoning channel may still emit intentional
+assistant commentary. Otherwise they receive deterministic Forge activity only;
+Forge does not synthesize fake internal thoughts.
 
 ### 3. Preserve output-channel contracts
 
@@ -144,7 +154,8 @@ The effective configuration adds selection field `display.activity` with values:
 
 - `auto` (built-in default): detailed on a human TTY, compact for non-TTY human
   output, and off for `--json`;
-- `detailed`: provider summaries plus canonical evidence/action/result narration;
+- `detailed`: provider reasoning, assistant commentary, and canonical evidence/
+  action/result narration;
 - `compact`: canonical phase changes and required decisions only;
 - `off`: final response plus required approvals, warnings, and errors only.
 
@@ -185,7 +196,37 @@ response event, Forge may retry the same provider, endpoint, model, task input,
 tools, and request identity exactly once without that field and emit one bounded
 warning. It must not retry after any provider event or for an ambiguous failure.
 
-### 6. Reveal accepted tool activity, not raw intent
+### 6. Treat commentary as explicit assistant communication
+
+Commentary is the assistant speaking to the user, not Forge exposing private model
+state. For the OpenAI route, the stable planner instruction requests a short
+preamble before tool use in a multi-step task and another update only when a major
+phase starts or evidence changes the plan. Each update should name a concrete
+intent or finding, avoid narrating routine calls, and never claim an action
+completed before canonical evidence exists. The instruction is identical in every
+activity mode so changing presentation does not change the model prompt. Another
+adapter may opt in only when it has a documented, unambiguous commentary channel.
+
+`NormalizedInferenceEvent` also distinguishes assistant text as `commentary`,
+`final_answer`, or `unspecified`:
+
+- OpenAI Responses binds each assistant output item's `output_index` to its
+  documented `phase` and maps later text deltas through that immutable association.
+- A provider without phase metadata remains `unspecified` and follows the existing
+  assistant-output path. Forge does not infer commentary from prose wording or
+  merely because a tool call occurs in the same turn.
+
+The TypeScript collector keeps commentary separate from final-answer text.
+Commentary enters the provider conversation exactly once and retains its phase
+where the provider supports phases; it can never be concatenated into the terminal
+artifact. It may be present in the bounded durable planner checkpoint required for
+exact continuation, but it is not a `RunEvent`, capability result, outcome
+assessment, memory record, or accepted evidence. Run inspection must identify it
+as model-authored conversation if it is ever exposed. Activity modes decide
+whether to render it; they never remove it from provider continuation or
+reinterpret it as canonical truth.
+
+### 7. Reveal accepted tool activity, not raw intent
 
 Provider `tool_call.delta` arguments are never rendered. The first user-visible
 tool action comes from canonical `capability.requested`, after Rust validation and
@@ -198,15 +239,17 @@ Byte-for-byte live subprocess output would require a new Rust bridge/run-event
 contract and is excluded from the first authorized packet. The first packet shows
 command/capability start, completion, and a bounded accepted result summary.
 
-### 7. Bound and sanitize presentation
+### 8. Bound and sanitize presentation
 
 - Cumulative provider summary/trace text is limited to 65,536 Unicode scalar
   values per inference request.
+- Cumulative assistant commentary is limited to 16,384 Unicode scalar values per
+  inference request; the existing final-answer bound remains separate.
 - One rendered activity line is limited to 1,024 characters after control-character
   removal and whitespace normalization.
 - One detailed capability-result preview is limited to 4,096 UTF-8 bytes.
 - NUL, terminal escape, and non-printing control characters are removed from
-  provider and capability-derived activity before rendering.
+  provider, commentary, and capability-derived activity before rendering.
 - Raw provider tool arguments, credentials, effective secret values, full prompts,
   and full context items are never activity inputs.
 - Truncation is explicit once per source and does not fail or change the run.
@@ -214,7 +257,7 @@ command/capability start, completion, and a bounded accepted result summary.
 These controls reduce accidental disclosure; they are not a general DLP or
 prompt-injection-resistance claim.
 
-### 8. Presentation cannot affect execution authority
+### 9. Presentation cannot affect execution authority
 
 Activity mode has one narrow provider-request effect: detailed mode may request
 an OpenAI display summary as defined above. It cannot change provider, endpoint,
@@ -228,20 +271,24 @@ Given the same non-display provider outputs, every activity mode must produce an
 equivalent canonical artifact. OpenAI summary generation can add latency and
 billable output, so `compact`, `off`, non-TTY `auto`, and `--json` do not request it.
 
-### 9. Defer persisted activity and live process chunks
+### 10. Defer a separate activity ledger and live process chunks
 
-Provider summaries are live, bounded presentation observations in this lane. They
-are not added to `RunEvent`, `RunArtifact`, memory, or a new activity ledger.
+Provider summaries/traces are live, bounded presentation observations in this
+lane. Assistant commentary remains ordinary provider-conversation content and may
+therefore be carried by the existing planner checkpoint; this lane does not copy
+either channel into `RunEvent`, `RunArtifact`, memory, or a new activity ledger.
 Durable replay continues to reconstruct canonical status from the run ledger and
-the terminal assistant response from the artifact. Persisted provider narration,
-machine-streaming NDJSON, byte-level process output, and graphical UI rendering
-require later gates.
+the terminal assistant response from the artifact. A separately queryable activity
+history, machine-streaming NDJSON, byte-level process output, and graphical UI
+rendering require later gates.
 
 ## Consequences
 
 ### Positive
 
 - The default TTY experience becomes materially more legible and human.
+- Intentional preambles provide the responsive, collaborative rhythm users expect
+  from a contemporary coding agent.
 - Canonical actions remain visibly distinct from provisional model narration.
 - Providers can expose useful summary channels without becoming authorities.
 - JSON and host integrations remain stable.
@@ -249,8 +296,11 @@ require later gates.
 
 ### Negative
 
-- Providers without native summary support cannot match the richest narration.
+- Providers without native summaries, phases, or tool-adjacent text cannot match
+  the richest narration.
 - Live provider summaries are not replayable in the first lane.
+- Commentary consumes ordinary output tokens and becomes part of the bounded
+  provider conversation even when its display is disabled.
 - The configuration addition touches a shared alpha contract and its complete
   conformance suite.
 - Live subprocess bytes remain deferred, so long-running commands initially expose
@@ -260,6 +310,8 @@ require later gates.
 
 - **Narration is mistaken for truth:** label it as `working`, retain canonical
   event labels, and never feed it into policy or evidence.
+- **Commentary becomes noisy or performative:** request updates only at meaningful
+  boundaries, require a concrete intent/finding, and test repetition limits.
 - **Terminal output becomes noisy:** use `auto`, `compact`, and `off`; keep phase
   labels stable and avoid repeating unchanged state.
 - **Provider summary leaks sensitive content:** accept only explicit summary fields,
@@ -277,10 +329,15 @@ require later gates.
   before-stream, oversized, control-character, reasoning-text, encrypted-only,
   tool-call, failure, and cancellation cases; Ollama fixtures separately cover
   displayable `message.thinking` present/absent without changing `think`.
+- Commentary fixtures cover explicit OpenAI `commentary`/`final_answer` phases,
+  provider text without phase metadata, tool-adjacent classification, multiple
+  commentary items, checkpoint round-trip, and no-commentary behavior.
 - Artifact equivalence proves activity mode cannot change canonical output.
 - Tool arguments and unapproved capability result content never appear in activity.
 - Open narration is closed before canonical status, approval, error, cancellation,
   and assistant output lines.
+- Golden prompts prove the commentary instruction is identical in every activity
+  mode and asks for updates only at meaningful phase boundaries.
 - The complete configuration compiler/source/projection/service tests pass for the
   optional `display.activity` field.
 - Exact product gates pass on Windows x64, macOS ARM64/x64, and Ubuntu x64.
@@ -292,6 +349,7 @@ require later gates.
 Reopen this ADR before:
 
 - persisting provider narration or treating it as memory/evidence;
+- promoting assistant commentary into canonical events, evidence, or memory;
 - emitting machine-readable incremental activity;
 - exposing raw or encrypted reasoning;
 - adding live subprocess stdout/stderr to the Rust run protocol;
@@ -301,5 +359,7 @@ Reopen this ADR before:
 ## References
 
 - [OpenAI reasoning summaries](https://developers.openai.com/api/docs/guides/reasoning#reasoning-summaries)
+- [OpenAI tool preambles and assistant phases](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-5.5#improve-time-to-first-visible-token-with-a-preamble)
 - [OpenAI Responses streaming event reference](https://developers.openai.com/api/reference/cli/resources/beta/subresources/responses)
+- [Codex app-server items and deltas](https://learn.chatgpt.com/docs/app-server#items)
 - [Ollama thinking capability](https://docs.ollama.com/capabilities/thinking)

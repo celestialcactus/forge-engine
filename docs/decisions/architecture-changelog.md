@@ -1,5 +1,17 @@
 # 2026-09-09 - Terminal observable-activity gates prepared after Slice 5 merge
 
+- Amended ADR-0040 and its four-gate packet to match the documented Codex
+  interaction pattern more closely: intentional assistant commentary/preambles are
+  a fourth source class beside provider reasoning, canonical run events, and
+  deterministic presentation. Commentary is produced inside the existing task
+  turn, preserves explicit provider phase through continuation/checkpoint state,
+  and never becomes canonical evidence or memory.
+- The stable OpenAI planner prompt requests short updates only before the first
+  meaningful tool phase or when evidence materially changes the plan. The
+  terminal renders explicitly phased commentary as `update`, distinct from
+  provider-reported `working` and canonical `action`/`result`; no separate
+  narration inference is added, and phase-less adapters are not guessed from
+  prose.
 - PR #35 final head `9df27d3` passed all nine declared Windows x64, macOS
   ARM64/x64, Ubuntu x64, and RustSec jobs, then merged into `develop` at
   `7a1dc128723bf8c38ca18996acd11b0d98674939`.

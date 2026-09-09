@@ -49,15 +49,17 @@ frontend.
 
 1. The developer starts an ordinary `forge run` or interactive prompt without
    configuring a logging subsystem.
-2. Forge briefly states the current working intent when the provider exposes a
-   supported user-displayable summary or trace.
-3. Forge identifies evidence selection and accepted capability lifecycle in plain
+2. The assistant gives a short user-facing update before a meaningful tool phase
+   when the provider supplies explicit commentary/preamble semantics.
+3. Forge may also show the current working intent when the provider exposes a
+   supported user-displayable reasoning summary or trace.
+4. Forge identifies evidence selection and accepted capability lifecycle in plain
    language.
-4. Tool intent becomes an action only after the canonical Rust request event.
-5. Approvals, verification, cancellation, and failures interrupt the narration
+5. Tool intent becomes an action only after the canonical Rust request event.
+6. Approvals, verification, cancellation, and failures interrupt the narration
    clearly.
-6. The final answer remains visually distinct from activity.
-7. A developer who wants less output uses one discoverable `activity` preference;
+7. The final answer remains visually distinct from activity.
+8. A developer who wants less output uses one discoverable `activity` preference;
    JSON users continue receiving one machine artifact.
 
 ### Interaction sketch
@@ -65,12 +67,13 @@ frontend.
 ```text
 $ forge run "Fix the parser regression"
 
-working   I’ll locate the parser boundary and reproduce the failing case first.
+update    I’ll locate the parser boundary and reproduce the failing case first.
+working   Comparing the parser branches and their existing coverage.
 context   6 items selected; 2 omitted; 18 KiB of 64 KiB
 evidence  searching the current repository
 action    workspace.search requested
 result    workspace.search completed
-working   The failing branch is isolated; I’m checking its existing tests.
+update    I found the failing branch; I’m checking its existing tests next.
 action    workspace.read requested
 result    workspace.read completed
 verify    accepted outcome met
@@ -78,14 +81,18 @@ verify    accepted outcome met
 assistant> The parser regression is fixed and the focused tests pass.
 ```
 
-`working` means provider-reported user-displayable summary, not raw hidden thought.
-`action`, `result`, `context`, and `verify` are derived from canonical run events.
+`working` means provider-reported user-displayable reasoning, not raw hidden
+thought. `update` is an intentional assistant message to the user, not execution
+proof. `action`, `result`, `context`, and `verify` derive from canonical run
+events.
 
 ### Observable success and acceptance examples
 
 - A first-time user can tell what Forge is doing, what actually ran, and whether it
   was verified without opening an artifact.
 - Provider narration never makes an unapproved tool call look executed.
+- Commentary appears at meaningful phase boundaries, identifies a concrete intent
+  or finding, and does not narrate every routine call.
 - OpenAI summary data and Ollama trace data are shown only when the adapter can
   identify the explicit provider field; neither being present still yields a
   coherent run.
@@ -101,22 +108,25 @@ assistant> The parser regression is fixed and the focused tests pass.
 
 Run one deterministic two-turn fixture and one real local-provider task:
 
-1. provider displayable reasoning arrives in fragments;
-2. the model proposes one read-only tool;
-3. Rust appends and emits capability request/completion events;
-4. a second summary explains the observed evidence;
-5. the assistant answer and evidence summary complete;
-6. the fixture is repeated in all activity modes and JSON;
-7. the real VS Code terminal confirms readable ordering and editing.
+1. assistant commentary states the first evidence-gathering step;
+2. provider displayable reasoning arrives in fragments;
+3. the model proposes one read-only tool;
+4. Rust appends and emits capability request/completion events;
+5. a second commentary update explains the concrete finding and next phase;
+6. the assistant answer and evidence summary complete;
+7. the fixture is repeated in all activity modes and JSON;
+8. the real VS Code terminal confirms readable ordering and editing.
 
 ### Non-goals and non-claims
 
 - no raw, hidden, encrypted, or private chain-of-thought exposure;
 - no claim that narrated reasoning is true, complete, or authoritative;
 - no extra inference calls solely to generate narration;
+- no claim that assistant commentary is hidden reasoning or execution evidence;
 - no graphical/TUI frontend in this lane;
 - no machine-readable incremental NDJSON stream;
-- no persistence of provider narration as run truth, memory, or evidence;
+- no promotion of provider reasoning or commentary into run truth, memory, or
+  evidence; commentary may remain in the existing bounded planner checkpoint;
 - no raw provider tool arguments or unrestricted capability payload dumps;
 - no byte-for-byte live subprocess terminal mirror in the first packet;
 - no new capability, approval, sandbox, provider, memory, or retrieval authority;
@@ -150,6 +160,10 @@ sequenceDiagram
     participant View as Activity presenter
     participant Terminal
 
+    Provider-->>TS: assistant commentary delta (explicit phase)
+    TS-->>View: assistant_commentary update
+    View-->>Terminal: update ...
+    TS->>TS: retain message and phase for continuation
     Provider-->>TS: displayable reasoning summary or trace delta
     TS-->>View: provider_reported working activity
     View-->>Terminal: working ...
@@ -173,8 +187,12 @@ provisional and cannot enter Rust policy or evidence through the activity path.
 
 - `NormalizedInferenceEvent.displayable_reasoning.delta` is an internal provider-
   neutral display signal with `summary|trace` format, not a persisted run event.
-- `TerminalActivityEnvelope` classifies `canonical_run`, `provider_reported`, and
-  `presentation_derived` sources.
+- Explicit assistant `commentary` phase text is a user-directed message, not a
+  reasoning summary or canonical event. The stable OpenAI planner prompt requests
+  it only for the first meaningful tool phase or a material plan change. Another
+  provider may opt in only through a documented, unambiguous commentary channel.
+- `TerminalActivityEnvelope` classifies `canonical_run`, `provider_reported`,
+  `assistant_commentary`, and `presentation_derived` sources.
 - Canonical envelopes retain `runId` and `sequence`; provider envelopes retain
   request/provider/model identity; display `ordinal` is process-local only.
 - Effective config adds optional `display.activity` selection with built-in `auto`.
@@ -196,13 +214,16 @@ provisional and cannot enter Rust policy or evidence through the activity path.
   inference or changing the artifact.
 - Cancellation closes any open activity line before rendering the canonical
   cancellation result.
+- Commentary and its phase round-trip through the existing bounded planner
+  checkpoint for exact continuation. It does not enter the run-event ledger,
+  outcome evidence, or memory.
 - Run inspection/replay reconstructs canonical activity only; it does not claim to
   replay provisional provider narration.
 
 ### Security, privacy, provenance, and platform boundary
 
-- Provider summary/trace text is untrusted display content and is sanitized before
-  terminal output.
+- Provider summary/trace and assistant commentary are untrusted display content and
+  are sanitized before terminal output.
 - Provider tool arguments, encrypted reasoning, full prompts, and raw context are
   excluded from activity.
 - Capability display begins only after Rust validation and append.
@@ -214,11 +235,12 @@ provisional and cannot enter Rust policy or evidence through the activity path.
 
 ### Alternatives and least-confident decisions
 
-ADR-0040 rejects raw provider dumping, canonical-only sparse output, and additional
-narration calls. The least-confident boundary is provider-summary portability:
-providers expose different fields and some expose none. The replacement condition
-is a stable provider-neutral standard or evidence that deterministic Forge
-narration gives a better user experience at lower disclosure risk.
+ADR-0040 rejects raw provider dumping, canonical-only sparse output, and separate
+narration calls. The least-confident boundary is provider narration portability:
+providers expose different reasoning and assistant-phase fields, and some expose
+neither. The replacement condition is a stable provider-neutral standard or
+evidence that deterministic Forge narration gives a better user experience at
+lower disclosure risk.
 
 The second uncertainty is live subprocess output. It remains excluded until a
 separate design proves bounded append-before-notify semantics and secret handling
@@ -249,10 +271,11 @@ src/
     resolve.ts                # shared: selection precedence
     projection.ts             # shared: effective diagnostics
   inference/
-    contracts.ts              # shared: displayable_reasoning.delta
+    contracts.ts              # shared: displayable reasoning + assistant phases
     stream.ts                 # shared: bounded observation forwarding
     openai.ts                 # exclusive provider mapping
     ollama.ts                 # exclusive provider mapping
+    planner.ts                # exclusive stable preamble/continuation contract
   cli.ts                      # serial integration: flag/config/presenter wiring
   live-cli.ts                 # serial migration shim, then removal or re-export
 tests/
@@ -283,10 +306,12 @@ export type ResolvedActivityMode = Exclude<ConfiguredActivityMode, 'auto'>;
 export type ActivityAuthority =
   | 'canonical_run'
   | 'provider_reported'
+  | 'assistant_commentary'
   | 'presentation_derived';
 
 export type ActivityKind =
   | 'working'
+  | 'update'
   | 'run'
   | 'context'
   | 'evidence'
@@ -308,6 +333,7 @@ export interface TerminalActivityEnvelope {
   readonly provider?: string;
   readonly model?: string;
   readonly reasoningFormat?: 'summary' | 'trace';
+  readonly assistantPhase?: 'commentary';
   readonly truncated?: true;
 }
 
@@ -317,7 +343,26 @@ export type NormalizedInferenceEvent =
       readonly format: 'summary' | 'trace';
       readonly text: string;
     }
-  | ExistingNormalizedInferenceEvent;
+  | {
+      readonly type: 'assistant_text.delta';
+      readonly phase: 'commentary' | 'final_answer' | 'unspecified';
+      readonly text: string;
+    }
+  | ExistingNormalizedInferenceEventExceptTextDelta;
+
+export type InferenceMessage =
+  | ExistingNonAssistantInferenceMessage
+  | {
+      readonly role: 'assistant';
+      readonly content: string;
+      readonly phase?: 'commentary' | 'final_answer';
+      readonly toolCalls?: readonly InferenceToolCall[];
+    };
+
+export interface CollectedInferenceText {
+  readonly finalText: string;
+  readonly commentary: readonly InferenceMessage[];
+}
 
 export interface ActivityPresenter {
   onInferenceEvent(observation: ProviderInferenceObservation): void;
@@ -336,6 +381,13 @@ export function resolveActivityMode(input: {
 }): ResolvedActivityMode;
 ```
 
+`assistant_text.delta` replaces the current undifferentiated `text.delta` inside
+the TypeScript inference stream. Collection keeps commentary separate from
+`finalText`: only final-answer or compatible `unspecified` text may become the
+planner's completed assistant output or terminal artifact. Commentary is appended
+to provider continuation once, with its explicit phase, and cannot be accidentally
+concatenated into the final answer.
+
 `display.activity` is a `selection` field normalized by
 `activity_mode_v1`; eligible sources are managed, command line, environment,
 workspace, user, and built-in. Its CLI option is `--activity`, environment key is
@@ -351,6 +403,19 @@ different `think` value from this feature; detailed mode maps an already emitted
 `message.thinking` field as `trace`. This is the only accepted request-level effect
 of activity mode.
 
+The stable OpenAI planner instruction asks for one- or two-sentence user updates
+before the first meaningful tool phase and when evidence materially changes the
+plan. It forbids claiming completion before a canonical result and discourages
+routine tool-by-tool narration. That instruction is identical in every activity
+mode. Another provider adapter may opt in only after documenting an unambiguous
+commentary channel. OpenAI maps the output item's
+`phase: 'commentary'|'final_answer'`; phase-less provider text remains
+`unspecified` and preserves the existing assistant-output behavior. Forge does not
+infer commentary from wording or from a same-turn tool call. Commentary retained
+for a later provider turn or planner checkpoint preserves its explicit phase. The
+OpenAI adapter binds each assistant output item's `output_index` to its declared
+phase before mapping later text deltas; a phase cannot change within that item.
+
 ### Principal call stacks and state transitions
 
 ```text
@@ -358,6 +423,7 @@ CLI parse -> compile effective configuration -> resolveActivityMode
   -> create ActivityPresenter
   -> ProviderTaskPlanner.onInferenceEvent
        -> supported provider reasoning -> provider_reported envelope -> stderr
+       -> explicit commentary -> assistant_commentary envelope -> stderr
   -> RustKernelRuntime.onEvent
        -> append-before-notify RunEvent -> canonical_run envelope -> stderr
   -> terminal artifact
@@ -370,6 +436,9 @@ Presenter line state is:
 idle -> working_open -> working_delta*
 working_open -> canonical_interrupt -> idle
 working_open -> response_completed -> idle
+idle -> update_open -> update_delta*
+update_open -> canonical_interrupt -> idle
+update_open -> response_completed -> idle
 idle -> assistant_open -> assistant_delta*
 assistant_open -> canonical_interrupt -> idle
 any -> cancellation/error/close -> idle
@@ -384,6 +453,8 @@ human mode. Detailed and compact are views over the same canonical inputs.
   CLI-argument error path with the four allowed values and a corrective hint.
 - Provider summary deltas are bounded to 65,536 scalar values per request; one
   truncation warning is emitted and later summary deltas are ignored for display.
+- Assistant commentary is bounded to 16,384 scalar values per request and shares
+  the terminal-safe line limit without reducing the separate final-answer bound.
 - Sanitized activity lines are at most 1,024 characters; capability previews are
   at most 4,096 UTF-8 bytes.
 - Control characters other than normalized newline/tab input are removed before
@@ -406,10 +477,12 @@ Frozen fixtures:
 - explicit OpenAI pre-stream summary rejection and same-route retry;
 - OpenAI reasoning-text/encrypted items that must never render;
 - Ollama `message.thinking` present/absent with request-body equivalence;
+- OpenAI commentary/final phases, multiple commentary sections, phase-preserving
+  continuation, and a phase-less provider compatibility case;
 - oversized/control-character summary;
 - denied approval, capability failure, cancellation, budget exhaustion, and unmet
   verification;
-- assistant delta interrupted by a canonical event;
+- reasoning, commentary, and final-answer deltas interrupted by a canonical event;
 - equivalent artifact across all display modes;
 - valid/invalid config at every source and source-attributed `config show` output.
 
@@ -440,7 +513,7 @@ narration, Backspace, `/help`, cancellation, required approval, and `/exit`.
 - Package B owns `src/activity/presenter.ts`, `sanitize.ts`, presentation tests, and
   the configuration files/tests. `src/cli.ts` is integrated serially.
 - Package C owns provider mapping in `openai.ts`, `ollama.ts`, `stream.ts`, and
-  inference tests after Package A freezes the event contract.
+  `planner.ts` plus inference tests after Package A freezes the event contract.
 - Package D is the sole integration owner for `src/cli.ts`, `live-cli.ts`, help,
   interactive wiring, smoke/package fixtures, workflows, and operational docs.
 - CLI8B/C may continue documentation work separately. It may not modify the shared
@@ -451,12 +524,18 @@ narration, Backspace, `/help`, cancellation, required approval, and `/exit`.
 
 None may be inferred by implementation owners. Reviewers must explicitly accept:
 
-- the authority labels and non-persistence of provider narration;
+- the four authority/source labels and the boundary between provider reasoning,
+  assistant commentary, and canonical events;
 - the `auto|detailed|compact|off` modes and TTY defaults;
 - the optional `display.activity` effective-config field;
 - the narrow detailed-mode OpenAI summary request, pre-stream retry rule, and
   summary-free continuation replay;
 - the Ollama observe-only rule that never changes `think`;
+- the stable preamble instruction, explicit-phase-only mapping, and checkpoint
+  round-trip of commentary without promotion into run truth or memory;
+- the tradeoff that the stable OpenAI preamble instruction is present in every
+  activity mode, so commentary can consume output tokens and checkpoint budget
+  even when `compact`, `off`, non-TTY `auto`, or JSON suppresses its display;
 - summary and preview limits;
 - completion-only capability output in this packet; and
 - Package D as serial integration owner.
@@ -466,16 +545,16 @@ None may be inferred by implementation owners. Reviewers must explicitly accept:
 ```mermaid
 flowchart LR
     A["A. Contract tracer"] --> B["B. Canonical terminal UX"]
-    A --> C["C. Provider summaries"]
+    A --> C["C. Provider narration"]
     B --> D["D. Integrated alpha gate"]
     C --> D
 ```
 
 | Package | Observable proof | Depends on | Owned files | Shared files | Acceptance evidence | Merge/re-steer point |
 | --- | --- | --- | --- | --- | --- | --- |
-| A. Contract tracer | Frozen typed activity inputs and one golden terminal transcript agree on authority labels. | Product + Architecture + Program Design approval | `src/activity/contracts.ts`, activity fixtures/tests | ADR/task docs | Contract tests and `git diff --check` | Stop if provider narration cannot remain outside run truth. |
-| B. Canonical terminal UX | Default TTY shows clear context/action/result/approval/verification narration with compact/off controls. | A | presenter, sanitizer, presentation/config tests | config modules; later `src/cli.ts` integration | Focused presenter/config tests; artifact equivalence | Stop if display mode changes execution or JSON. |
-| C. Provider reasoning display | OpenAI summary and already-emitted Ollama trace fragments render as `working`; private/encrypted reasoning never renders. | A | provider adapters and inference tests | inference contracts/stream | Provider fixtures for mapping, absence, malformed input, bounds, pre-stream retry, continuation isolation, and cancellation | Stop if an adapter cannot distinguish a documented display field from private reasoning or if display changes continuation context. |
+| A. Contract tracer | Frozen typed activity inputs and one golden terminal transcript agree on all four authority/source labels. | Product + Architecture + Program Design approval | `src/activity/contracts.ts`, activity fixtures/tests | ADR/task docs | Contract tests and `git diff --check` | Stop if narration cannot remain distinguishable from run truth. |
+| B. Canonical terminal UX | Default TTY shows clear updates plus context/action/result/approval/verification narration with compact/off controls. | A | presenter, sanitizer, presentation/config tests | config modules; later `src/cli.ts` integration | Focused presenter/config tests; artifact equivalence | Stop if display mode changes execution or JSON. |
+| C. Provider narration | OpenAI summary and commentary phases plus already-emitted Ollama traces render through distinct `working`/`update` channels; private/encrypted reasoning never renders. | A | provider adapters, planner, and inference tests | inference contracts/stream | Provider fixtures for mapping, phase replay, absence, malformed input, bounds, pre-stream retry, continuation isolation, and cancellation | Stop if an adapter cannot distinguish commentary/displayable reasoning from private reasoning or if display changes continuation context. |
 | D. Integrated alpha gate | `forge run`, interactive, and safe resume provide one coherent cross-platform stream and pass real VS Code. | B + C | CLI integration, help, product fixtures, acceptance docs | `src/cli.ts`, `src/live-cli.ts`, workflows, current/build plan | Full product/RustSec/package/benchmark/hosted/VS Code gates | Re-steer rather than adding raw process streaming or changing Rust schemas. |
 
 ### Authorized slice packet
