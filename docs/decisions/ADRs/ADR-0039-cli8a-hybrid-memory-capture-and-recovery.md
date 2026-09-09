@@ -1,8 +1,8 @@
 # ADR-0039: Use hybrid memory machinery with standing capture grants and bounded recovery
 
 **Date:** 2026-08-29
-**Status:** Accepted through Slice 5 implementation candidate `0c08a06`, PR #35,
-and Checkpoint 95; merge remains pending
+**Status:** Accepted and merged through Slice 5 implementation candidate `0c08a06`,
+PR #35 merge `7a1dc12`, and Checkpoint 95
 **Scope:** CLI8A capture, lifecycle, recovery, and future retrieval boundary
 **Amends:** ADR-0038
 

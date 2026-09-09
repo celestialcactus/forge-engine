@@ -6,7 +6,7 @@ Slice 3 accepted through PR #33 implementation candidate `26f011e` and
 [Checkpoint 93](../decisions/checkpoints/2026-09-01-93-cli8a-memory-slice-3-hosted-gate.md);
 Slice 4 merged through PR #34 at `9bba75e` after acceptance through
 [Checkpoint 94](../decisions/checkpoints/2026-09-02-94-cli8a-memory-slice-4-hosted-gate.md);
-Slice 5 candidate `0c08a06` accepted for merge through PR #35 and
+Slice 5 candidate `0c08a06` accepted and merged through PR #35 at `7a1dc12` and
 [Checkpoint 95](../decisions/checkpoints/2026-09-04-95-cli8a-memory-slice-5-hosted-gate.md)
 **Authority:**
 [ADR-0034](../decisions/ADRs/ADR-0034-commodity-sandbox-and-differentiated-learning-lane.md),
@@ -40,8 +40,8 @@ Slice 3 autosave is accepted through PR #33 candidate `26f011e` after exact loca
 hosted, real PTY, and live VS Code gates. Slice 4 candidate `20b9bac` passes the
 exact local, clean-install, benchmark, and hosted privacy gates and is merged
 through PR #34 and Checkpoint 94. Slice 5 candidate `0c08a06` passes exact local,
-package, benchmark, privacy, and hosted gates and is accepted for merge through PR
-#35 and Checkpoint 95. It remains only the frozen provider-free eligibility preview.
+package, benchmark, privacy, and hosted gates and is accepted and merged through PR
+#35 at `7a1dc12` and Checkpoint 95. It remains only the frozen provider-free eligibility preview.
 Future-dated observations fail closed, and preview does not compact or change saved
 memory records. Retrieval and skills remain gated.
 
@@ -99,7 +99,7 @@ Current local evidence:
   Hosted runs `33925597815` and `33925597769` pass all declared Windows x64, macOS
   ARM64/x64, and Ubuntu x64 jobs. Independent review removed a hidden-recovery
   ledger fingerprint and added direct invariance and first-fit regressions before
-  Checkpoint 95 accepted the candidate for merge through PR #35.
+  Checkpoint 95 accepted the candidate, merged through PR #35 at `7a1dc12`.
 - Pre-merge dependency-remediation candidate `0014ddb` updates only the transitive
   lockfile resolutions for `fast-uri`, `qs`, and `hono`. Clean installation reports
   zero current npm-audit findings; the complete local gates and hosted runs

@@ -1,3 +1,25 @@
+# 2026-09-09 - Terminal observable-activity gates prepared after Slice 5 merge
+
+- PR #35 final head `9df27d3` passed all nine declared Windows x64, macOS
+  ARM64/x64, Ubuntu x64, and RustSec jobs, then merged into `develop` at
+  `7a1dc128723bf8c38ca18996acd11b0d98674939`.
+- Proposed
+  [ADR-0040](ADRs/ADR-0040-authority-labeled-terminal-activity-stream.md) and the
+  [terminal observable-activity four-gate packet](../tasks/CLI-OBSERVABLE-ACTIVITY-FOUR-GATE-REVIEW.md).
+  The previously accepted Product outcome is preserved; Architecture is ready for
+  review, Program Design and Packages A-D are drafts, and implementation is inactive.
+- The proposed stream distinguishes append-before-notify canonical events,
+  provider-reported user-displayable summaries/traces, and presentation-derived
+  wording. OpenAI detailed mode may request `reasoning.summary: auto`; Ollama
+  thinking is observe-only so presentation never enables or tunes model reasoning.
+  It explicitly rejects raw/encrypted chain-of-thought exposure, provider tool-
+  argument dumping, extra narration calls, and any effect on execution authority.
+- `auto` defaults to detailed human TTY output, while compact/off controls and the
+  existing one-artifact JSON contract keep the experience usable and script-safe.
+- The terminal lane takes ADR-0040 because its Product Gate predates and its
+  integration is scheduled before the unmerged CLI8B/C proposal. That proposal
+  must be renumbered to ADR-0041 before integration.
+
 # 2026-09-09 - CLI8A Slice 5 dependency advisory caveat closed before merge
 
 - PR #35 dependency-remediation candidate
