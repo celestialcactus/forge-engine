@@ -31,6 +31,13 @@ does not expose hidden chain of thought or authorize implementation.
 | Program Design | draft | Gate 3 below | | | Review only after Architecture approval. |
 | Vertical Slices | draft | Packages A-D below | | | No package is authorized. |
 
+**Accepted clarification — 2026-09-09:** The maintainer accepts the normal token
+and bounded checkpoint cost of concise commentary as part of the Product
+experience. Early visibility is expected to save wasted execution as well: a user
+can steer or cancel after seeing intent, before Forge performs an unintended and
+potentially more expensive tool sequence. This accepts the cost rationale only;
+Architecture, Program Design, and implementation remain separately gated.
+
 ## Gate 1: Product
 
 ### User and problem
@@ -533,9 +540,6 @@ None may be inferred by implementation owners. Reviewers must explicitly accept:
 - the Ollama observe-only rule that never changes `think`;
 - the stable preamble instruction, explicit-phase-only mapping, and checkpoint
   round-trip of commentary without promotion into run truth or memory;
-- the tradeoff that the stable OpenAI preamble instruction is present in every
-  activity mode, so commentary can consume output tokens and checkpoint budget
-  even when `compact`, `off`, non-TTY `auto`, or JSON suppresses its display;
 - summary and preview limits;
 - completion-only capability output in this packet; and
 - Package D as serial integration owner.

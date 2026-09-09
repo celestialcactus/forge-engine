@@ -12,6 +12,11 @@
   provider-reported `working` and canonical `action`/`result`; no separate
   narration inference is added, and phase-less adapters are not guessed from
   prose.
+- The maintainer accepted commentary's ordinary token and bounded continuation
+  cost as part of the desired Product experience. Early intent/finding updates
+  also create a savings opportunity by letting the user steer or cancel before an
+  unintended, potentially more expensive tool sequence. This clarification does
+  not approve Architecture, Program Design, or implementation.
 - PR #35 final head `9df27d3` passed all nine declared Windows x64, macOS
   ARM64/x64, Ubuntu x64, and RustSec jobs, then merged into `develop` at
   `7a1dc128723bf8c38ca18996acd11b0d98674939`.

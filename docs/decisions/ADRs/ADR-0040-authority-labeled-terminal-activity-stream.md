@@ -207,6 +207,13 @@ completed before canonical evidence exists. The instruction is identical in ever
 activity mode so changing presentation does not change the model prompt. Another
 adapter may opt in only when it has a documented, unambiguous commentary channel.
 
+The maintainer accepts the ordinary output-token and bounded continuation cost of
+this commentary as part of the intended agent experience. Timely intent and
+finding updates are also an efficiency control: they let a user steer or cancel
+before Forge enters an unintended, potentially much more expensive tool sequence.
+This acceptance does not permit unbounded narration, a separate narration request,
+or commentary before trivial tool-free answers.
+
 `NormalizedInferenceEvent` also distinguishes assistant text as `commentary`,
 `final_answer`, or `unspecified`:
 
