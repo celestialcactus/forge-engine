@@ -1,8 +1,9 @@
 # CLI observable activity: four-gate review packet
 
 **Delivery path:** full
-**State:** Product approved; Architecture ready for review; Program Design and
-Vertical Slices drafted; implementation inactive
+**State:** Product, Architecture, and Program Design approved; Package A contract
+tracer implemented and locally validated as a candidate; independent acceptance
+pending; Packages B-D inactive
 **Build-plan authority:**
 [ForgeEngine V1 validated build plan](../architecture/forgeengine-v1-validated-build-plan.md)
 **Related ADRs:**
@@ -27,9 +28,9 @@ does not expose hidden chain of thought or authorize implementation.
 | Gate | Status | Revision/material | Approver | Date | Decision source |
 | --- | --- | --- | --- | --- | --- |
 | Product | approved | Gate 1 below | Maintainer | 2026-09-02 | Main Forge discussion; recorded in the architecture changelog with CLI8A Slice 5 authorization. |
-| Architecture | ready for review | ADR-0040 and Gate 2 below | | | Requires explicit approval. |
-| Program Design | draft | Gate 3 below | | | Review only after Architecture approval. |
-| Vertical Slices | draft | Packages A-D below | | | No package is authorized. |
+| Architecture | approved | ADR-0040 and Gate 2 below | Maintainer | 2026-09-09 | Main Forge discussion: “approve this ADR and commence work on the next slice.” |
+| Program Design | approved | Gate 3 below | Maintainer | 2026-09-09 | Same instruction authorizes the frozen design required to begin its next bounded package. |
+| Vertical Slices | Package A candidate; acceptance pending | Package A only | Maintainer | 2026-09-09 | Commence the next slice; Packages B-D remain unauthorized. |
 
 **Accepted clarification — 2026-09-09:** The maintainer accepts the normal token
 and bounded checkpoint cost of concise commentary as part of the Product
@@ -260,8 +261,8 @@ ADR-0040 is proposed. It changes no accepted runtime schema and retains every Ga
 
 ## Gate 3: Program Design
 
-**Status:** draft. The contract below becomes freeze material only after ADR-0040
-is explicitly approved.
+**Status:** approved on 2026-09-09 as the freeze material for Package A. Later
+packages remain bounded by their separate authorization states below.
 
 ### Proposed file-tree diff
 
@@ -527,9 +528,10 @@ narration, Backspace, `/help`, cancellation, required approval, and `/exit`.
   CLI/config/inference files until Package D merges or the integration owner
   explicitly reopens ownership.
 
-### Unresolved decisions
+### Accepted design decisions
 
-None may be inferred by implementation owners. Reviewers must explicitly accept:
+The maintainer accepted the following together with ADR-0040 and Gate 3 on
+2026-09-09. Later implementation owners may not silently widen them:
 
 - the four authority/source labels and the boundary between provider reasoning,
   assistant commentary, and canonical events;
@@ -563,8 +565,18 @@ flowchart LR
 
 ### Authorized slice packet
 
-None. Product is approved; ADR-0040 Architecture, Gate 3 contracts, and Packages
-A-D require explicit approval before implementation.
+Package A, the contract tracer, is authorized on the exact PR #35 merge baseline
+plus the accepted documentation commits on this branch. It may change only
+`src/activity/contracts.ts`, `tests/activity-contracts.test.ts`, frozen
+`tests/fixtures/activity/*`, and the approval/decision documentation. Packages
+B-D remain unauthorized until Package A is independently accepted and the
+maintainer opens the next package.
+
+The local Package A candidate freezes all four source classes, reserves execution
+claims for canonical run activity, and binds those constraints to one implementing-
+developer transcript. Its focused contract tests pass 4/4; the complete Node suite
+passes 177/177; TypeScript typecheck and build pass. This is candidate evidence,
+not independent or hosted acceptance.
 
 ### Parallelization map
 

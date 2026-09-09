@@ -1,8 +1,9 @@
 # ADR-0040: Authority-labeled terminal activity stream
 
 **Date:** 2026-09-09
-**Status:** Proposed for Architecture Gate review; Product Gate approved; no
-runtime implementation authorized
+**Status:** Accepted at the Architecture Gate on 2026-09-09; Package A contract
+tracer implemented and locally validated as a candidate; Packages B-D remain
+unauthorized
 **Scope:** Human-mode `forge run`, `forge interactive`, and accepted run-resume
 presentation
 **Extends:** ADR-0018, ADR-0021, ADR-0029, ADR-0036, and ADR-0037

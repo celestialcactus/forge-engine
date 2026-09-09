@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "name": "implementing-developer-transcript",
+  "resolvedMode": "detailed",
+  "envelopes": [
+    {
+      "schemaVersion": 1,
+      "ordinal": 1,
+      "authority": "assistant_commentary",
+      "kind": "update",
+      "message": "I’ll locate the parser boundary and reproduce the failing case first.",
+      "requestId": "inference:one",
+      "provider": "openai",
+      "model": "fixture-model",
+      "assistantPhase": "commentary"
+    },
+    {
+      "schemaVersion": 1,
+      "ordinal": 2,
+      "authority": "provider_reported",
+      "kind": "working",
+      "message": "Comparing the parser branches and their existing coverage.",
+      "requestId": "inference:one",
+      "provider": "openai",
+      "model": "fixture-model",
+      "reasoningFormat": "summary"
+    },
+    {
+      "schemaVersion": 1,
+      "ordinal": 3,
+      "authority": "presentation_derived",
+      "kind": "run",
+      "message": "Evidence gathering"
+    },
+    {
+      "schemaVersion": 1,
+      "ordinal": 4,
+      "authority": "canonical_run",
+      "kind": "context",
+      "message": "6 items selected; 2 omitted; 18 KiB of 64 KiB",
+      "runId": "run:fixture",
+      "runSequence": 2
+    },
+    {
+      "schemaVersion": 1,
+      "ordinal": 5,
+      "authority": "canonical_run",
+      "kind": "action",
+      "message": "workspace.search requested",
+      "runId": "run:fixture",
+      "runSequence": 4
+    },
+    {
+      "schemaVersion": 1,
+      "ordinal": 6,
+      "authority": "canonical_run",
+      "kind": "result",
+      "message": "workspace.search completed",
+      "runId": "run:fixture",
+      "runSequence": 6
+    },
+    {
+      "schemaVersion": 1,
+      "ordinal": 7,
+      "authority": "assistant_commentary",
+      "kind": "update",
+      "message": "I found the failing branch; I’m checking its existing tests next.",
+      "requestId": "inference:two",
+      "provider": "openai",
+      "model": "fixture-model",
+      "assistantPhase": "commentary"
+    },
+    {
+      "schemaVersion": 1,
+      "ordinal": 8,
+      "authority": "canonical_run",
+      "kind": "verify",
+      "message": "accepted outcome met",
+      "runId": "run:fixture",
+      "runSequence": 9
+    }
+  ],
+  "expectedTranscript": [
+    "update    I’ll locate the parser boundary and reproduce the failing case first.",
+    "working   Comparing the parser branches and their existing coverage.",
+    "run       Evidence gathering",
+    "context   6 items selected; 2 omitted; 18 KiB of 64 KiB",
+    "action    workspace.search requested",
+    "result    workspace.search completed",
+    "update    I found the failing branch; I’m checking its existing tests next.",
+    "verify    accepted outcome met"
+  ],
+  "expectedAuthorityTrace": [
+    "1 assistant_commentary update",
+    "2 provider_reported working",
+    "3 presentation_derived run",
+    "4 canonical_run context",
+    "5 canonical_run action",
+    "6 canonical_run result",
+    "7 assistant_commentary update",
+    "8 canonical_run verify"
+  ]
+}

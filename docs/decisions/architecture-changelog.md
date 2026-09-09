@@ -1,5 +1,15 @@
 # 2026-09-09 - Terminal observable-activity gates prepared after Slice 5 merge
 
+- The maintainer approved ADR-0040, its Gate 3 Program Design, and commencement of
+  the next bounded slice. Package A alone is authorized to freeze typed activity
+  inputs and one golden transcript. Presenter/configuration, provider narration,
+  and CLI integration in Packages B-D remain inactive pending Package A acceptance
+  and separate authorization.
+- The Package A candidate now freezes the mode, authority, kind, per-authority
+  claim, limit, presenter, and resolution-input contracts plus one four-source
+  implementing-developer transcript. Focused contract tests pass 4/4, the complete
+  Node suite passes 177/177, and TypeScript typecheck/build pass. Independent and
+  hosted acceptance remain open; no presenter or provider/CLI behavior changed.
 - Amended ADR-0040 and its four-gate packet to match the documented Codex
   interaction pattern more closely: intentional assistant commentary/preambles are
   a fourth source class beside provider reasoning, canonical run events, and
