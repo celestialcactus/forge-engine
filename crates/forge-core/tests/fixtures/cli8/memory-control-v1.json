@@ -4,6 +4,7 @@
   "maximumRequestBytes": 262144,
   "transactionEncoding": "canonical_ndjson",
   "operations": [
+    "preview",
     "remember",
     "inspect",
     "correct",
@@ -31,12 +32,19 @@
     "recoveryVersionsPerLineage": 5,
     "maximumRecoveryBytes": 16777216
   },
+  "contextPreview": {
+    "defaultBudgetBytes": 65536,
+    "maximumBudgetBytes": 262144,
+    "maximumOmissionPreviewBytes": 120,
+    "scopePolicy": "exact_repository_plus_derived_developer"
+  },
   "runtimeClaims": {
     "plannerInjection": false,
     "providerCalls": false,
     "mcpMutation": false,
     "automaticCapture": true,
     "automaticCaptureBoundary": "eligible_exact_developer_input_under_active_local_grant",
-    "plannerRetrieval": false
+    "plannerRetrieval": false,
+    "contextPreview": true
   }
 }

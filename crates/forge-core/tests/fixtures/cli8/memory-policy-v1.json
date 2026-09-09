@@ -6,6 +6,7 @@
   "runtimeCapabilities": {
     "explicitControl": true,
     "automaticCapture": true,
+    "contextPreview": true,
     "plannerInjection": false,
     "providerRetrieval": false,
     "skills": false

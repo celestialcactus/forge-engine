@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "cli8a-memory-context-preview-v1",
+  "operation": "preview",
+  "defaultBudgetBytes": 65536,
+  "maximumBudgetBytes": 262144,
+  "maximumOmissionPreviewBytes": 120,
+  "scopePolicy": "exact_repository_plus_derived_developer",
+  "selectionReason": "active_fresh_exact_scope",
+  "omissionReasons": [
+    "observation_not_yet_effective",
+    "declared_contradiction",
+    "inferred_hypothesis",
+    "source_not_eligible",
+    "explicit_validity_expired",
+    "evidence_currentness_unavailable",
+    "run_context_unavailable",
+    "budget_exceeded"
+  ],
+  "runtimeClaims": {
+    "eligibilityOnly": true,
+    "taskRelevanceRanking": false,
+    "retrievalActive": false,
+    "plannerInjection": false,
+    "providerWorkPerformed": false
+  }
+}

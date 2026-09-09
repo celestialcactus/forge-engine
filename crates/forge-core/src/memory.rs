@@ -1,18 +1,22 @@
 //! CLI8A attributable memory contracts.
 //!
 //! This module defines validated observation material, deterministic identities,
-//! and the bounded explicit-control lifecycle used by CLI8A Slices 1–4. It is not
+//! and the bounded explicit-control lifecycle used by CLI8A Slices 1–5. It is not
 //! connected to the run coordinator, planner, context compiler, MCP, or provider
 //! retrieval loop. Standing-grant capture is explicit and local; Slice 4 forget,
 //! purge, and recovery-history clearing remain exact-scope memory operations.
-//! Retrieval and prompt injection remain inactive.
+//! Slice 5 adds an eligibility-only context preview; retrieval, task relevance
+//! ranking, and planner/provider work remain inactive. Forge does not insert the
+//! preview into planner or provider prompt context.
 
+mod context;
 mod grants;
 mod lifecycle;
 mod projection;
 mod retention;
 mod store;
 
+pub use context::*;
 pub use grants::*;
 pub use lifecycle::*;
 pub use projection::*;

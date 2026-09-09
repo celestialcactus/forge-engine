@@ -1,3 +1,55 @@
+# 2026-09-09 - CLI8A Slice 5 dependency advisory caveat closed before merge
+
+- PR #35 dependency-remediation candidate
+  `0014ddba44fde46dcd0e13ef48b912d322cb2dff` updates only the transitive lockfile
+  resolutions: `fast-uri` 3.1.7, `qs` 6.16.0, and `hono` 4.13.7. The direct MCP
+  SDK version and application behavior are unchanged.
+- Clean installation and the current npm advisory feed report zero vulnerabilities.
+  The full local product, RustSec, release-smoke, native-package, and asserted
+  benchmark gates pass with the patched graph.
+- Hosted runs `34376523507` and `34376523494` pass all nine declared Windows x64,
+  macOS ARM64/x64, Ubuntu x64, and RustSec jobs on the exact remediation candidate.
+- PR #35 remains directly based on `develop` `9bba75e`, open, and unmerged.
+
+# 2026-09-04 - CLI8A Slice 5 eligibility preview accepted for merge
+
+- Candidate `0c08a0600696f95122126e0e329664b7515e49a1` and PR #35 pass the exact
+  local, RustSec, clean-install package, native archive, benchmark, and hosted
+  Windows x64, macOS ARM64/x64, and Ubuntu x64 gates.
+- [Checkpoint 95](checkpoints/2026-09-04-95-cli8a-memory-slice-5-hosted-gate.md)
+  accepts the bounded provider-free preview for merge. PR #35 remains unmerged.
+- Independent review found that initial candidate `882e00c` exposed a ledger-head
+  fingerprint derived from hidden recovery history. Final candidate `0c08a06`
+  removes it from output and identity, rejects reintroduction in TypeScript, and
+  proves hidden-recovery invariance plus first-fit admission in focused regressions.
+- Runtime retrieval, task ranking, planner/provider prompt insertion, provider and
+  network work, CLI8B evaluation, CLI8C skills, and terminal observable-activity
+  work remain separate and inactive.
+- The advisory feed at this checkpoint reported inherited transitive `fast-uri`
+  and `qs` findings through the MCP SDK dependency graph. They were not introduced
+  by Slice 5 and were subsequently closed by the 2026-09-09 lockfile-only refresh.
+
+# 2026-09-02 - CLI8A Slice 4 merges and bounded Slice 5 preview is authorized
+
+- PR #34 merged the Checkpoint 94 Slice 4 privacy lifecycle into `develop` at
+  `9bba75e`; recoverable forget/restore, selected-lineage purge, and
+  recovery-history clear are now accepted baseline behavior.
+- The reviewer approved CLI8A Slice 5 only as a deterministic baseline eligibility
+  preview over the exact current repository and requesting developer scopes.
+- Rust owns selection, omission reasons, scope validation, ordering, preview
+  identity, and byte accounting. TypeScript owns invocation and human/JSON
+  presentation without recomputing admission.
+- The default preview budget is 65,536 UTF-8 bytes and the maximum is 262,144.
+  Unresolved evidence-bound and run-bound freshness fails closed; only explicitly
+  declared contradictions count as conflicts in this slice.
+- Slice 5 does not authorize a task query, semantic ranking, planner/provider or
+  network work, memory insertion into planner/provider prompt context,
+  recovery-content disclosure, CLI8B retrieval, or CLI8C skills. This is not a
+  claim of general prompt-injection resistance.
+- A separate terminal observable-activity lane passed its Product Gate on the same
+  date. Its architecture/program design and implementation remain separately gated;
+  shared CLI, smoke, and documentation integration must be serialized.
+
 # 2026-09-02 - CLI8A Slice 4 passes the local and hosted privacy gate
 
 - PR #34 implementation candidate `20b9bac` is accepted for merge through

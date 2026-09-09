@@ -320,6 +320,49 @@ try {
     throw new Error(`Clean-install history clear did not retain only active memory: ${JSON.stringify(cleared)}`);
   }
 
+  const providerFreePreviewEnvironment = productEnvironment(homeRoot, {
+    FORGE_DEFAULT_PROVIDER: 'openai',
+    FORGE_DEFAULT_MODEL: 'provider-must-not-be-constructed',
+    FORGE_MAX_TURNS: '5',
+  });
+  const contextPreviewResult = await runCliWithEnvironment([
+    'memory', 'preview', '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ], providerFreePreviewEnvironment);
+  const contextPreview = JSON.parse(contextPreviewResult.stdout).preview;
+  const contextPreviewText = JSON.stringify(contextPreview);
+  if (contextPreview?.candidateCount !== 1
+    || contextPreview?.selected?.length !== 1
+    || contextPreview.selected[0]?.entry?.observation?.statement !== historyBeta
+    || contextPreview?.scopeHeads?.length !== 2
+    || contextPreview.retrievalActive !== false
+    || contextPreview.plannerInjection !== false
+    || contextPreview.providerWorkPerformed !== false
+    || contextPreviewText.includes(historyAlpha)
+    || contextPreviewText.includes(privacyAlpha)
+    || contextPreviewText.includes(privacyBeta)
+    || contextPreviewText.includes(fixtureSecret)) {
+    throw new Error(`Clean-install memory preview was not exact, inactive, and privacy-safe: ${contextPreviewResult.stdout}`);
+  }
+  const tinyPreview = JSON.parse((await runCliWithEnvironment([
+    'memory', 'preview', '--max-bytes', '1',
+    '--workspace', workspaceRoot, '--engine-root', engineRoot, '--json',
+  ], providerFreePreviewEnvironment)).stdout).preview;
+  if (tinyPreview?.selected?.length !== 0
+    || tinyPreview?.omitted?.length !== 1
+    || tinyPreview.omitted[0]?.reason !== 'budget_exceeded') {
+    throw new Error(`Clean-install memory preview did not enforce its byte budget: ${JSON.stringify(tinyPreview)}`);
+  }
+  const humanPreview = await runCliWithEnvironment([
+    'memory', 'preview', '--workspace', workspaceRoot, '--engine-root', engineRoot,
+  ], providerFreePreviewEnvironment);
+  if (!humanPreview.stdout.includes('nothing was sent to a model')
+    || !humanPreview.stdout.includes('did not change saved memories or insert them into planner or provider context')
+    || !humanPreview.stdout.includes('internal IDs are not required')
+    || humanPreview.stdout.includes('memory_observation:v1')
+    || humanPreview.stderr.length !== 0) {
+    throw new Error(`Clean-install human memory preview was not truthful and approachable: ${humanPreview.stdout}${humanPreview.stderr}`);
+  }
+
   const partialEnvironment = productEnvironment(partialHomeRoot, {
     FORGE_DEFAULT_PROVIDER: 'ollama',
     FORGE_KERNEL_BINARY: join(root, 'kernel-must-not-be-probed'),
@@ -408,6 +451,7 @@ try {
       'onboard',
       'memory-autosave-ask-auto-off',
       'memory-forget-restore-purge-history-clear',
+      'memory-context-preview',
       'inspect',
       'update',
       'uninstall',

@@ -2,8 +2,13 @@
 
 This bounded kit exercises the Rust-authoritative private trusted-alpha
 acceptance candidate. It does not promote a restricted provider, add a containment
-claim, activate CLI8 learning work, prove contributor-rights attestation, or
-publish a public release.
+claim, activate memory retrieval/ranking, insert memory into planner/provider
+context, activate skills, prove contributor-rights attestation, or publish a public
+release.
+
+PR #34 merge `9bba75e` is the accepted Slice 4 baseline. `memory preview` is the
+active, unaccepted Slice 5 candidate until its exact local, package, hosted, and
+merge gates complete.
 
 ## Prerequisites
 
@@ -59,7 +64,7 @@ home. It sanitizes every covered environment variable, exercises fixed user and
 workspace configuration paths, safe no-overwrite initialization, validation,
 redacted show/doctor output, partial-route refusal before kernel/provider work,
 conformant onboarding, installed autosave `ask → auto → off`, and a real
-Rust-backed inspection. It then runs an exact-
+Rust-backed memory eligibility preview and workspace inspection. It then runs an exact-
 pair update and uninstalls both packages. It removes its temporary project unless
 `FORGE_KEEP_PACKAGE_SMOKE=1` is set.
 
@@ -107,6 +112,8 @@ forge memory history "concise test output"
 forge memory restore "concise test output"
 forge memory purge "concise test output"
 forge memory history clear
+forge memory preview
+forge memory preview --max-bytes 1024 --json
 ```
 
 `ask` is the default. These commands are not workspace configuration: checked-in
@@ -130,6 +137,15 @@ without a recovery copy. It does not erase independently retained run artifacts,
 conversation logs, backups, filesystem journals, or storage media. Memory remains
 excluded from planner/provider prompt context until the separately gated CLI8B
 evaluation.
+
+`memory preview` is a Rust-authoritative, read-only eligibility report over the
+exact current repository and local developer scopes. It defaults to 65,536 bytes,
+never exceeds 262,144 bytes, and reports selected active records plus stable
+omission reasons. Forgotten and recovery content are counted only in aggregate;
+purged and cross-repository content remain absent. It does not compact recovery or
+change saved memory records. Human output says that nothing was sent to a model,
+and JSON reports `retrievalActive=false`,
+`plannerInjection=false`, and `providerWorkPerformed=false`.
 
 ## Prompts and expected evidence
 
