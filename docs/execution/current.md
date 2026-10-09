@@ -1,7 +1,7 @@
 # ForgeEngine current execution index
 
 **Status:** operational ground truth for active ForgeEngine delivery
-**As of:** 2026-09-09
+**As of:** 2026-09-21
 **Accepted implementation baseline:** PR #35 merge `7a1dc12` (Slice 5
 implementation `0c08a06`, dependency remediation `0014ddb`, final head `9df27d3`)
 **Documentation baseline:** the commit containing this file
@@ -82,7 +82,7 @@ claims permitted at each delivery stage.
 
 ## Active lanes
 
-| Lane | Canonical ID | State on 2026-09-09 | Authority and next gate |
+| Lane | Canonical ID | State on 2026-09-21 | Authority and next gate |
 | --- | --- | --- | --- |
 | Documentation reconciliation | `DOC-GROUND-TRUTH` | Accepted at `5fff597` through PR #25 | Preserve Checkpoint 88 and the execution/release-profile authority during every lane replay. |
 | Authority and contract clarification | `ARCH-AUTHORITY` | Accepted through PR #26 (`70a3288`) | Preserve the repository guard, Apache-2.0 alignment, target/config/protocol decisions, memory primer, and system map. |
@@ -95,6 +95,19 @@ claims permitted at each delivery stage.
 The stale-base CLI7 candidate was successfully replayed without importing its old
 ancestry. The stale CLI8A candidate `b5effea` remains reference material only. The
 merged baseline is the ADR-0038/0039-conformant PR #32–35 lineage at `7a1dc12`.
+
+## Planned but inactive lane
+
+| Lane | Canonical ID | State | Activation dependency |
+| --- | --- | --- | --- |
+| Harness efficiency and context economics | `CLI9-HARNESS-EFFICIENCY` | [Research-informed four-gate draft](../tasks/CLI9-HARNESS-EFFICIENCY-FOUR-GATE-REVIEW.md); no gate approved and no package authorized | Settle the active terminal lane, freeze CLI8B Product/Architecture evaluation semantics, approve CLI9 Product/Architecture/Program Design, then explicitly authorize Package A. |
+
+The CLI9 draft translates the SoL-Pi findings into Forge-native hypotheses:
+quality/economics instrumentation first, provider-only observation projection with
+Rust-owned exact recall second, and measurement of the existing governed change
+composition. Model-based log reduction and online compaction remain conditional
+future gates. This planning entry does not change the merge order or the next three
+gates below.
 
 ## Merge order and shared-boundary rule
 
@@ -137,7 +150,7 @@ rebased and reconciled before merge rather than resolved by taking an entire sid
 | P0 | Public artifact signing and provenance | Private hosted/package evidence does not sign or establish provenance for a published artifact. | Release workflow and exact target evidence before publication. |
 | P1 | Sandbox requirement/binding/lifecycle split | The provider must not become a second policy authority or receive two competing launch truths. | ADR-0033 refinement after the current conformance spike. |
 | P1 | Protocol implementation | ADR-0037 accepts negotiation and copy-on-write migration; current code still needs handshake/migration fixtures before another public schema bump. | Protocol increment with golden compatibility tests. |
-| P1 | Evaluation budgets | Small-model quality, latency, filesystem scans, tokens, retries, and accepted outcome need ceilings to prevent locally efficient-looking regressions. | Shared acceptance matrix before automatic retrieval/routing. |
+| P1 | Evaluation budgets and harness economics | Small-model quality, latency, filesystem scans, tokens, cache traffic, auxiliary calls, retries, corrective turns, accepted outcome, and integrity need ceilings to prevent locally efficient-looking regressions. | Shared CLI8B acceptance matrix first; CLI9 adds a separately reviewed price manifest, non-inferiority margin, and sealed-holdout contract before any context transform is enabled. |
 | P1 | Terminal activity authority and presentation | Provider reasoning and assistant commentary must remain distinguishable from durable run truth and must not leak private reasoning/tool payloads. | Approve ADR-0040 plus commentary phase/continuation, mode, limits, provider mapping, and serial integration contracts before Package A. |
 | P2 | Public extension boundary | MCP, embedded hosts, skills, and future plugins need a declared stable surface without freezing private internals. | Post-alpha API/extension ADR before third-party integration promises. |
 

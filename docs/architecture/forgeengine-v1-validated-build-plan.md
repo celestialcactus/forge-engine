@@ -2,8 +2,9 @@
 
 **Status:** authoritative for V1 planning
 **Date:** 2026-07-10
-**Last groomed:** 2026-09-09 for the CLI8A Slice 5 merge and proposed terminal
-observable-activity architecture
+**Last groomed:** 2026-09-21 for the SoL-Pi-informed CLI9 harness-efficiency
+planning draft; the active terminal observable-activity and CLI8B/C gates are
+unchanged
 **Supersedes for execution planning:** `forgeengine-v1-reconstruction-plan.md`
 **Historical only:** `forgeengine-proposed-plan-v2.md` and `docs/archive/prototype/`
 
@@ -90,7 +91,7 @@ slice has usable behavior, trace evidence, and a passing fixture.
 | 0. Protocol and fixtures | A developer can inspect a stable, simulated run. | Define event vocabulary, IDs, run state machine, cancellation, error/retry semantics, artifact schema, fixture workspaces, golden traces. | Golden traces cover success, denied approval, tool error, cancellation race, and budget exhaustion; type-level and behavior tests pass. |
 | 1. Deterministic kernel | `forge run` can execute a scripted plan against read-only workspace evidence and explain its result. | Run coordinator, capability registry, approval interface, read/search/git/diagnostic evidence adapters, streamed events, deterministic provider. | The same fixture/run inputs produce the same ordered trace and context plan on repeated runs. |
 | 2. Developer change loop | Forge can propose, apply, and verify a small patch with full evidence. | Patch artifact, explicit write capability, process/test capability, change transaction, rollback/reporting boundaries, worktree design spike. | A fixture task produces a reviewable diff, test result, and final evidence summary; failed verification leaves a clear recoverable state. |
-| 3. Context compiler | Forge chooses bounded, attributable context for a task. | Context item model, token/size budgets, deterministic selection, tiering, transforms, retrieval handles, metrics. | Baseline and compiled context are compared on fixtures; no transform is enabled by default without meeting the quality gate. |
+| 3. Context compiler | Forge chooses bounded, attributable context for a task. | Context item model, token/size budgets, deterministic selection, tiering, provider-only projections, exact retrieval handles, transforms, and economics. | Baseline and compiled context are compared on fixtures; no transform is enabled by default without meeting the quality, evidence-integrity, and cost-per-accepted-outcome gates. |
 | 4. Sessions and projections | A run can resume, be inspected, and be replayed without relying on chat history. | Append-only events/artifacts, SQLite projections, workspace snapshot identity, trace export/replay. | A recorded fixture run replays deterministically and projections reconstruct its current state. |
 | 5. Skills and bounded memory | A developer can load a reviewed workflow skill and inspect why it applied. | Skill manifest/provenance/scope, progressive disclosure, memory observations, candidate/promote workflow. | A skill improves a fixture workflow without unattributed instruction insertion; every applied instruction is attributable. |
 | 6. VS Code MCP apprentice | VS Code can ask Forge for evidence and invoke a bounded workflow. | MCP server, capability advertisement, cancellation/progress mapping, `.vscode/mcp.json` sandbox fixture. | MCP conformance and the VS Code fixture demonstrate cancellation, errors, trace links, and no host-specific core fork. |
@@ -336,6 +337,36 @@ are incompatible with the sovereign-first default.
 Automatic unreviewed skill activation, opaque developer profiling, and memory that
 cannot be attributed or corrected are not accepted shortcuts.
 
+### Planned harness efficiency and context economics lane
+
+The research-informed
+[CLI9 harness-efficiency packet](../tasks/CLI9-HARNESS-EFFICIENCY-FOUR-GATE-REVIEW.md)
+is a planning draft, not an active or authorized implementation lane. It adapts the
+SoL-Pi findings to Forge's existing authority instead of copying its Pi extension
+surface:
+
+1. freeze quality, usage, cache, cost, and paired-evaluation semantics before
+   optimizing the harness;
+2. retain complete capability results in the Rust-owned run record while testing a
+   provider-only observation projection with opaque, exact bounded recall;
+3. evaluate Forge's existing `workspace.change.execute` composition rather than add
+   a generic edit-plus-shell capability;
+4. keep evidence-preserving model reduction conditional and off by default, with
+   deterministic parsers, exact-source verification, privacy/route controls, and
+   original-result fallback required first;
+5. defer online compaction until durable sessions, semantic plan boundaries, actual
+   cut-point accounting, cache economics, priced summarization, and safe
+   continuation exist; and
+6. search candidate configurations only on development tasks, then freeze them for
+   one-way acceptance and sealed holdout evaluation.
+
+CLI9 Package A depends on the terminal activity lane being settled and the CLI8B
+Product/Architecture evaluation contract being frozen. It does not require CLI8C
+skill implementation; after the common evaluation contract is stable, CLI8C and
+CLI9 may proceed as separately authorized measured lanes. A Sol comparison can use
+an already conformant explicit OpenAI route. An Opus comparison remains unavailable
+until an Anthropic adapter independently passes the Slice 7 provider gate.
+
 ### Deferred but retained platform slices
 
 The first context-compilation, scoped-memory, and reviewed-skill loop is promoted to
@@ -414,6 +445,20 @@ The compiler has five stages, each independently observable:
 The operational metric is **cost to accepted outcome**, not compression ratio. A
 transform that saves tokens but causes an additional model turn or a failed edit is
 a regression.
+
+A reversible provider projection may replace repeated full text only in the
+provider-visible conversation. The authoritative capability result, its run/call
+identity, and its content digest remain in the Rust-owned record; a bounded recall
+request must resolve against that identity without accepting a filesystem path.
+Projection thresholds and exposure counts are evaluated configuration, not durable
+architecture constants. Full text, projected text, exact recalls, and any fallback
+must each be attributable in the evaluation record.
+
+Context economics distinguishes reported input, cache-read, cache-write, output,
+reasoning, and auxiliary-model usage when the provider supplies them. Missing facts
+remain unavailable rather than zero, and estimated price-manifest cost remains
+distinct from provider-reported cost. Model-generated reduction and compaction must
+include their own inference call in total task cost.
 
 ## State and storage decision
 
@@ -582,9 +627,16 @@ promotion/discard. Continue as follows:
     preserve the Rust-authoritative explicit control/recovery boundary accepted by
     Checkpoints 92–95. Merge the accepted Slice 5 baseline eligibility preview
     without widening the memory-store erasure claim or activating retrieval.
-    Expand providers, a high-level
-    MCP/VS Code mutation workflow, and other advanced platform surfaces on separate
-    measured lanes; native sandbox completion does not block the learning loop.
+    Expand providers, a high-level MCP/VS Code mutation workflow, and other advanced
+    platform surfaces on separate measured lanes; native sandbox completion does
+    not block the learning loop.
+15. **Harness efficiency remains planning-only:** settle the active terminal lane
+    and freeze the CLI8B evaluation contract, then review the CLI9 four-gate packet.
+    If authorized, implement economics/evaluation first, provider-only observation
+    projection with exact recall second, and measure existing governed action
+    composition in parallel. Model reduction and online compaction remain separate
+    conditional gates; only individually accepted mechanisms may enter a frozen
+    composed candidate and sealed holdout.
 
 This sequence does not pretend sandboxing is optional forever. It prevents an
 unfinished sandbox program from delaying the controlled prototype while reserving
@@ -615,6 +667,7 @@ is not repeated unless new evidence invalidates its checkpoint.
 | Slice 6 | Existing harness interoperability | Pending P2 | Can MCP represent the target central "agents" harness accurately; if not, what minimal optional adapter maps its tool, cancellation, approval-fact, progress, and trace contracts without creating a second run model? |
 | Slice 7 | Provider normalization | Accepted for Ollama plus direct OpenAI through CLI ship-lane increments 2-3; expansion remains gated | The selected local and cloud paths satisfy the stream, tool, cancellation, usage, and error contract without silent cross-boundary fallback. New providers require the same conformance gate. |
 | Slices 3/7 | Evaluation harness | Partial; provider and low-compute fixtures accepted, CLI8 retrieval baseline pending | What representative fixture set measures accepted outcome, evidence recall, token/cost, latency, and corrective turns before automatic retrieval or routing is enabled? |
+| Slices 3/7 / CLI9 | Harness economics and provider observation projection | Research-informed planning draft; no package authorized | Can exact-recall provider projections and existing governed action composition reduce cost per accepted outcome without regressing verifier quality, evidence integrity, corrective turns, privacy, or recovery? |
 
 ## Prototype and open-source delivery gate
 
@@ -658,6 +711,7 @@ not source volume or the number of abstractions present.
 | Installable developer alpha | Configuration-conformant private foundation accepted; public-release gates open | PR #27 and Checkpoint 90 accept ADR-0032 exact-version native packaging, local install/update/uninstall, the tester kit, and hosted Windows/macOS/Ubuntu product evidence. PR #31 and Checkpoint 91 accept effective configuration, config UX, and clean-install conformance. Contributor-rights attestation and public artifact signing/provenance remain open; no public artifact has been published. |
 | Differentiated learning loop | Slices 0–5 accepted and merged through PRs #32–35 / Checkpoints 92–95; PR #35 merge `7a1dc12` is the baseline | ADR-0038/0039 lock identity, normalization, exact scope, Rust authority, TypeScript orchestration, reviewed decisions, bounded recovery, and locally granted capture modes. Recoverable forget/restore, selected-lineage privacy purge, recovery-history clear, and the fingerprint-free bounded eligibility preview pass the exact local and hosted boundary. CLI8B/C remain unauthorized. |
 | Terminal observable activity | Product, Architecture, and Program Design approved; Package A candidate locally validated | ADR-0040 accepts four distinct channels: canonical run activity, provider-reported displayable summaries/traces, intentional assistant commentary/preambles, and deterministic presentation. Commentary occurs inside the existing task turn, preserves explicit phase in provider continuation, and never becomes run evidence or memory. One effective activity preference preserves JSON/run truth; detailed mode's only display-related request effect is an optional OpenAI summary, while Ollama thinking remains observe-only. Package A freezes the typed contract and golden transcript and awaits independent acceptance; Packages B-D remain gated. |
+| Harness efficiency and context economics | CLI9 research-informed planning draft; no package authorized | The draft prioritizes quality/economics instrumentation and provider-only observation projection with exact recall, measures the existing governed change composition, and defers model reduction and online compaction behind separate security/session gates. It creates no parity claim and does not change the active terminal or CLI8B/C order. |
 | Broader V1 platform | Deferred beyond the bounded learning loop | Advanced compression/retrieval, MCP client/mutation symmetry, connectors, automation, and generalized UI retain their later roadmap gates. Windows/macOS restricted providers continue as a bounded, actively scheduled commodity-platform lane under ADR-0031/0033/0034 and cannot borrow acceptance from trusted mode. |
 
 Percent-complete figures are intentionally not used. They hid the difference

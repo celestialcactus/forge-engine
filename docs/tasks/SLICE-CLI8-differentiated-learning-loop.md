@@ -271,4 +271,9 @@ turns, total input/output tokens, latency, memory selections, and skill provenan
 - organization-wide sharing or policy distribution;
 - a mandatory graph/vector database;
 - background agents, generalized automation, connectors, and Project Sybil workers;
-- automatic lossy compression without a task-quality evaluation gate.
+- automatic lossy compression without a task-quality evaluation gate;
+- provider-history observation packing, cache-economic online compaction,
+  delegated long-log reduction, and automated harness candidate search. These are
+  scoped by the separate, currently inactive
+  [CLI9 harness-efficiency draft](CLI9-HARNESS-EFFICIENCY-FOUR-GATE-REVIEW.md) and
+  cannot be imported into CLI8B/C without their own approval and quality gates.

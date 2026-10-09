@@ -1,7 +1,7 @@
 # ForgeEngine V1 system map and build strategy
 
 **Status:** explanatory map; contracts and ADRs remain authoritative
-**Date:** 2026-08-17
+**Date:** 2026-09-21
 
 ForgeEngine is one evidence-producing runtime with several surfaces. TypeScript owns
 fast-changing product integration; Rust owns decisions and durable execution truth.
@@ -20,6 +20,7 @@ flowchart TB
         UX["CLI UX and streaming presentation"]
         HOST["MCP and embedded-host adapters"]
         PROVIDERS["Ollama and cloud inference adapters"]
+        CTXPROJ["Provider-only context projection and economics"]
         TOOLS["Tool and workflow composition"]
         CONFIG["Config facts and secret references"]
     end
@@ -30,6 +31,7 @@ flowchart TB
         TX["ChangeSet transaction and recovery"]
         EVIDENCE["Events, artifacts, provenance, and verification"]
         CONTEXT["Context admission and future memory selection"]
+        RECALL["Observation identity and bounded exact recall"]
         SBXPLAN["Sandbox requirements and provider binding"]
     end
 
@@ -54,7 +56,11 @@ flowchart TB
     CONFIG --> POLICY
     RUN --> POLICY
     RUN --> CONTEXT
+    CONTEXT --> CTXPROJ
+    RECALL --> CTXPROJ
+    CTXPROJ --> PROVIDERS
     POLICY --> TX
+    POLICY --> RECALL
     POLICY --> SBXPLAN
     TX --> WORKSPACE
     RUN --> INFERENCE
@@ -62,6 +68,7 @@ flowchart TB
     WORKSPACE --> EVIDENCE
     INFERENCE --> EVIDENCE
     SANDBOX --> EVIDENCE
+    EVIDENCE --> RECALL
     EVIDENCE --> LEDGER
     LEDGER --> PROJECTION
     EVIDENCE --> UX
@@ -81,16 +88,30 @@ flowchart LR
     ALPHA --> MEM["CLI8A attributable memory"]
     MEM --> EVAL["CLI8B paired retrieval evaluation"]
     EVAL --> SKILL["CLI8C reviewed skill candidate"]
+    EVAL --> ECON["CLI9A economics and paired harness contract"]
+    ECON --> OBS["CLI9B provider observation projection and recall"]
+    ECON --> FUSION["CLI9C governed action-composition accounting"]
+    OBS --> HEVAL["CLI9F frozen candidate and sealed evaluation"]
+    FUSION --> HEVAL
+    OBS -. "conditional" .-> REDUCE["CLI9D evidence receipts"]
+    OBS -. "sessions prerequisite" .-> COMPACT["CLI9E context epochs"]
+    REDUCE -. "only if accepted" .-> HEVAL
+    COMPACT -. "only if accepted" .-> HEVAL
     CORE --> SBX["Parallel native sandbox lifecycle gate"]
     SBX --> BETA["Restricted beta"]
     SKILL --> PILOT["Developer pilot differentiation"]
+    HEVAL --> PILOT
     BETA --> PILOT
 ```
 
 The sandbox lane and learning lane share contracts but not release claims. The
 trusted alpha does not claim containment; the restricted beta cannot ship until an
 exact OS/provider gate passes. Memory and skills cannot bypass policy or mutation
-authority.
+authority. CLI9 is a planning-only branch after the shared CLI8B evaluation contract:
+it cannot preempt the active terminal gate, activate CLI8B/C, or enable a context
+transform by default. Its reducer and compaction nodes are conditional and may be
+omitted from the frozen candidate when they do not independently pass quality,
+economics, integrity, privacy, and recovery gates.
 
 ## Recommended public extension boundary
 
